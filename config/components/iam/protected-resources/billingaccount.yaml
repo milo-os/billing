@@ -1,0 +1,22 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: billing.miloapis.com-billingaccount
+spec:
+  serviceRef:
+    name: "billing.miloapis.com"
+  kind: BillingAccount
+  plural: billingaccounts
+  singular: billingaccount
+  permissions:
+    - list
+    - get
+    - create
+    - update
+    - patch
+    - delete
+    - watch
+    - updateStatus
+  parentResources:
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Organization

@@ -1,0 +1,80 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing
+  labels:
+    control-plane: billing
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  selector:
+    matchLabels:
+      control-plane: billing
+  replicas: 1
+  template:
+    metadata:
+      annotations:
+        kubectl.kubernetes.io/default-container: manager
+      labels:
+        control-plane: billing
+        app.kubernetes.io/name: billing
+    spec:
+      securityContext:
+        runAsNonRoot: true
+      containers:
+      - command:
+        - /billing
+        args:
+          - --leader-elect
+          - --health-probe-bind-address=:8081
+          - --server-config=/config/config.yaml
+        image: ghcr.io/datum-cloud/billing:dev
+        name: manager
+        ports:
+        - containerPort: 9443
+          name: webhook-server
+          protocol: TCP
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop:
+            - "ALL"
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8081
+          initialDelaySeconds: 15
+          periodSeconds: 20
+        readinessProbe:
+          httpGet:
+            path: /readyz
+            port: 8081
+          initialDelaySeconds: 5
+          periodSeconds: 10
+        resources:
+          limits:
+            cpu: 500m
+            memory: 128Mi
+          requests:
+            cpu: 10m
+            memory: 64Mi
+        volumeMounts:
+        - name: config
+          mountPath: /config
+        - name: webhook-cert
+          mountPath: /tmp/k8s-webhook-server/serving-certs
+          readOnly: true
+      serviceAccountName: billing
+      terminationGracePeriodSeconds: 10
+      volumes:
+      - name: config
+        configMap:
+          name: billing-config
+      # Optional so the manager can run without admission webhooks: when
+      # `webhookServer:` is omitted from the server config, the binary
+      # skips the webhook server entirely and the missing Secret is fine.
+      - name: webhook-cert
+        secret:
+          secretName: billing-webhook-cert
+          defaultMode: 420
+          optional: true

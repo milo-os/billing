@@ -1,0 +1,10 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: lifecycle-test-account
+  namespace: default
+spec:
+  currencyCode: EUR
+  paymentProfile:
+    type: CreditCard
+    externalID: cc-lifecycle-test-123

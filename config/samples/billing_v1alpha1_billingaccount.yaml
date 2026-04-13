@@ -1,0 +1,19 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingaccount-sample
+spec:
+  currencyCode: USD
+  paymentTerms:
+    netDays: 30
+    invoiceFrequency: Monthly
+    invoiceDayOfMonth: 1
+  paymentProfile:
+    type: CreditCard
+    externalID: cc-example-12345
+  contactInfo:
+    email: billing@example.com
+    name: Billing Department
