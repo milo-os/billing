@@ -1,0 +1,21 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: binding-test-account-a
+  namespace: default
+spec:
+  currencyCode: USD
+  paymentProfile:
+    type: CreditCard
+    externalID: cc-binding-test-a
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: binding-test-account-b
+  namespace: default
+spec:
+  currencyCode: USD
+  paymentProfile:
+    type: CreditCard
+    externalID: cc-binding-test-b

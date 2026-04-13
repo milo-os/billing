@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccountBinding
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingaccountbinding-sample
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  projectRef:
+    name: example-project

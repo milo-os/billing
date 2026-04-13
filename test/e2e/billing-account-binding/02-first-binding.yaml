@@ -1,0 +1,10 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccountBinding
+metadata:
+  name: binding-test-first
+  namespace: default
+spec:
+  billingAccountRef:
+    name: binding-test-account-a
+  projectRef:
+    name: test-project-alpha

@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-viewer
+  annotations:
+    kubernetes.io/display-name: Billing Viewer
+    kubernetes.io/description: "View access to all billing resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/billingaccounts.list
+    - billing.miloapis.com/billingaccounts.get
+    - billing.miloapis.com/billingaccounts.watch
+    - billing.miloapis.com/billingaccountbindings.list
+    - billing.miloapis.com/billingaccountbindings.get
+    - billing.miloapis.com/billingaccountbindings.watch
