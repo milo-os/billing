@@ -20,6 +20,9 @@ patches:
     - op: replace
       path: /webhooks/0/clientConfig/service/name
       value: billing-webhook
+    - op: replace
+      path: /webhooks/0/clientConfig/service/namespace
+      value: billing-system
   target:
     kind: MutatingWebhookConfiguration
     name: mutating-webhook-configuration
@@ -30,6 +33,15 @@ patches:
     - op: replace
       path: /webhooks/0/clientConfig/service/name
       value: billing-webhook
+    - op: replace
+      path: /webhooks/0/clientConfig/service/namespace
+      value: billing-system
+    - op: replace
+      path: /webhooks/1/clientConfig/service/name
+      value: billing-webhook
+    - op: replace
+      path: /webhooks/1/clientConfig/service/namespace
+      value: billing-system
   target:
     kind: ValidatingWebhookConfiguration
     name: validating-webhook-configuration

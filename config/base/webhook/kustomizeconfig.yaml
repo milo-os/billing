@@ -1,16 +1,9 @@
-# Teach kustomize that webhook clientConfig.service.namespace and .name
-# point at a Service, so the namespace transform and name reference handling
-# rewrite them automatically when an overlay sets `namespace:`.
-namespace:
-- path: webhooks/clientConfig/service/namespace
-  kind: ValidatingWebhookConfiguration
-  group: admissionregistration.k8s.io
-  create: false
-- path: webhooks/clientConfig/service/namespace
-  kind: MutatingWebhookConfiguration
-  group: admissionregistration.k8s.io
-  create: false
-
+# Teach kustomize about webhook clientConfig.service.name so Service
+# nameReferences are rewritten. We intentionally do NOT declare the
+# namespace path here: the bundle pins webhooks at `billing-system` via
+# explicit patches so consumer overlays (e.g. Flux `targetNamespace`) can
+# relocate the CRDs/roles into a different namespace without dragging the
+# webhook clientConfig along with them.
 nameReference:
 - kind: Service
   version: v1
