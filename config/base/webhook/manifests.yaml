@@ -1,0 +1,74 @@
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: MutatingWebhookConfiguration
+metadata:
+  name: mutating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-billing-miloapis-com-v1alpha1-billingaccount
+  failurePolicy: Fail
+  name: mbillingaccount.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - billingaccounts
+  sideEffects: None
+---
+apiVersion: admissionregistration.k8s.io/v1
+kind: ValidatingWebhookConfiguration
+metadata:
+  name: validating-webhook-configuration
+webhooks:
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-billingaccount
+  failurePolicy: Fail
+  name: vbillingaccount.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - billingaccounts
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-billingaccountbinding
+  failurePolicy: Fail
+  name: vbillingaccountbinding.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - billingaccountbindings
+  sideEffects: None
