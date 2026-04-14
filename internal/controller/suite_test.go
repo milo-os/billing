@@ -88,9 +88,10 @@ var _ = BeforeSuite(func() {
 	)
 	Expect(err).NotTo(HaveOccurred())
 
-	// Register BillingAccount controller using the standard (non-multicluster)
-	// controller-runtime builder for envtest. The multicluster wiring is tested
-	// separately; here we use a thin adapter to call the same reconcile logic.
+	// Register BillingAccount controller. We use a thin test adapter rather
+	// than the production reconciler so that test-specific behavior (e.g.,
+	// refetching before status update to avoid stale conflicts) can be
+	// exercised against envtest.
 	err = ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccount-test").
 		For(&billingv1alpha1.BillingAccount{}).

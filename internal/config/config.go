@@ -20,8 +20,6 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	multiclusterproviders "go.miloapis.com/milo/pkg/multicluster-runtime"
 )
 
 // +k8s:deepcopy-gen:interfaces=k8s.io/apimachinery/pkg/runtime.Object
@@ -38,7 +36,23 @@ type BillingOperator struct {
 	// is required.
 	WebhookServer *WebhookServerConfig `json:"webhookServer,omitempty"`
 
-	Discovery DiscoveryConfig `json:"discovery"`
+	// KubeconfigPath is the path to the kubeconfig file pointing at the Milo
+	// API server where billing resources (BillingAccount,
+	// BillingAccountBinding) are stored. When empty the controller falls back
+	// to in-cluster config / $KUBECONFIG via ctrl.GetConfig(), which is
+	// useful for local development where the controller and API server share
+	// a cluster.
+	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
+}
+
+// RestConfig returns the *rest.Config used to connect to the Milo API server.
+// When KubeconfigPath is empty it falls back to the standard
+// controller-runtime config resolution (in-cluster / $KUBECONFIG).
+func (c *BillingOperator) RestConfig() (*rest.Config, error) {
+	if c.KubeconfigPath == "" {
+		return ctrl.GetConfig()
+	}
+	return clientcmd.BuildConfigFromFlags("", c.KubeconfigPath)
 }
 
 // +k8s:deepcopy-gen=true
@@ -190,53 +204,10 @@ func SetDefaults_TLSConfig(obj *TLSConfig) {
 	}
 }
 
-// +k8s:deepcopy-gen=true
-
-// DiscoveryConfig configures cluster discovery.
-type DiscoveryConfig struct {
-	// Mode is the mode that the operator should use to discover clusters.
-	// Defaults to "single"
-	Mode multiclusterproviders.Provider `json:"mode"`
-
-	// InternalServiceDiscovery will result in the operator connecting to internal
-	// service addresses for projects.
-	InternalServiceDiscovery bool `json:"internalServiceDiscovery"`
-
-	// DiscoveryKubeconfigPath is the path to the kubeconfig file to use for
-	// project discovery.
-	DiscoveryKubeconfigPath string `json:"discoveryKubeconfigPath"`
-
-	// ProjectKubeconfigPath is the path to the kubeconfig file to use as a
-	// template when connecting to project control planes.
-	ProjectKubeconfigPath string `json:"projectKubeconfigPath"`
-}
-
-func SetDefaults_DiscoveryConfig(obj *DiscoveryConfig) {
-	if obj.Mode == "" {
-		obj.Mode = multiclusterproviders.ProviderSingle
-	}
-}
-
-func (c *DiscoveryConfig) DiscoveryRestConfig() (*rest.Config, error) {
-	if c.DiscoveryKubeconfigPath == "" {
-		return ctrl.GetConfig()
-	}
-
-	return clientcmd.BuildConfigFromFlags("", c.DiscoveryKubeconfigPath)
-}
-
-func (c *DiscoveryConfig) ProjectRestConfig() (*rest.Config, error) {
-	if c.ProjectKubeconfigPath == "" {
-		return ctrl.GetConfig()
-	}
-
-	return clientcmd.BuildConfigFromFlags("", c.ProjectKubeconfigPath)
-}
-
 // SetDefaults_BillingOperator sets defaults for BillingOperator.
 // The generated SetObjectDefaults_BillingOperator handles calling nested
-// defaults (MetricsServerConfig, WebhookServerConfig, TLSConfig,
-// DiscoveryConfig), so this function only sets top-level defaults.
+// defaults (MetricsServerConfig, WebhookServerConfig, TLSConfig), so this
+// function only sets top-level defaults.
 func SetDefaults_BillingOperator(obj *BillingOperator) {
 	// Top-level defaults are handled by nested SetDefaults_* functions
 	// which are called by the generated SetObjectDefaults_BillingOperator.

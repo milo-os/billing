@@ -21,8 +21,9 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-// testBillingAccountReconciler is a non-multicluster adapter for envtest
-// that exercises the same logic as the real BillingAccountReconciler.
+// testBillingAccountReconciler is a test adapter for envtest that exercises
+// the same logic as the real BillingAccountReconciler while adding
+// test-only behaviors (e.g., refetch-before-update) where appropriate.
 type testBillingAccountReconciler struct {
 	client client.Client
 }
@@ -115,7 +116,7 @@ func (r *testBillingAccountReconciler) countActiveBindings(ctx context.Context, 
 	return count, nil
 }
 
-// testBillingAccountBindingReconciler is a non-multicluster adapter for envtest.
+// testBillingAccountBindingReconciler is a test adapter for envtest.
 type testBillingAccountBindingReconciler struct {
 	client client.Client
 }
