@@ -42,6 +42,7 @@ spec:
         - /billing
         args:
           - --leader-elect
+          - --leader-elect-namespace=kube-system
           - --health-probe-bind-address=:8081
           - --server-config=/config/config.yaml
         image: ghcr.io/datum-cloud/billing:dev
