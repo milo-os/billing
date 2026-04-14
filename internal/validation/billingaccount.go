@@ -17,7 +17,6 @@ var emailRegex = regexp.MustCompile(`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-
 func ValidateBillingAccountCreate(account *billingv1alpha1.BillingAccount) field.ErrorList {
 	var allErrs field.ErrorList
 
-	allErrs = append(allErrs, validatePaymentProfile(account.Spec.PaymentProfile, field.NewPath("spec", "paymentProfile"))...)
 	allErrs = append(allErrs, validateContactInfo(account.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
 
 	return allErrs
@@ -37,24 +36,7 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 		))
 	}
 
-	allErrs = append(allErrs, validatePaymentProfile(newAccount.Spec.PaymentProfile, field.NewPath("spec", "paymentProfile"))...)
 	allErrs = append(allErrs, validateContactInfo(newAccount.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
-
-	return allErrs
-}
-
-func validatePaymentProfile(profile *billingv1alpha1.PaymentProfileRef, fldPath *field.Path) field.ErrorList {
-	var allErrs field.ErrorList
-	if profile == nil {
-		return allErrs
-	}
-
-	if profile.Type == "" {
-		allErrs = append(allErrs, field.Required(fldPath.Child("type"), "payment profile type is required when profile is set"))
-	}
-	if profile.ExternalID == "" {
-		allErrs = append(allErrs, field.Required(fldPath.Child("externalID"), "external ID is required when profile is set"))
-	}
 
 	return allErrs
 }

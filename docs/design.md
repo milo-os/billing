@@ -94,8 +94,6 @@ consumption within an organization. It captures:
 
 - **Currency** -- the ISO 4217 currency code for all charges (immutable after
   the account is activated, to prevent mid-period currency confusion)
-- **Payment profile** -- a reference to the payment method (e.g., credit card)
-  that will be charged for invoices
 - **Payment terms** -- the commercial schedule: how many days after invoice to
   pay, how often invoices are generated, and on what day of the month
 - **Billing contact** -- who receives billing notifications and invoices
@@ -105,7 +103,6 @@ A billing account progresses through lifecycle phases:
 | Phase | Meaning |
 |-------|---------|
 | **Provisioning** | Account just created, not yet validated |
-| **Incomplete** | Missing required configuration (e.g., no payment profile) |
 | **Ready** | Fully configured; projects can be bound to it |
 | **Suspended** | Temporarily disabled (e.g., payment failure, compliance hold) |
 | **Archived** | Permanently closed; read-only for historical access |

@@ -21,30 +21,7 @@ var _ = Describe("BillingAccount Controller", func() {
 	)
 
 	Context("Phase transitions via reconciliation", func() {
-		It("should transition to Incomplete when no payment profile is set", func() {
-			account := &billingv1alpha1.BillingAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-incomplete",
-					Namespace: "default",
-				},
-				Spec: billingv1alpha1.BillingAccountSpec{
-					CurrencyCode: "USD",
-				},
-			}
-			Expect(k8sClient.Create(ctx, account)).To(Succeed())
-
-			// The controller should reconcile and set phase to Incomplete
-			Eventually(func(g Gomega) {
-				var fetched billingv1alpha1.BillingAccount
-				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
-				g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseIncomplete))
-			}, timeout, interval).Should(Succeed())
-
-			// Cleanup
-			Expect(k8sClient.Delete(ctx, account)).To(Succeed())
-		})
-
-		It("should transition to Ready when payment profile is set", func() {
+		It("should transition to Ready after creation", func() {
 			account := &billingv1alpha1.BillingAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-ready",
@@ -52,10 +29,6 @@ var _ = Describe("BillingAccount Controller", func() {
 				},
 				Spec: billingv1alpha1.BillingAccountSpec{
 					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						Type:       "CreditCard",
-						ExternalID: "cc-123",
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, account)).To(Succeed())
@@ -73,10 +46,6 @@ var _ = Describe("BillingAccount Controller", func() {
 			account := &billingv1alpha1.BillingAccount{
 				Spec: billingv1alpha1.BillingAccountSpec{
 					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						Type:       "CreditCard",
-						ExternalID: "cc-123",
-					},
 				},
 				Status: billingv1alpha1.BillingAccountStatus{
 					Phase: billingv1alpha1.BillingAccountPhaseSuspended,
@@ -113,10 +82,6 @@ var _ = Describe("BillingAccount Controller", func() {
 				},
 				Spec: billingv1alpha1.BillingAccountSpec{
 					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						Type:       "CreditCard",
-						ExternalID: "cc-456",
-					},
 				},
 			}
 			Expect(k8sClient.Create(ctx, account)).To(Succeed())

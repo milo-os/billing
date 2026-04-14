@@ -74,23 +74,6 @@ spec:
                   This field is immutable once the account transitions past Provisioning phase.
                 pattern: ^[A-Z]{3}$
                 type: string
-              paymentProfile:
-                description: PaymentProfile references the payment method for this
-                  billing account.
-                properties:
-                  externalID:
-                    description: ExternalID is the reference to the payment profile
-                      in the payment provider.
-                    minLength: 1
-                    type: string
-                  type:
-                    description: Type is the payment profile type (e.g., "CreditCard").
-                    minLength: 1
-                    type: string
-                required:
-                - externalID
-                - type
-                type: object
               paymentTerms:
                 description: PaymentTerms defines the invoicing schedule for this
                   billing account.
@@ -205,7 +188,6 @@ spec:
                 enum:
                 - Provisioning
                 - Ready
-                - Incomplete
                 - Suspended
                 - Archived
                 type: string

@@ -5,6 +5,3 @@ metadata:
   namespace: default
 spec:
   currencyCode: EUR
-  paymentProfile:
-    type: CreditCard
-    externalID: cc-lifecycle-test-123

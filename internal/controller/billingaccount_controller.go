@@ -87,18 +87,12 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 			Message:            "Billing account is active and ready for project binding.",
 		})
 	} else {
-		reason := "BillingAccountNotReady"
-		message := fmt.Sprintf("Billing account is in %s phase.", targetPhase)
-		if targetPhase == billingv1alpha1.BillingAccountPhaseIncomplete {
-			reason = "PaymentProfileMissing"
-			message = "Billing account requires a payment profile to become ready."
-		}
 		apimeta.SetStatusCondition(&account.Status.Conditions, metav1.Condition{
 			Type:               ConditionTypeReady,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: account.Generation,
-			Reason:             reason,
-			Message:            message,
+			Reason:             "BillingAccountNotReady",
+			Message:            fmt.Sprintf("Billing account is in %s phase.", targetPhase),
 		})
 	}
 
@@ -115,34 +109,15 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 }
 
 // determinePhase computes the target phase based on the account's current
-// state and spec.
+// state. Suspended and Archived are managed externally (by admin or payment
+// system); all other phases converge to Ready.
 func (r *BillingAccountReconciler) determinePhase(account *billingv1alpha1.BillingAccount) billingv1alpha1.BillingAccountPhase {
-	currentPhase := account.Status.Phase
-
-	// Suspended and Archived are managed externally (e.g., by admin or payment system).
-	// The controller does not transition into or out of these states automatically.
-	switch currentPhase {
+	switch account.Status.Phase {
 	case billingv1alpha1.BillingAccountPhaseSuspended,
 		billingv1alpha1.BillingAccountPhaseArchived:
-		return currentPhase
+		return account.Status.Phase
 	}
-
-	// For Provisioning, Incomplete, or empty phase: determine based on spec
-	if account.Spec.PaymentProfile != nil {
-		return billingv1alpha1.BillingAccountPhaseReady
-	}
-
-	// No payment profile
-	if currentPhase == "" || currentPhase == billingv1alpha1.BillingAccountPhaseProvisioning {
-		return billingv1alpha1.BillingAccountPhaseIncomplete
-	}
-
-	// If currently Ready but payment profile was removed, transition to Incomplete
-	if currentPhase == billingv1alpha1.BillingAccountPhaseReady {
-		return billingv1alpha1.BillingAccountPhaseIncomplete
-	}
-
-	return billingv1alpha1.BillingAccountPhaseIncomplete
+	return billingv1alpha1.BillingAccountPhaseReady
 }
 
 // countActiveBindings counts the number of active BillingAccountBindings

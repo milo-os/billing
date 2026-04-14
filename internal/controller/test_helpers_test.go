@@ -81,18 +81,12 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 			Message:            "Billing account is active and ready for project binding.",
 		})
 	} else {
-		reason := "BillingAccountNotReady"
-		message := fmt.Sprintf("Billing account is in %s phase.", targetPhase)
-		if targetPhase == billingv1alpha1.BillingAccountPhaseIncomplete {
-			reason = "PaymentProfileMissing"
-			message = "Billing account requires a payment profile to become ready."
-		}
 		apimeta.SetStatusCondition(&account.Status.Conditions, metav1.Condition{
 			Type:               ConditionTypeReady,
 			Status:             metav1.ConditionFalse,
 			ObservedGeneration: account.Generation,
-			Reason:             reason,
-			Message:            message,
+			Reason:             "BillingAccountNotReady",
+			Message:            fmt.Sprintf("Billing account is in %s phase.", targetPhase),
 		})
 	}
 

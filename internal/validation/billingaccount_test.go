@@ -24,43 +24,6 @@ func TestValidateBillingAccountCreate(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "valid account with payment profile",
-			account: &billingv1alpha1.BillingAccount{
-				Spec: billingv1alpha1.BillingAccountSpec{
-					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						Type:       "CreditCard",
-						ExternalID: "cc-123",
-					},
-				},
-			},
-			wantErr: false,
-		},
-		{
-			name: "invalid payment profile missing type",
-			account: &billingv1alpha1.BillingAccount{
-				Spec: billingv1alpha1.BillingAccountSpec{
-					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						ExternalID: "cc-123",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
-			name: "invalid payment profile missing externalID",
-			account: &billingv1alpha1.BillingAccount{
-				Spec: billingv1alpha1.BillingAccountSpec{
-					CurrencyCode: "USD",
-					PaymentProfile: &billingv1alpha1.PaymentProfileRef{
-						Type: "CreditCard",
-					},
-				},
-			},
-			wantErr: true,
-		},
-		{
 			name: "invalid contact info missing email",
 			account: &billingv1alpha1.BillingAccount{
 				Spec: billingv1alpha1.BillingAccountSpec{
@@ -140,8 +103,8 @@ func TestValidateBillingAccountUpdate_CurrencyImmutability(t *testing.T) {
 			wantErr:  false,
 		},
 		{
-			name:     "reject currency change in Incomplete",
-			oldPhase: billingv1alpha1.BillingAccountPhaseIncomplete,
+			name:     "reject currency change in Suspended",
+			oldPhase: billingv1alpha1.BillingAccountPhaseSuspended,
 			oldCurr:  "USD",
 			newCurr:  "EUR",
 			wantErr:  true,

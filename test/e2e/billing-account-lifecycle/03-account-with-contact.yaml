@@ -5,9 +5,6 @@ metadata:
   namespace: default
 spec:
   currencyCode: USD
-  paymentProfile:
-    type: CreditCard
-    externalID: cc-lifecycle-test-123
   contactInfo:
     email: billing@example.com
     name: Billing Department

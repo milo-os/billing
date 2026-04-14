@@ -41,19 +41,6 @@ func TestValidateBillingAccountReady(t *testing.T) {
 			wantErr: false,
 		},
 		{
-			name: "account is Incomplete",
-			account: &billingv1alpha1.BillingAccount{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "test-account",
-					Namespace: "default",
-				},
-				Status: billingv1alpha1.BillingAccountStatus{
-					Phase: billingv1alpha1.BillingAccountPhaseIncomplete,
-				},
-			},
-			wantErr: true,
-		},
-		{
 			name: "account is Suspended",
 			account: &billingv1alpha1.BillingAccount{
 				ObjectMeta: metav1.ObjectMeta{

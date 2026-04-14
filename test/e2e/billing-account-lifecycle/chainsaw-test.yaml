@@ -5,34 +5,17 @@ metadata:
 spec:
   description: |
     Tests the BillingAccount lifecycle including:
-    - Creating an account transitions to Incomplete (no payment profile)
-    - Adding a payment profile transitions to Ready
+    - Creating an account transitions to Ready
     - CRD validation rejects invalid currency codes
     - CurrencyCode is immutable after activation
     - Contact info and payment terms are configurable
 
   steps:
-    - name: create-account-without-payment
-      description: Create a BillingAccount without a payment profile. Should become Incomplete.
+    - name: create-account
+      description: Create a BillingAccount. Should become Ready.
       try:
         - create:
-            file: 01-account-no-payment.yaml
-        - assert:
-            timeout: 30s
-            file: assertions/assert-incomplete.yaml
-
-    - name: add-payment-profile
-      description: Update the account to add a payment profile. Should transition to Ready.
-      try:
-        - apply:
-            file: 02-account-with-payment.yaml
-        - assert:
-            timeout: 30s
-            file: assertions/assert-ready.yaml
-
-    - name: verify-ready-condition
-      description: Verify the Ready condition is True.
-      try:
+            file: 01-create-account.yaml
         - assert:
             timeout: 30s
             file: assertions/assert-ready.yaml

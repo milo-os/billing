@@ -7,7 +7,7 @@ import (
 )
 
 // BillingAccountPhase represents the lifecycle state of a BillingAccount.
-// +kubebuilder:validation:Enum=Provisioning;Ready;Incomplete;Suspended;Archived
+// +kubebuilder:validation:Enum=Provisioning;Ready;Suspended;Archived
 type BillingAccountPhase string
 
 const (
@@ -16,10 +16,6 @@ const (
 
 	// BillingAccountPhaseReady indicates the account is active and can accept bindings.
 	BillingAccountPhaseReady BillingAccountPhase = "Ready"
-
-	// BillingAccountPhaseIncomplete indicates the account is missing required
-	// configuration (e.g., payment profile).
-	BillingAccountPhaseIncomplete BillingAccountPhase = "Incomplete"
 
 	// BillingAccountPhaseSuspended indicates the account has been suspended.
 	BillingAccountPhaseSuspended BillingAccountPhase = "Suspended"
@@ -41,11 +37,6 @@ type BillingAccountSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	PaymentTerms *PaymentTerms `json:"paymentTerms,omitempty"`
-
-	// PaymentProfile references the payment method for this billing account.
-	//
-	// +kubebuilder:validation:Optional
-	PaymentProfile *PaymentProfileRef `json:"paymentProfile,omitempty"`
 
 	// ContactInfo defines the billing contact for notifications.
 	//
@@ -76,21 +67,6 @@ type PaymentTerms struct {
 	// +kubebuilder:validation:Maximum=28
 	// +kubebuilder:default=1
 	InvoiceDayOfMonth int32 `json:"invoiceDayOfMonth,omitempty"`
-}
-
-// PaymentProfileRef references a payment method.
-type PaymentProfileRef struct {
-	// Type is the payment profile type (e.g., "CreditCard").
-	//
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	Type string `json:"type"`
-
-	// ExternalID is the reference to the payment profile in the payment provider.
-	//
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	ExternalID string `json:"externalID"`
 }
 
 // BillingContactInfo defines contact details for billing notifications.

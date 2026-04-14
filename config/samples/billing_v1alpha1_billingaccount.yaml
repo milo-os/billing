@@ -11,9 +11,6 @@ spec:
     netDays: 30
     invoiceFrequency: Monthly
     invoiceDayOfMonth: 1
-  paymentProfile:
-    type: CreditCard
-    externalID: cc-example-12345
   contactInfo:
     email: billing@example.com
     name: Billing Department

@@ -5,9 +5,6 @@ metadata:
   namespace: default
 spec:
   currencyCode: USD
-  paymentProfile:
-    type: CreditCard
-    externalID: cc-binding-test-a
 ---
 apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccount
@@ -16,6 +13,3 @@ metadata:
   namespace: default
 spec:
   currencyCode: USD
-  paymentProfile:
-    type: CreditCard
-    externalID: cc-binding-test-b
