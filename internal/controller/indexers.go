@@ -5,8 +5,8 @@ package controller
 import (
 	"context"
 
+	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -22,7 +22,7 @@ const (
 )
 
 // AddIndexers adds field indexers to the manager for efficient lookups.
-func AddIndexers(ctx context.Context, mgr mcmanager.Manager) error {
+func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&billingv1alpha1.BillingAccountBinding{},

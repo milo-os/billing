@@ -13,23 +13,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/validation"
-	billingwebhook "go.miloapis.com/billing/internal/webhook"
 )
 
 var billingAccountBindingLog = logf.Log.WithName("billingaccountbinding-webhook")
 
 // SetupBillingAccountBindingWebhookWithManager registers the BillingAccountBinding
 // webhook with the manager.
-func SetupBillingAccountBindingWebhookWithManager(mgr mcmanager.Manager) error {
+func SetupBillingAccountBindingWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &billingAccountBindingWebhook{
-		mgr: mgr,
+		client: mgr.GetClient(),
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr.GetLocalManager()).
+	return ctrl.NewWebhookManagedBy(mgr).
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		WithValidator(webhook).
 		Complete()
@@ -38,23 +36,10 @@ func SetupBillingAccountBindingWebhookWithManager(mgr mcmanager.Manager) error {
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-billingaccountbinding,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=billingaccountbindings,verbs=create;update;delete,versions=v1alpha1,name=vbillingaccountbinding.kb.io,admissionReviewVersions=v1
 
 type billingAccountBindingWebhook struct {
-	mgr mcmanager.Manager
+	client client.Client
 }
 
 var _ admission.CustomValidator = &billingAccountBindingWebhook{}
-
-// getClusterClient returns the appropriate client for the cluster context.
-// In multicluster mode, this resolves the cluster from the webhook context.
-// In single-cluster mode, it falls back to the local manager client.
-func (r *billingAccountBindingWebhook) getClusterClient(ctx context.Context) client.Client {
-	clusterName := billingwebhook.ClusterNameFromContext(ctx)
-	if clusterName != "" {
-		if cl, err := r.mgr.GetCluster(ctx, clusterName); err == nil {
-			return cl.GetClient()
-		}
-	}
-	return r.mgr.GetLocalManager().GetClient()
-}
 
 // ValidateCreate implements webhook.CustomValidator.
 func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
@@ -69,11 +54,9 @@ func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj r
 		"account", binding.Spec.BillingAccountRef.Name,
 	)
 
-	clusterClient := r.getClusterClient(ctx)
-
 	opts := validation.BillingAccountBindingValidationOptions{
 		Context: ctx,
-		Client:  clusterClient,
+		Client:  r.client,
 	}
 
 	if errs := validation.ValidateBillingAccountBindingCreate(binding, opts); len(errs) > 0 {

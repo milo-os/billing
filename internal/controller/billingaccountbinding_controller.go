@@ -13,10 +13,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
-	mcbuilder "sigs.k8s.io/multicluster-runtime/pkg/builder"
-	mccontext "sigs.k8s.io/multicluster-runtime/pkg/context"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
-	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
+	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -28,26 +25,18 @@ const (
 
 // BillingAccountBindingReconciler reconciles a BillingAccountBinding object.
 type BillingAccountBindingReconciler struct {
-	mgr mcmanager.Manager
+	client client.Client
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings/finalizers,verbs=update
 
-func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req mcreconcile.Request) (ctrl.Result, error) {
+func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	cl, err := r.mgr.GetCluster(ctx, req.ClusterName)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	ctx = mccontext.WithCluster(ctx, req.ClusterName)
-	clusterClient := cl.GetClient()
-
 	var binding billingv1alpha1.BillingAccountBinding
-	if err := clusterClient.Get(ctx, req.NamespacedName, &binding); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, &binding); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -73,7 +62,7 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req mcr
 	binding.Status.BillingResponsibility.CurrentAccount = binding.Spec.BillingAccountRef.Name
 
 	// Find and supersede older active bindings for the same project
-	if err := r.supersedeOlderBindings(ctx, clusterClient, &binding); err != nil {
+	if err := r.supersedeOlderBindings(ctx, r.client, &binding); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to supersede older bindings: %w", err)
 	}
 
@@ -89,7 +78,7 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req mcr
 		Message:            "Project successfully bound to billing account.",
 	})
 
-	if err := clusterClient.Status().Update(ctx, &binding); err != nil {
+	if err := r.client.Status().Update(ctx, &binding); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update binding status: %w", err)
 	}
 
@@ -176,10 +165,10 @@ func (r *BillingAccountBindingReconciler) supersedeOlderBindings(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BillingAccountBindingReconciler) SetupWithManager(mgr mcmanager.Manager) error {
-	r.mgr = mgr
+func (r *BillingAccountBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.client = mgr.GetClient()
 
-	return mcbuilder.ControllerManagedBy(mgr).
+	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccountbinding").
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		Complete(r)

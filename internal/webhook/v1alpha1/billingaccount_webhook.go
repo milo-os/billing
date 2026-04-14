@@ -13,23 +13,21 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/validation"
-	billingwebhook "go.miloapis.com/billing/internal/webhook"
 )
 
 var billingAccountLog = logf.Log.WithName("billingaccount-webhook")
 
 // SetupBillingAccountWebhookWithManager registers the BillingAccount webhook
 // with the manager.
-func SetupBillingAccountWebhookWithManager(mgr mcmanager.Manager) error {
+func SetupBillingAccountWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &billingAccountWebhook{
-		mgr: mgr,
+		client: mgr.GetClient(),
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr.GetLocalManager()).
+	return ctrl.NewWebhookManagedBy(mgr).
 		For(&billingv1alpha1.BillingAccount{}).
 		WithDefaulter(webhook).
 		WithValidator(webhook).
@@ -41,22 +39,11 @@ func SetupBillingAccountWebhookWithManager(mgr mcmanager.Manager) error {
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-billingaccount,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=billingaccounts,verbs=create;update;delete,versions=v1alpha1,name=vbillingaccount.kb.io,admissionReviewVersions=v1
 
 type billingAccountWebhook struct {
-	mgr mcmanager.Manager
+	client client.Client
 }
 
 var _ admission.CustomDefaulter = &billingAccountWebhook{}
 var _ admission.CustomValidator = &billingAccountWebhook{}
-
-// getClusterClient returns the appropriate client for the cluster context.
-func (r *billingAccountWebhook) getClusterClient(ctx context.Context) client.Client {
-	clusterName := billingwebhook.ClusterNameFromContext(ctx)
-	if clusterName != "" {
-		if cl, err := r.mgr.GetCluster(ctx, clusterName); err == nil {
-			return cl.GetClient()
-		}
-	}
-	return r.mgr.GetLocalManager().GetClient()
-}
 
 // Default implements webhook.CustomDefaulter.
 func (r *billingAccountWebhook) Default(ctx context.Context, obj runtime.Object) error {
@@ -131,10 +118,8 @@ func (r *billingAccountWebhook) ValidateDelete(ctx context.Context, obj runtime.
 
 	billingAccountLog.Info("validating delete", "name", account.GetName())
 
-	clusterClient := r.getClusterClient(ctx)
-
 	var bindingList billingv1alpha1.BillingAccountBindingList
-	if err := clusterClient.List(ctx, &bindingList, client.InNamespace(account.Namespace)); err != nil {
+	if err := r.client.List(ctx, &bindingList, client.InNamespace(account.Namespace)); err != nil {
 		// If we can't list bindings, allow deletion -- the finalizer will catch it.
 		billingAccountLog.Error(err, "failed to list bindings for delete validation, allowing deletion")
 		return nil, nil

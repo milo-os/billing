@@ -29,7 +29,6 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/config"
 	"go.miloapis.com/billing/internal/controller"
-	billingwebhook "go.miloapis.com/billing/internal/webhook"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
 	multiclusterproviders "go.miloapis.com/milo/pkg/multicluster-runtime"
 	milomulticluster "go.miloapis.com/milo/pkg/multicluster-runtime/milo"
@@ -133,10 +132,6 @@ func main() {
 		webhookServer = webhook.NewServer(
 			serverConfig.WebhookServer.Options(ctx, deploymentClusterClient),
 		)
-
-		if serverConfig.Discovery.Mode != multiclusterproviders.ProviderSingle {
-			webhookServer = billingwebhook.NewClusterAwareWebhookServer(webhookServer)
-		}
 	} else {
 		setupLog.Info("webhookServer not configured; admission webhook server disabled")
 	}
@@ -155,26 +150,33 @@ func main() {
 		os.Exit(1)
 	}
 
-	if err = (&controller.BillingAccountReconciler{}).SetupWithManager(mgr); err != nil {
+	// Billing resources only exist in the local (core) control plane, so register
+	// controllers, indexers, and webhooks against the local manager rather than
+	// the multicluster manager. Otherwise the multicluster-runtime would engage
+	// the reconcilers against every discovered project cluster, where the
+	// billing CRDs do not exist.
+	localMgr := mgr.GetLocalManager()
+
+	if err = (&controller.BillingAccountReconciler{}).SetupWithManager(localMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BillingAccount")
 		os.Exit(1)
 	}
-	if err = (&controller.BillingAccountBindingReconciler{}).SetupWithManager(mgr); err != nil {
+	if err = (&controller.BillingAccountBindingReconciler{}).SetupWithManager(localMgr); err != nil {
 		setupLog.Error(err, "unable to create controller", "controller", "BillingAccountBinding")
 		os.Exit(1)
 	}
 
-	if err = controller.AddIndexers(ctx, mgr); err != nil {
+	if err = controller.AddIndexers(ctx, localMgr); err != nil {
 		setupLog.Error(err, "unable to add indexers")
 		os.Exit(1)
 	}
 
 	if serverConfig.WebhookServer != nil {
-		if err = billingwebhooks.SetupBillingAccountWebhookWithManager(mgr); err != nil {
+		if err = billingwebhooks.SetupBillingAccountWebhookWithManager(localMgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "BillingAccount")
 			os.Exit(1)
 		}
-		if err = billingwebhooks.SetupBillingAccountBindingWebhookWithManager(mgr); err != nil {
+		if err = billingwebhooks.SetupBillingAccountBindingWebhookWithManager(localMgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "BillingAccountBinding")
 			os.Exit(1)
 		}

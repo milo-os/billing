@@ -14,13 +14,9 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
-	mcbuilder "sigs.k8s.io/multicluster-runtime/pkg/builder"
-	mccontext "sigs.k8s.io/multicluster-runtime/pkg/context"
-	mchandler "sigs.k8s.io/multicluster-runtime/pkg/handler"
-	mcmanager "sigs.k8s.io/multicluster-runtime/pkg/manager"
-	mcreconcile "sigs.k8s.io/multicluster-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -34,7 +30,7 @@ const (
 
 // BillingAccountReconciler reconciles a BillingAccount object.
 type BillingAccountReconciler struct {
-	mgr mcmanager.Manager
+	client client.Client
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -42,19 +38,11 @@ type BillingAccountReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch
 
-func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req mcreconcile.Request) (ctrl.Result, error) {
+func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
 
-	cl, err := r.mgr.GetCluster(ctx, req.ClusterName)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	ctx = mccontext.WithCluster(ctx, req.ClusterName)
-	clusterClient := cl.GetClient()
-
 	var account billingv1alpha1.BillingAccount
-	if err := clusterClient.Get(ctx, req.NamespacedName, &account); err != nil {
+	if err := r.client.Get(ctx, req.NamespacedName, &account); err != nil {
 		if apierrors.IsNotFound(err) {
 			return ctrl.Result{}, nil
 		}
@@ -63,13 +51,13 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req mcreconcil
 
 	// Handle deletion with finalizer
 	if !account.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, clusterClient, &account)
+		return r.reconcileDelete(ctx, r.client, &account)
 	}
 
 	// Ensure finalizer is present
 	if !controllerutil.ContainsFinalizer(&account, billingAccountFinalizer) {
 		controllerutil.AddFinalizer(&account, billingAccountFinalizer)
-		if err := clusterClient.Update(ctx, &account); err != nil {
+		if err := r.client.Update(ctx, &account); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
@@ -79,7 +67,7 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req mcreconcil
 	targetPhase := r.determinePhase(&account)
 
 	// Count linked projects
-	linkedCount, err := r.countActiveBindings(ctx, clusterClient, &account)
+	linkedCount, err := r.countActiveBindings(ctx, r.client, &account)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to count active bindings: %w", err)
 	}
@@ -114,7 +102,7 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req mcreconcil
 		})
 	}
 
-	if err := clusterClient.Status().Update(ctx, &account); err != nil {
+	if err := r.client.Status().Update(ctx, &account); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
@@ -215,26 +203,24 @@ func (r *BillingAccountReconciler) reconcileDelete(
 }
 
 // SetupWithManager sets up the controller with the Manager.
-func (r *BillingAccountReconciler) SetupWithManager(mgr mcmanager.Manager) error {
-	r.mgr = mgr
+func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
+	r.client = mgr.GetClient()
 
-	return mcbuilder.ControllerManagedBy(mgr).
+	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccount").
 		For(&billingv1alpha1.BillingAccount{}).
 		Watches(&billingv1alpha1.BillingAccountBinding{},
-			mchandler.TypedEnqueueRequestsFromMapFunc(
-				func(ctx context.Context, obj client.Object) []mcreconcile.Request {
+			handler.EnqueueRequestsFromMapFunc(
+				func(ctx context.Context, obj client.Object) []reconcile.Request {
 					binding, ok := obj.(*billingv1alpha1.BillingAccountBinding)
 					if !ok {
 						return nil
 					}
-					return []mcreconcile.Request{
+					return []reconcile.Request{
 						{
-							Request: reconcile.Request{
-								NamespacedName: client.ObjectKey{
-									Name:      binding.Spec.BillingAccountRef.Name,
-									Namespace: binding.Namespace,
-								},
+							NamespacedName: client.ObjectKey{
+								Name:      binding.Spec.BillingAccountRef.Name,
+								Namespace: binding.Namespace,
 							},
 						},
 					}
