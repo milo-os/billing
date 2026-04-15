@@ -9,6 +9,7 @@ rules:
   resources:
   - billingaccountbindings
   - billingaccounts
+  - meterdefinitions
   verbs:
   - create
   - delete
@@ -22,6 +23,7 @@ rules:
   resources:
   - billingaccountbindings/finalizers
   - billingaccounts/finalizers
+  - meterdefinitions/finalizers
   verbs:
   - update
 - apiGroups:
@@ -29,6 +31,7 @@ rules:
   resources:
   - billingaccountbindings/status
   - billingaccounts/status
+  - meterdefinitions/status
   verbs:
   - get
   - patch

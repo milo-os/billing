@@ -19,6 +19,14 @@ const (
 	// BindingProjectRefField is the field index for looking up bindings
 	// by their project reference.
 	BindingProjectRefField = ".spec.projectRef.name"
+
+	// MeterDefinitionMeterNameField is the field index for looking up
+	// meter definitions by their canonical meter name.
+	MeterDefinitionMeterNameField = ".spec.meterName"
+
+	// MeterDefinitionOwnerServiceField is the field index for listing
+	// meter definitions owned by a given service.
+	MeterDefinitionOwnerServiceField = ".spec.owner.service"
 )
 
 // AddIndexers adds field indexers to the manager for efficient lookups.
@@ -42,6 +50,30 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			binding := obj.(*billingv1alpha1.BillingAccountBinding)
 			return []string{binding.Spec.ProjectRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.MeterDefinition{},
+		MeterDefinitionMeterNameField,
+		func(obj client.Object) []string {
+			md := obj.(*billingv1alpha1.MeterDefinition)
+			return []string{md.Spec.MeterName}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.MeterDefinition{},
+		MeterDefinitionOwnerServiceField,
+		func(obj client.Object) []string {
+			md := obj.(*billingv1alpha1.MeterDefinition)
+			return []string{md.Spec.Owner.Service}
 		},
 	); err != nil {
 		return err

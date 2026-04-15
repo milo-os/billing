@@ -1,0 +1,9 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MeterDefinition
+metadata:
+  name: e2e-compute-cpu-seconds
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: MeterDefinitionActive

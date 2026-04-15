@@ -150,6 +150,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "BillingAccountBinding")
 		os.Exit(1)
 	}
+	if err = (&controller.MeterDefinitionReconciler{}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MeterDefinition")
+		os.Exit(1)
+	}
 
 	if err = controller.AddIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to add indexers")
@@ -163,6 +167,10 @@ func main() {
 		}
 		if err = billingwebhooks.SetupBillingAccountBindingWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "BillingAccountBinding")
+			os.Exit(1)
+		}
+		if err = billingwebhooks.SetupMeterDefinitionWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MeterDefinition")
 			os.Exit(1)
 		}
 	}
