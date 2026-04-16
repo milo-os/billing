@@ -10,6 +10,7 @@ rules:
   - billingaccountbindings
   - billingaccounts
   - meterdefinitions
+  - monitoredresourcetypes
   verbs:
   - create
   - delete
@@ -24,6 +25,7 @@ rules:
   - billingaccountbindings/finalizers
   - billingaccounts/finalizers
   - meterdefinitions/finalizers
+  - monitoredresourcetypes/finalizers
   verbs:
   - update
 - apiGroups:
@@ -32,6 +34,7 @@ rules:
   - billingaccountbindings/status
   - billingaccounts/status
   - meterdefinitions/status
+  - monitoredresourcetypes/status
   verbs:
   - get
   - patch

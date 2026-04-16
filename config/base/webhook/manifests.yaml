@@ -24,26 +24,6 @@ webhooks:
     resources:
     - billingaccounts
   sideEffects: None
-- admissionReviewVersions:
-  - v1
-  clientConfig:
-    service:
-      name: webhook-service
-      namespace: system
-      path: /mutate-billing-miloapis-com-v1alpha1-meterdefinition
-  failurePolicy: Fail
-  name: mmeterdefinition.kb.io
-  rules:
-  - apiGroups:
-    - billing.miloapis.com
-    apiVersions:
-    - v1alpha1
-    operations:
-    - CREATE
-    - UPDATE
-    resources:
-    - meterdefinitions
-  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -112,4 +92,25 @@ webhooks:
     - DELETE
     resources:
     - meterdefinitions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-monitoredresourcetype
+  failurePolicy: Fail
+  name: vmonitoredresourcetype.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - monitoredresourcetypes
   sideEffects: None

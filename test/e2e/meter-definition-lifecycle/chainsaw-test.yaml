@@ -6,7 +6,6 @@ spec:
   description: |
     Tests the MeterDefinition lifecycle including:
     - Creating a meter transitions to Ready=True
-    - Webhook rejects meterName whose prefix does not match owner.service
     - Webhook rejects attempts to change immutable fields (meterName)
     - Webhook rejects removing declared dimensions
     - displayName, description, and dimension additions are permitted
@@ -20,16 +19,6 @@ spec:
         - assert:
             timeout: 30s
             file: assertions/assert-ready.yaml
-
-    - name: reject-wrong-owner-prefix
-      description: Verify that a meterName without the owner.service prefix is rejected.
-      try:
-        - create:
-            file: test-data/missing-owner-prefix.yaml
-            expect:
-              - check:
-                  ($error != null): true
-                  (contains($error, 'meterName')): true
 
     - name: reject-change-meter-name
       description: Verify that meterName cannot be changed after create (immutability).

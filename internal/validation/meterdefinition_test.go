@@ -3,148 +3,101 @@
 package validation
 
 import (
-	"context"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-func newMeterDefinition(name, meterName, owner string, dims ...string) *billingv1alpha1.MeterDefinition {
+// newMeterDefinition is a test helper that builds a minimal valid MeterDefinition.
+func newMeterDefinition(name, meterName string, dims ...string) *billingv1alpha1.MeterDefinition {
 	return &billingv1alpha1.MeterDefinition{
 		ObjectMeta: metav1.ObjectMeta{Name: name},
 		Spec: billingv1alpha1.MeterDefinitionSpec{
 			MeterName:   meterName,
 			DisplayName: name,
-			Owner:       billingv1alpha1.MeterOwner{Service: owner},
+			Phase:       billingv1alpha1.PhaseDraft,
 			Measurement: billingv1alpha1.MeterMeasurement{
 				Aggregation: billingv1alpha1.MeterAggregationSum,
 				Unit:        "s",
 				Dimensions:  dims,
 			},
 			Billing: billingv1alpha1.MeterBilling{
-				ConsumedUnit:   "s",
-				PricingUnit:    "h",
-				ChargeCategory: billingv1alpha1.MeterChargeCategoryUsage,
+				ConsumedUnit: "s",
+				PricingUnit:  "h",
 			},
 		},
 	}
 }
 
-func TestValidateMeterNameFormat(t *testing.T) {
-	tests := []struct {
-		name      string
-		meterName string
-		owner     string
-		wantErr   bool
-	}{
-		{
-			name:      "valid prefix",
-			meterName: "compute.miloapis.com/instance/cpu-seconds",
-			owner:     "compute.miloapis.com",
-			wantErr:   false,
-		},
-		{
-			name:      "missing owner prefix",
-			meterName: "something/else",
-			owner:     "compute.miloapis.com",
-			wantErr:   true,
-		},
-		{
-			name:      "exact owner without path segment",
-			meterName: "compute.miloapis.com/",
-			owner:     "compute.miloapis.com",
-			wantErr:   true,
-		},
-		{
-			name:      "wrong owner prefix",
-			meterName: "storage.miloapis.com/bucket/ops",
-			owner:     "compute.miloapis.com",
-			wantErr:   true,
-		},
-		{
-			name:      "owner missing skips prefix check",
-			meterName: "whatever/here",
-			owner:     "",
-			wantErr:   false,
-		},
-		{
-			name:      "owner equal to meterName without slash",
-			meterName: "compute.miloapis.com",
-			owner:     "compute.miloapis.com",
-			wantErr:   true,
-		},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			md := newMeterDefinition("m", tt.meterName, tt.owner)
-			errs := validateMeterNameFormat(md)
-			if (len(errs) > 0) != tt.wantErr {
-				t.Errorf("validateMeterNameFormat() errs = %v, wantErr %v", errs, tt.wantErr)
-			}
-		})
+func TestValidateMeterDefinitionCreate(t *testing.T) {
+	md := newMeterDefinition("test-meter", "compute.miloapis.com/instance/cpu-seconds", "region")
+	errs := ValidateMeterDefinitionCreate(md)
+	if len(errs) != 0 {
+		t.Errorf("expected no errors for valid MeterDefinition, got: %v", errs)
 	}
 }
 
 func TestValidateDimensionsAdditive(t *testing.T) {
 	tests := []struct {
-		name    string
-		oldDims []string
-		newDims []string
-		wantErr bool
+		name     string
+		oldDims  []string
+		newDims  []string
+		wantErrs int
 	}{
 		{
-			name:    "no dimensions",
-			oldDims: nil,
-			newDims: nil,
-			wantErr: false,
+			name:     "nil to nil ok",
+			oldDims:  nil,
+			newDims:  nil,
+			wantErrs: 0,
 		},
 		{
-			name:    "add a dimension",
-			oldDims: []string{"region"},
-			newDims: []string{"region", "tier"},
-			wantErr: false,
+			name:     "add dimension ok",
+			oldDims:  []string{"region"},
+			newDims:  []string{"region", "instance.type"},
+			wantErrs: 0,
 		},
 		{
-			name:    "unchanged",
-			oldDims: []string{"region", "tier"},
-			newDims: []string{"region", "tier"},
-			wantErr: false,
+			name:     "unchanged ok",
+			oldDims:  []string{"region", "instance.type"},
+			newDims:  []string{"region", "instance.type"},
+			wantErrs: 0,
 		},
 		{
-			name:    "remove a dimension",
-			oldDims: []string{"region", "tier"},
-			newDims: []string{"region"},
-			wantErr: true,
+			name:     "remove dimension errors",
+			oldDims:  []string{"region", "instance.type"},
+			newDims:  []string{"region"},
+			wantErrs: 1,
 		},
 		{
-			name:    "reorder",
-			oldDims: []string{"region", "tier"},
-			newDims: []string{"tier", "region"},
-			wantErr: true,
+			name:     "reorder ok (all old dims present)",
+			oldDims:  []string{"region", "instance.type"},
+			newDims:  []string{"instance.type", "region"},
+			wantErrs: 0,
 		},
 		{
-			name:    "rename",
-			oldDims: []string{"region"},
-			newDims: []string{"zone"},
-			wantErr: true,
+			name:     "rename dimension errors",
+			oldDims:  []string{"region"},
+			newDims:  []string{"zone"},
+			wantErrs: 1,
 		},
 		{
-			name:    "add to empty",
-			oldDims: nil,
-			newDims: []string{"region"},
-			wantErr: false,
+			name:     "add to empty ok",
+			oldDims:  nil,
+			newDims:  []string{"region"},
+			wantErrs: 0,
 		},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			oldMD := newMeterDefinition("m", "svc/m", "svc", tt.oldDims...)
-			newMD := newMeterDefinition("m", "svc/m", "svc", tt.newDims...)
-			errs := validateDimensionsAdditive(oldMD, newMD)
-			if (len(errs) > 0) != tt.wantErr {
-				t.Errorf("validateDimensionsAdditive() errs = %v, wantErr %v", errs, tt.wantErr)
+
+	fldPath := field.NewPath("spec", "measurement", "dimensions")
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			errs := validateDimensionsAdditive(tc.oldDims, tc.newDims, fldPath)
+			if len(errs) != tc.wantErrs {
+				t.Errorf("got %d errors, want %d: %v", len(errs), tc.wantErrs, errs)
 			}
 		})
 	}
@@ -152,70 +105,99 @@ func TestValidateDimensionsAdditive(t *testing.T) {
 
 func TestValidateMeterDefinitionUpdate_Immutability(t *testing.T) {
 	tests := []struct {
-		name    string
-		mutate  func(md *billingv1alpha1.MeterDefinition)
-		wantErr bool
+		name     string
+		mutate   func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition
+		wantErrs int
 	}{
 		{
-			name:    "no changes",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) {},
-			wantErr: false,
-		},
-		{
-			name:    "change meterName",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) { md.Spec.MeterName = "svc/other" },
-			wantErr: true,
-		},
-		{
-			name:    "change owner.service",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) { md.Spec.Owner.Service = "other" },
-			wantErr: true,
-		},
-		{
-			name: "change aggregation",
-			mutate: func(md *billingv1alpha1.MeterDefinition) {
-				md.Spec.Measurement.Aggregation = billingv1alpha1.MeterAggregationMax
+			name: "no changes ok",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				return md.DeepCopy()
 			},
-			wantErr: true,
+			wantErrs: 0,
 		},
 		{
-			name:    "change unit",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) { md.Spec.Measurement.Unit = "By" },
-			wantErr: true,
-		},
-		{
-			name:    "change displayName (editable)",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) { md.Spec.DisplayName = "new name" },
-			wantErr: false,
-		},
-		{
-			name:    "change description (editable)",
-			mutate:  func(md *billingv1alpha1.MeterDefinition) { md.Spec.Description = "updated" },
-			wantErr: false,
-		},
-		{
-			name: "change pricingUnit (editable)",
-			mutate: func(md *billingv1alpha1.MeterDefinition) {
-				md.Spec.Billing.PricingUnit = "min"
+			name: "changing meterName errors",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.MeterName = "compute.miloapis.com/instance/cpu-seconds/v2"
+				return c
 			},
-			wantErr: false,
+			wantErrs: 1,
+		},
+		{
+			name: "changing aggregation errors",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Measurement.Aggregation = billingv1alpha1.MeterAggregationMax
+				return c
+			},
+			wantErrs: 1,
+		},
+		{
+			name: "changing unit errors",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Measurement.Unit = "h"
+				return c
+			},
+			wantErrs: 1,
+		},
+		{
+			name: "changing displayName ok",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.DisplayName = "Updated Display Name"
+				return c
+			},
+			wantErrs: 0,
+		},
+		{
+			name: "changing description ok",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Description = "Updated description."
+				return c
+			},
+			wantErrs: 0,
+		},
+		{
+			name: "changing pricingUnit ok",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Billing.PricingUnit = "d"
+				return c
+			},
+			wantErrs: 0,
+		},
+		{
+			name: "valid phase transition ok",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Phase = billingv1alpha1.PhasePublished
+				return c
+			},
+			wantErrs: 0,
+		},
+		{
+			name: "invalid phase transition errors",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Phase = billingv1alpha1.PhaseRetired // Draft -> Retired is invalid
+				return c
+			},
+			wantErrs: 1,
 		},
 	}
 
-	// Client is unused for these fields but required by the options struct.
-	cl := fake.NewClientBuilder().WithScheme(newScheme()).Build()
-	opts := MeterDefinitionValidationOptions{Context: context.Background(), Client: cl}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			oldMD := newMeterDefinition("m", "svc/m", "svc", "region")
-			newMD := oldMD.DeepCopy()
-			tt.mutate(newMD)
-			errs := ValidateMeterDefinitionUpdate(oldMD, newMD, opts)
-			if (len(errs) > 0) != tt.wantErr {
-				t.Errorf("ValidateMeterDefinitionUpdate() errs = %v, wantErr %v", errs, tt.wantErr)
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			oldMD := newMeterDefinition("test-meter", "compute.miloapis.com/instance/cpu-seconds", "region")
+			newMD := tc.mutate(oldMD)
+			errs := ValidateMeterDefinitionUpdate(oldMD, newMD)
+			if len(errs) != tc.wantErrs {
+				t.Errorf("got %d errors, want %d: %v", len(errs), tc.wantErrs, errs)
 			}
 		})
 	}
 }
-

@@ -6,4 +6,4 @@ status:
   conditions:
     - type: Ready
       status: "True"
-      reason: MeterDefinitionActive
+      reason: MeterDefinitionReady

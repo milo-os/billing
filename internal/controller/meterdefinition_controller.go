@@ -11,29 +11,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
-)
-
-// meterDefinitionFinalizer is placed on every MeterDefinition so that
-// future pricing / entitlement / usage resources can rely on the meter
-// remaining present while they hold a reference. For v0 there are no
-// downstream resources to check, so the finalizer is removed immediately
-// on deletion.
-const meterDefinitionFinalizer = "billing.miloapis.com/meter-definition"
-
-const (
-	// reasonMeterDefinitionActive is the Ready=True reason.
-	reasonMeterDefinitionActive = "MeterDefinitionActive"
-
-	// reasonDuplicateMeterName is the Ready=False reason when another
-	// MeterDefinition with the same spec.meterName exists. The webhook
-	// prevents the common case; this condition is how the controller
-	// surfaces the race between two concurrent admissions.
-	reasonDuplicateMeterName = "DuplicateMeterName"
 )
 
 // MeterDefinitionReconciler reconciles a MeterDefinition object.
@@ -56,129 +37,80 @@ func (r *MeterDefinitionReconciler) Reconcile(ctx context.Context, req reconcile
 		return ctrl.Result{}, err
 	}
 
-	if !md.DeletionTimestamp.IsZero() {
-		return r.reconcileDelete(ctx, &md)
+	// Compute desired status.
+	newStatus := billingv1alpha1.MeterDefinitionStatus{}
+	newStatus.ObservedGeneration = md.Generation
+
+	// Preserve publishedAt if already set.
+	newStatus.PublishedAt = md.Status.PublishedAt
+
+	// Set publishedAt when phase first becomes Published.
+	if md.Spec.Phase == billingv1alpha1.PhasePublished && newStatus.PublishedAt == nil {
+		now := metav1.Now()
+		newStatus.PublishedAt = &now
 	}
 
-	if !controllerutil.ContainsFinalizer(&md, meterDefinitionFinalizer) {
-		controllerutil.AddFinalizer(&md, meterDefinitionFinalizer)
-		if err := r.client.Update(ctx, &md); err != nil {
-			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
-		}
+	// Carry over existing conditions to mutate them.
+	newStatus.Conditions = md.Status.Conditions
+
+	// Ready condition: True when phase is not Draft.
+	if md.Spec.Phase != billingv1alpha1.PhaseDraft {
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               ConditionTypeReady,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: md.Generation,
+			Reason:             "MeterDefinitionReady",
+			Message:            fmt.Sprintf("MeterDefinition is in %s phase.", md.Spec.Phase),
+		})
+	} else {
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               ConditionTypeReady,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: md.Generation,
+			Reason:             "MeterDefinitionDraft",
+			Message:            "MeterDefinition is in Draft phase and not yet published.",
+		})
+	}
+
+	// Published condition: True when phase is Published, Deprecated, or Retired.
+	switch md.Spec.Phase {
+	case billingv1alpha1.PhasePublished, billingv1alpha1.PhaseDeprecated, billingv1alpha1.PhaseRetired:
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               ConditionTypePublished,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: md.Generation,
+			Reason:             "MeterDefinitionPublished",
+			Message:            fmt.Sprintf("MeterDefinition has been published (current phase: %s).", md.Spec.Phase),
+		})
+	default:
+		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+			Type:               ConditionTypePublished,
+			Status:             metav1.ConditionFalse,
+			ObservedGeneration: md.Generation,
+			Reason:             "MeterDefinitionDraft",
+			Message:            "MeterDefinition has not been published yet.",
+		})
+	}
+
+	// Skip status update if nothing changed.
+	if statusEqual(md.Status.CatalogStatus, newStatus.CatalogStatus) {
 		return ctrl.Result{}, nil
 	}
 
-	readyCondition, err := r.desiredReadyCondition(ctx, &md)
-	if err != nil {
-		return ctrl.Result{}, err
-	}
-
-	if !statusNeedsUpdate(&md, readyCondition) {
-		return ctrl.Result{}, nil
-	}
-
-	md.Status.ObservedGeneration = md.Generation
-	apimeta.SetStatusCondition(&md.Status.Conditions, readyCondition)
-
+	md.Status = newStatus
 	if err := r.client.Status().Update(ctx, &md); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 
-	logger.Info("reconciled meter definition",
-		"meterName", md.Spec.MeterName,
-		"owner", md.Spec.Owner.Service,
-		"ready", readyCondition.Status,
-	)
-
-	return ctrl.Result{}, nil
-}
-
-// desiredReadyCondition builds the Ready condition for this reconcile.
-// The webhook rejects duplicate meterNames at admission, but two
-// concurrent creates can slip past the check. If this controller ever
-// observes a duplicate, every offender is marked Ready=False so the
-// collision is visible via `kubectl get` and to downstream automations.
-func (r *MeterDefinitionReconciler) desiredReadyCondition(
-	ctx context.Context,
-	md *billingv1alpha1.MeterDefinition,
-) (metav1.Condition, error) {
-	var list billingv1alpha1.MeterDefinitionList
-	if err := r.client.List(ctx, &list,
-		client.MatchingFields{MeterDefinitionMeterNameField: md.Spec.MeterName},
-	); err != nil {
-		return metav1.Condition{}, fmt.Errorf("failed to list duplicates for %q: %w", md.Spec.MeterName, err)
-	}
-
-	for i := range list.Items {
-		other := &list.Items[i]
-		if other.UID == md.UID {
-			continue
-		}
-		return metav1.Condition{
-			Type:               ConditionTypeReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: md.Generation,
-			Reason:             reasonDuplicateMeterName,
-			Message: fmt.Sprintf("meterName %q is also defined by %q; resolve the collision before use",
-				md.Spec.MeterName, other.Name),
-		}, nil
-	}
-
-	return metav1.Condition{
-		Type:               ConditionTypeReady,
-		Status:             metav1.ConditionTrue,
-		ObservedGeneration: md.Generation,
-		Reason:             reasonMeterDefinitionActive,
-		Message:            "Meter definition is active and available to downstream systems.",
-	}, nil
-}
-
-// statusNeedsUpdate returns true when the observed generation is stale or
-// the existing Ready condition does not match the desired one. Avoids
-// write amplification on resources that are already settled.
-func statusNeedsUpdate(md *billingv1alpha1.MeterDefinition, desired metav1.Condition) bool {
-	if md.Status.ObservedGeneration != md.Generation {
-		return true
-	}
-	existing := apimeta.FindStatusCondition(md.Status.Conditions, ConditionTypeReady)
-	if existing == nil {
-		return true
-	}
-	return existing.Status != desired.Status ||
-		existing.Reason != desired.Reason ||
-		existing.Message != desired.Message ||
-		existing.ObservedGeneration != desired.ObservedGeneration
-}
-
-// reconcileDelete handles the deletion of a MeterDefinition. With no
-// downstream references to check in v0, the finalizer is removed
-// immediately. The finalizer is still installed so that downstream
-// reference checks can be added later without an API change.
-func (r *MeterDefinitionReconciler) reconcileDelete(
-	ctx context.Context,
-	md *billingv1alpha1.MeterDefinition,
-) (ctrl.Result, error) {
-	logger := log.FromContext(ctx)
-
-	if !controllerutil.ContainsFinalizer(md, meterDefinitionFinalizer) {
-		return ctrl.Result{}, nil
-	}
-
-	controllerutil.RemoveFinalizer(md, meterDefinitionFinalizer)
-	if err := r.client.Update(ctx, md); err != nil {
-		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
-	}
-
-	logger.Info("finalized meter definition", "meterName", md.Spec.MeterName)
+	logger.Info("reconciled meter definition", "phase", md.Spec.Phase)
 	return ctrl.Result{}, nil
 }
 
 // SetupWithManager sets up the controller with the Manager.
 func (r *MeterDefinitionReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
-
 	return ctrl.NewControllerManagedBy(mgr).
-		Named("meterdefinition").
+		Named("billing-meterdefinition").
 		For(&billingv1alpha1.MeterDefinition{}).
 		Complete(r)
 }

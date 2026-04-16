@@ -154,6 +154,10 @@ func main() {
 		setupLog.Error(err, "unable to create controller", "controller", "MeterDefinition")
 		os.Exit(1)
 	}
+	if err = (&controller.MonitoredResourceTypeReconciler{}).SetupWithManager(mgr); err != nil {
+		setupLog.Error(err, "unable to create controller", "controller", "MonitoredResourceType")
+		os.Exit(1)
+	}
 
 	if err = controller.AddIndexers(ctx, mgr); err != nil {
 		setupLog.Error(err, "unable to add indexers")
@@ -171,6 +175,18 @@ func main() {
 		}
 		if err = billingwebhooks.SetupMeterDefinitionWebhookWithManager(mgr); err != nil {
 			setupLog.Error(err, "unable to create webhook", "webhook", "MeterDefinition")
+			os.Exit(1)
+		}
+		if err = billingwebhooks.SetupMonitoredResourceTypeWebhookWithManager(mgr); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MonitoredResourceType")
+			os.Exit(1)
+		}
+		if err = billingwebhooks.SetupMeterDefinitionOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MeterDefinitionOwnership")
+			os.Exit(1)
+		}
+		if err = billingwebhooks.SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
+			setupLog.Error(err, "unable to create webhook", "webhook", "MonitoredResourceTypeOwnership")
 			os.Exit(1)
 		}
 	}

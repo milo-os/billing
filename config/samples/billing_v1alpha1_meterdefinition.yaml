@@ -11,8 +11,7 @@ spec:
   description: |
     CPU time consumed by running compute instances, measured at 1-minute
     resolution.
-  owner:
-    service: compute.miloapis.com
+  phase: Draft
   measurement:
     aggregation: Sum
     unit: s
@@ -23,4 +22,3 @@ spec:
   billing:
     consumedUnit: s
     pricingUnit: h
-    chargeCategory: Usage

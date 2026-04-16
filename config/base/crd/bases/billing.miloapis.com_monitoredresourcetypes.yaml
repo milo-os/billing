@@ -4,19 +4,19 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.4
-  name: meterdefinitions.billing.miloapis.com
+  name: monitoredresourcetypes.billing.miloapis.com
 spec:
   group: billing.miloapis.com
   names:
-    kind: MeterDefinition
-    listKind: MeterDefinitionList
-    plural: meterdefinitions
-    singular: meterdefinition
+    kind: MonitoredResourceType
+    listKind: MonitoredResourceTypeList
+    plural: monitoredresourcetypes
+    singular: monitoredresourcetype
   scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.meterName
-      name: Meter
+    - jsonPath: .spec.resourceTypeName
+      name: Type
       type: string
     - jsonPath: .spec.phase
       name: Phase
@@ -28,10 +28,10 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          MeterDefinition is the Schema for the meterdefinitions API. It is a
-          declarative, platform-advertised catalog entry for a single billable
-          dimension -- what is measured, in what unit, how it is aggregated.
-          It does not ingest events, calculate money, or store customer data.
+          MonitoredResourceType is the Schema for the monitoredresourcetypes
+          API. It is the platform's declaration of which Kubernetes Kinds can
+          appear on a bill or a dashboard, and what descriptive labels their
+          usage events are allowed to carry.
         properties:
           apiVersion:
             description: |-
@@ -52,118 +52,116 @@ spec:
             type: object
           spec:
             description: |-
-              MeterDefinitionSpec defines the desired state of a MeterDefinition.
+              MonitoredResourceTypeSpec defines the desired state of a
+              MonitoredResourceType.
 
-              The spec is organized into three cohesive blocks: identity (who/what
-              this is), measurement (how the signal is captured and aggregated),
-              and billing (how it crosses into commerce). Core fields (meterName,
-              measurement.aggregation, measurement.unit) are immutable once created;
-              a breaking change ships as a new MeterDefinition with a versioned meterName.
+              A MonitoredResourceType declares which Kubernetes Kinds are billable
+              or otherwise monitored by the platform, and the closed set of
+              descriptive labels that usage events against that Kind may carry.
+
+              Core fields (resourceTypeName, gvk.group, gvk.kind) are immutable once
+              created; a breaking change ships as a new MonitoredResourceType with a
+              new canonical name.
 
               spec.phase is the provider-declared lifecycle intent: Draft ->
               Published -> Deprecated -> Retired. The controller mirrors that
               intent via conditions; it does not transition the phase itself.
 
-              Ownership is expressed via labels (e.g. app.kubernetes.io/managed-by)
-              rather than a spec.owner field.
+              Ownership is expressed via labels rather than a spec.owner field.
             properties:
-              billing:
-                description: |-
-                  Billing describes how the meter crosses into commerce. Carries no
-                  rates, currencies, or tiers -- those live in the pricing engine.
-                properties:
-                  consumedUnit:
-                    description: |-
-                      ConsumedUnit is the UCUM unit in which usage is measured (e.g.
-                      "s"). Typically matches measurement.unit; may diverge when the
-                      emitted telemetry is pre-converted. Equality with measurement.unit is
-                      not enforced.
-                    maxLength: 64
-                    minLength: 1
-                    type: string
-                  pricingUnit:
-                    description: |-
-                      PricingUnit is the UCUM unit pricing quotes against (e.g. "h").
-                      May differ from ConsumedUnit; the pricing engine handles the
-                      conversion.
-                    maxLength: 64
-                    minLength: 1
-                    type: string
-                required:
-                - consumedUnit
-                - pricingUnit
-                type: object
               description:
                 description: |-
-                  Description is a plain-English explanation of what the meter
-                  measures. Editable over the meter's lifetime.
+                  Description is a plain-English explanation of what the resource
+                  type represents. Editable over the type's lifetime.
                 maxLength: 1024
                 type: string
               displayName:
                 description: |-
-                  DisplayName is a human-readable name surfaced in portals and on
-                  invoices alongside the canonical meterName.
+                  DisplayName is a human-readable name surfaced in portals and
+                  dashboards alongside the canonical resourceTypeName. Editable
+                  over the type's lifetime.
                 maxLength: 128
                 minLength: 1
                 type: string
-              measurement:
-                description: Measurement describes how the signal is captured and
-                  aggregated.
+              gvk:
+                description: |-
+                  GVK pins the resource type to a Kubernetes Kind. Version is
+                  deliberately omitted: billability is a property of the Kind, not
+                  of a specific API version.
                 properties:
-                  aggregation:
+                  group:
                     description: |-
-                      Aggregation is the function applied to samples over a billing
-                      period. Single source of truth for how usage rolls up. Immutable.
-                    enum:
-                    - Sum
-                    - Max
-                    - Min
-                    - Count
-                    - UniqueCount
-                    - Latest
-                    - Average
-                    type: string
-                    x-kubernetes-validations:
-                    - message: measurement.aggregation is immutable
-                      rule: self == oldSelf
-                  dimensions:
-                    description: |-
-                      Dimensions is an ordered list of attribute keys that downstream
-                      systems may group by (e.g. "region", "tier", "resource.type").
-                      Adding a dimension is additive; removing one is a breaking change
-                      and must ship as a new meter.
-                    items:
-                      type: string
-                    maxItems: 32
-                    type: array
-                    x-kubernetes-list-type: atomic
-                  unit:
-                    description: |-
-                      Unit is a UCUM (https://ucum.org/ucum) string describing what the
-                      meter measures (e.g. "s", "By", "{request}", "GBy.h"). Immutable.
-                    maxLength: 64
+                      Group is the Kubernetes API group of the Kind (e.g.
+                      "compute.miloapis.com"). Immutable.
+                    maxLength: 253
                     minLength: 1
                     type: string
                     x-kubernetes-validations:
-                    - message: measurement.unit is immutable
+                    - message: gvk.group is immutable
+                      rule: self == oldSelf
+                  kind:
+                    description: Kind is the Kubernetes Kind (e.g. "Instance"). Immutable.
+                    maxLength: 63
+                    minLength: 1
+                    type: string
+                    x-kubernetes-validations:
+                    - message: gvk.kind is immutable
                       rule: self == oldSelf
                 required:
-                - aggregation
-                - unit
+                - group
+                - kind
                 type: object
-              meterName:
+              labels:
                 description: |-
-                  MeterName is the canonical, user-facing identifier for this
-                  meter. It is the cross-system join key used by invoices, rate
-                  cards, marketplace listings, and FOCUS exports. Typically a
-                  reverse-DNS path (e.g.
-                  "compute.miloapis.com/instance/cpu-seconds"). Immutable.
-                maxLength: 253
-                minLength: 1
-                type: string
-                x-kubernetes-validations:
-                - message: meterName is immutable
-                  rule: self == oldSelf
+                  Labels is the closed set of descriptive labels that usage events
+                  against this resource type are permitted to carry. Events whose
+                  labels are not in this set are rejected at the edge. Adding a new
+                  optional label is additive; adding a required label or removing
+                  any declared label is a breaking change.
+                items:
+                  description: |-
+                    MonitoredResourceLabel declares a single descriptive label that usage
+                    events against the resource type may carry. Labels form a closed set:
+                    events bearing any label not declared here are rejected before they
+                    reach the audit log.
+                  properties:
+                    allowedValues:
+                      description: |-
+                        AllowedValues, when non-empty, constrains the label to a fixed
+                        vocabulary. Events carrying a value outside this set are rejected.
+                      items:
+                        type: string
+                      maxItems: 64
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    description:
+                      description: |-
+                        Description is a plain-English explanation of what the label
+                        conveys. Editable over the resource type's lifetime.
+                      maxLength: 512
+                      type: string
+                    name:
+                      description: |-
+                        Name is the label key as it will appear on usage events (e.g.
+                        "region", "zone", "tier"). It is the map key for this list.
+                      maxLength: 63
+                      minLength: 1
+                      type: string
+                    required:
+                      default: false
+                      description: |-
+                        Required indicates whether every usage event against this
+                        resource type must carry this label. Defaults to false
+                        (optional).
+                      type: boolean
+                  required:
+                  - name
+                  type: object
+                maxItems: 64
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               phase:
                 allOf:
                 - enum:
@@ -178,19 +176,34 @@ spec:
                   - Retired
                 default: Draft
                 description: |-
-                  Phase is the provider-declared lifecycle state of this meter.
-                  Allowed transitions are forward-only:
+                  Phase is the provider-declared lifecycle state of this
+                  monitored resource type. Allowed transitions are forward-only:
                   Draft -> Published -> Deprecated -> Retired.
                 type: string
+              resourceTypeName:
+                description: |-
+                  ResourceTypeName is the canonical, user-facing identifier for
+                  this monitored resource type. It typically combines the owning
+                  service's reverse-DNS name with the Kubernetes Kind (e.g.
+                  "compute.miloapis.com/Instance") and is the stable identifier
+                  used by portal drill-downs, FinOps exports, and billing events.
+                  Immutable.
+                maxLength: 253
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: resourceTypeName is immutable
+                  rule: self == oldSelf
             required:
-            - billing
             - displayName
-            - measurement
-            - meterName
+            - gvk
             - phase
+            - resourceTypeName
             type: object
           status:
-            description: MeterDefinitionStatus defines the observed state of a MeterDefinition.
+            description: |-
+              MonitoredResourceTypeStatus defines the observed state of a
+              MonitoredResourceType.
             properties:
               conditions:
                 description: Conditions represent the latest available observations
