@@ -164,6 +164,17 @@ spec:
                 x-kubernetes-validations:
                 - message: meterName is immutable
                   rule: self == oldSelf
+              monitoredResourceTypes:
+                description: |-
+                  MonitoredResourceTypes names the billing.miloapis.com/MonitoredResourceType
+                  instances whose usage events are counted by this meter. Follows
+                  Google's MetricDescriptor.monitored_resource_types pattern: each
+                  entry identifies a resource type that emits samples this meter
+                  aggregates.
+                items:
+                  type: string
+                minItems: 1
+                type: array
               phase:
                 allOf:
                 - enum:
@@ -187,6 +198,7 @@ spec:
             - displayName
             - measurement
             - meterName
+            - monitoredResourceTypes
             - phase
             type: object
           status:

@@ -82,6 +82,16 @@ type MeterDefinitionSpec struct {
 	//
 	// +kubebuilder:validation:Required
 	Billing MeterBilling `json:"billing"`
+
+	// MonitoredResourceTypes names the billing.miloapis.com/MonitoredResourceType
+	// instances whose usage events are counted by this meter. Follows
+	// Google's MetricDescriptor.monitored_resource_types pattern: each
+	// entry identifies a resource type that emits samples this meter
+	// aggregates.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinItems=1
+	MonitoredResourceTypes []string `json:"monitoredResourceTypes"`
 }
 
 // MeterMeasurement describes how a meter's signal is captured.
