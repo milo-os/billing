@@ -160,6 +160,7 @@ type MonitoredResourceTypeStatus struct {
 // +kubebuilder:printcolumn:name="Type",type=string,JSONPath=`.spec.resourceTypeName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.spec.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Platform"
 type MonitoredResourceType struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
