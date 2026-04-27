@@ -3,4 +3,10 @@ resources:
 - billing_v1alpha1_billingaccount.yaml
 - billing_v1alpha1_billingaccountbinding.yaml
 - billing_v1alpha1_meterdefinition.yaml
+- billing_v1alpha1_monitoredresourcetype_assistant_conversation.yaml
+- billing_v1alpha1_meterdefinition_assistant_input_tokens.yaml
+- billing_v1alpha1_meterdefinition_assistant_output_tokens.yaml
+- billing_v1alpha1_meterdefinition_assistant_cache_read_tokens.yaml
+- billing_v1alpha1_meterdefinition_assistant_cache_write_tokens.yaml
+- billing_v1alpha1_meterdefinition_assistant_messages.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples
