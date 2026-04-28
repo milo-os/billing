@@ -1,0 +1,33 @@
+@startuml usage-pipeline-containers
+!$NEW_C4_STYLE = 1
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/datum-cloud/enhancements/main/enhancements/datum-theme.puml
+
+title Usage Pipeline — Container View
+
+Container_Ext(producer, "Service Producer", "Go / SDK", "Emits usage events via the billing SDK")
+System_Ext(provider, "Billing Provider", "External billing provider")
+
+System_Boundary(edge, "Edge Cluster") {
+    Container(vector, "Vector Agent", "DaemonSet", "Node-local disk buffer; forwards CloudEvents over HTTPS")
+    Container(tier2, "JetStream Cluster", "NATS JetStream, optional", "Cluster-local Raft durability; forwards to Gateway over HTTPS")
+}
+
+System_Boundary(platform, "Central Platform") {
+    Container(gateway, "Ingestion Gateway", "HTTP", "Single deployment; structural validation; NATS publish keyed by subject")
+    Container(jetstream, "Central JetStream", "NATS JetStream", "Durable event log; valid and quarantine streams per project")
+    Container(controllers, "Billing Controllers", "Go", "Central validation and attribution")
+    Container(submission, "Provider Submission Controller", "Go", "Reads attributed events; submits to billing provider")
+}
+
+Rel(producer, vector, "CloudEvents", "HTTP")
+Rel(vector, tier2, "CloudEvents", "HTTPS")
+Rel_R(vector, gateway, "CloudEvents batch", "HTTPS")
+Rel_R(tier2, gateway, "CloudEvents batch", "HTTPS")
+Rel_R(gateway, jetstream, "Publish", "NATS internal")
+Rel_U(controllers, jetstream, "Consume and publish", "NATS internal")
+Rel_L(submission, jetstream, "Consume attributed events", "NATS internal")
+Rel_R(submission, provider, "Ingest batch", "HTTPS")
+
+SHOW_LEGEND()
+@enduml
