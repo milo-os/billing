@@ -99,10 +99,11 @@ later.
 
 A service emits a usage event using the platform billing SDK. The SDK validates
 the event, wraps it in a [CloudEvents v1.0][cloudevents] envelope with a stable
-[ULID][ulid] identifier, and places it in an in-memory buffer, returning
-immediately to the caller. A background goroutine forwards events from the buffer
-to a local [Vector][vector] Agent, which commits them to disk. The Vector Agent
-forwards batches to a centrally-deployed Ingestion Gateway over HTTPS.
+[ULID][ulid] identifier, and writes it synchronously to the local
+[Vector][vector] Agent. The SDK retries on transient failures and returns an
+error to the caller if the Agent remains unreachable. Vector commits the event to
+its disk buffer and forwards batches to a centrally-deployed Ingestion Gateway
+over HTTPS.
 
 The Gateway performs structural validation and publishes the event to a
 project-scoped stream in the central durable log ([NATS JetStream][jetstream]).
@@ -181,18 +182,17 @@ or replay never results in double billing.
 
 #### No Silent Drops
 
-Structurally invalid events are rejected synchronously at the SDK before
-buffering. Business rule violations — unknown meter, invalid dimensions, missing
+Structurally invalid events are rejected synchronously at the SDK before any
+write. Business rule violations — unknown meter, invalid dimensions, missing
 binding — are quarantined centrally and surfaced via metrics. Nothing is
 discarded without an operator-visible signal.
 
 #### Durable Before Acknowledged
 
-The SDK returns immediately after writing to an in-memory buffer; a background
-goroutine forwards to the local [Vector][vector] Agent, which commits to disk
-before acknowledging. Events in the in-memory buffer at process crash time are
-lost, but once on Vector's disk the three-tier durability model ensures they
-survive node restarts, transient network failures, and edge cluster partitions.
+`Record()` returns success only after the local [Vector][vector] Agent has
+acknowledged the write to its disk buffer. Once on Vector's disk, the three-tier
+durability model ensures the event survives node restarts, transient network
+failures, and edge cluster partitions.
 
 #### Attribution from the Binding Graph
 
@@ -450,19 +450,14 @@ if err != nil {
    map to their CloudEvents attributes. `Quantity`, `Dimensions`, and `Resource`
    populate `data`.
 
-3. **Write to in-memory buffer.** The CloudEvent is placed into a bounded
-   in-memory queue and the SDK returns immediately to the caller. A background
-   goroutine drains the queue to the local [Vector][vector] Agent. Events in the
-   buffer at process crash time are lost; durable acknowledgement occurs once
-   Vector commits to its [disk buffer][vector-disk-buffer].
+3. **Write to the local [Vector][vector] Agent.** The CloudEvent is POSTed to
+   the Vector Agent over HTTP (localhost). The SDK retries with bounded
+   exponential backoff on transient failures (connection refused, 5xx). It never
+   falls back to calling the Gateway directly — bypassing Vector would remove
+   Tier 1 disk durability. If the Vector Agent remains unavailable after the
+   retry budget is exhausted, `Record()` returns an error to the caller.
 
-4. **Forward to the local [Vector][vector] Agent.** The background goroutine
-   POSTs CloudEvents batches to the Vector Agent over HTTP (localhost). If the
-   Vector Agent is unavailable, the goroutine retries with bounded exponential
-   backoff. It never forwards directly to the Gateway — bypassing Vector would
-   remove Tier 1 disk durability.
-
-5. **Vector forwards to the Gateway.** The Vector Agent reads from its disk
+4. **Vector forwards to the Gateway.** The Vector Agent reads from its disk
    buffer and POSTs CloudEvents batches to the Ingestion Gateway over HTTPS.
    Transient Gateway failures are handled by Vector's built-in retry. Permanent
    structural rejections (4xx) are surfaced via `billing_sdk_dead_letter_total`.
@@ -630,17 +625,14 @@ not a code change. Alerting rules are defined alongside the deployment manifests
 | `billing_submission_requests_total` | Counter | Provider submission requests, by status code |
 | `billing_quarantine_depth` | Gauge | Events in quarantine, by reason (`unknown_meter`, `invalid_dimensions`, `attribution_failure`) |
 | `billing_replication_lag_seconds` | Gauge | Replication lag between durability tiers, by tier (`tier1_to_2`, `tier2_to_3`) |
-| `billing_sdk_buffer_depth` | Gauge | Events currently in the SDK in-memory buffer awaiting forwarding to the Vector Agent |
-| `billing_sdk_buffer_drops_total` | Counter | Events dropped because the SDK in-memory buffer was full |
-| `billing_sdk_forward_failures_total` | Counter | SDK background goroutine forwarding attempts that failed after retries exhausted |
+| `billing_sdk_record_errors_total` | Counter | `Record()` calls that failed after the retry budget was exhausted, by reason |
 | `billing_sdk_dead_letter_total` | Counter | Events permanently rejected by the Vector Agent for structural reasons |
 
 **Core alert rules:**
 
 | Alert | Condition | Severity |
 |-------|-----------|----------|
-| `BillingSDKBufferDropping` | `billing_sdk_buffer_drops_total` rate > 0 | Critical |
-| `BillingSDKForwardFailing` | `billing_sdk_forward_failures_total` rate > 0 | Critical |
+| `BillingSDKRecordErrors` | `billing_sdk_record_errors_total` rate > 0 | Critical |
 | `BillingBacklogGrowing` | `billing_pipeline_backlog_depth` increasing over 3 consecutive 1-min intervals | Warning |
 | `BillingSubmissionDegraded` | Provider error rate >5% over 5 minutes | Critical |
 | `BillingQuarantineNonZero` | `billing_quarantine_depth > 0` for any reason | Warning |
