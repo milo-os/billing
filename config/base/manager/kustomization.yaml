@@ -8,7 +8,7 @@ resources:
 - pdb.yaml
 
 images:
-- name: ghcr.io/datum-cloud/billing
+- name: ghcr.io/milo-os/billing
   newTag: latest
 
 configMapGenerator:
