@@ -409,6 +409,33 @@ type ResourceRef struct {
     Name      string
     UID       types.UID
 }
+
+// Recorder is the entry point for emitting usage events.
+type Recorder interface {
+    Record(ctx context.Context, event UsageEvent) error
+}
+```
+
+**Example usage:**
+
+```go
+err := recorder.Record(ctx, billing.UsageEvent{
+    Meter:      "compute.miloapis.com/instance/cpu-seconds",
+    Project:    billing.ProjectRef{Name: "p-abc"},
+    Source:     "//compute.miloapis.com/controllers/instance-reconciler",
+    Quantity:   42,
+    Dimensions: map[string]string{"region": "us-east-1"},
+    Resource: &billing.ResourceRef{
+        Group:     "compute.miloapis.com",
+        Kind:      "Instance",
+        Namespace: "default",
+        Name:      "instance-123",
+        UID:       instance.UID,
+    },
+})
+if err != nil {
+    return fmt.Errorf("recording usage: %w", err)
+}
 ```
 
 **SDK behavior:**
@@ -585,8 +612,11 @@ the provider's own enhancement document.
 
 ### Observability
 
-Pipeline health is exposed via a standard [Prometheus][prometheus] `/metrics`
-endpoint. Alerting rules are defined alongside the deployment manifests.
+Pipeline components are instrumented using the [OpenTelemetry][otel-metrics] Go
+metrics SDK. Metrics are exported via the OTel Prometheus exporter, which exposes
+a standard `/metrics` scrape endpoint compatible with existing Kubernetes
+monitoring stacks. Swapping to an OTLP push exporter is a configuration change,
+not a code change. Alerting rules are defined alongside the deployment manifests.
 
 **Core metrics:**
 
@@ -691,6 +721,7 @@ attributes in a generic metric stream.
 - [Vector — disk buffer architecture][vector-disk-buffer]
 - [NATS JetStream][jetstream]
 - [ULID specification][ulid]
+- [OpenTelemetry metrics specification][otel-metrics]
 - [Prometheus][prometheus]
 
 <!-- Internal references -->
@@ -715,5 +746,6 @@ attributes in a generic metric stream.
 [vector-disk-buffer]: https://vector.dev/docs/about/under-the-hood/architecture/buffering-model/
 [otlp]: https://opentelemetry.io/docs/specs/otlp/
 [prometheus]: https://prometheus.io/
+[otel-metrics]: https://opentelemetry.io/docs/specs/otel/metrics/
 [stripe]: https://docs.stripe.com/api/billing/meter-event
 [metronome]: https://docs.metronome.com/api/#tag/usage/POST/ingest
