@@ -1,0 +1,60 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: meter-definition-lifecycle
+spec:
+  description: |
+    Tests the MeterDefinition lifecycle including:
+    - Creating a meter transitions to Ready=True
+    - Webhook rejects attempts to change immutable fields (meterName)
+    - Webhook rejects removing declared dimensions
+    - displayName, description, and dimension additions are permitted
+
+  steps:
+    - name: create-meter
+      description: Create a MeterDefinition. Should become Ready.
+      try:
+        - create:
+            file: 01-create-meter.yaml
+        - assert:
+            timeout: 30s
+            file: assertions/assert-ready.yaml
+
+    - name: reject-change-meter-name
+      description: Verify that meterName cannot be changed after create (immutability).
+      try:
+        - apply:
+            file: test-data/change-meter-name.yaml
+            expect:
+              - check:
+                  ($error != null): true
+
+    - name: reject-remove-dimension
+      description: Verify that removing a declared dimension is rejected.
+      try:
+        - apply:
+            file: test-data/remove-dimension.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'dimensions')): true
+
+    - name: edit-editable-fields
+      description: displayName, description, and added dimensions are permitted.
+      try:
+        - apply:
+            file: 02-edit-editable-fields.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-compute-cpu-seconds
+              spec:
+                displayName: Compute Instance CPU Time (Updated)
+                measurement:
+                  dimensions:
+                    - region
+                    - instance.type
+                    - resource.tier

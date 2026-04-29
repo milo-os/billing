@@ -2,4 +2,5 @@
 resources:
 - billing_v1alpha1_billingaccount.yaml
 - billing_v1alpha1_billingaccountbinding.yaml
+- billing_v1alpha1_meterdefinition.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

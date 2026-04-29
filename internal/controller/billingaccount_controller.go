@@ -23,9 +23,6 @@ import (
 
 const (
 	billingAccountFinalizer = "billing.miloapis.com/billing-account"
-
-	// ConditionTypeReady is the condition type for billing account readiness.
-	ConditionTypeReady = "Ready"
 )
 
 // BillingAccountReconciler reconciles a BillingAccount object.
