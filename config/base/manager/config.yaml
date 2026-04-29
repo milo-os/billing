@@ -1,0 +1,5 @@
+apiVersion: apiserver.config.miloapis.com/v1alpha1
+kind: BillingOperator
+metricsServer:
+  bindAddress: "0"
+webhookServer: {}

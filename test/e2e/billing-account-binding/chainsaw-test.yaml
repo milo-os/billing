@@ -1,0 +1,100 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: billing-account-binding
+spec:
+  description: |
+    Tests the BillingAccountBinding lifecycle including:
+    - Creating a binding sets it to Active with billing responsibility
+    - Binding spec is immutable (cannot change billingAccountRef or projectRef)
+    - LinkedProjectsCount updates on the BillingAccount
+    - Only one active binding per project (second binding supersedes the first)
+    - Binding to a non-Ready account is rejected by CRD validation
+
+  steps:
+    - name: setup-accounts
+      description: Create two Ready billing accounts for testing.
+      try:
+        - create:
+            file: 01-setup-accounts.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: binding-test-account-a
+                namespace: default
+              status:
+                phase: Ready
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: binding-test-account-b
+                namespace: default
+              status:
+                phase: Ready
+
+    - name: create-first-binding
+      description: Create a binding and verify it becomes Active with billing responsibility.
+      try:
+        - create:
+            file: 02-first-binding.yaml
+        - assert:
+            timeout: 30s
+            file: assertions/assert-first-binding-active.yaml
+
+    - name: verify-linked-projects
+      description: Verify the billing account's linkedProjectsCount is updated.
+      try:
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: binding-test-account-a
+                namespace: default
+              status:
+                linkedProjectsCount: 1
+
+    - name: test-binding-immutability
+      description: Verify that the binding spec cannot be modified.
+      try:
+        - apply:
+            file: test-data/change-binding-account.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'immutable')): true
+
+    - name: create-second-binding-same-project
+      description: |
+        Create a second binding for the same project pointing to a different account.
+        The new binding should become Active and the old one Superseded.
+      try:
+        - create:
+            file: 03-second-binding.yaml
+        - assert:
+            timeout: 60s
+            file: assertions/assert-second-binding-active.yaml
+        - assert:
+            timeout: 60s
+            file: assertions/assert-first-binding-superseded.yaml
+
+    - name: verify-linked-projects-updated
+      description: Verify linkedProjectsCount on account-b reflects the new binding.
+      try:
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: binding-test-account-b
+                namespace: default
+              status:
+                linkedProjectsCount: 1

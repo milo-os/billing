@@ -1,0 +1,18 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-admin
+  annotations:
+    kubernetes.io/display-name: Billing Admin
+    kubernetes.io/description: "Full access to all billing resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-viewer
+  includedPermissions:
+    - billing.miloapis.com/billingaccounts.create
+    - billing.miloapis.com/billingaccounts.update
+    - billing.miloapis.com/billingaccounts.delete
+    - billing.miloapis.com/billingaccountbindings.create
+    - billing.miloapis.com/billingaccountbindings.update
+    - billing.miloapis.com/billingaccountbindings.delete

@@ -1,0 +1,13 @@
+apiVersion: policy/v1
+kind: PodDisruptionBudget
+metadata:
+  name: billing-controller-manager
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  minAvailable: 1
+  selector:
+    matchLabels:
+      control-plane: billing
+      app.kubernetes.io/name: billing
