@@ -273,8 +273,9 @@ Billing Controllers.
   CloudEvents to the Gateway or optional Tier 2 cluster over HTTPS.
 - **Tier 2 [JetStream][jetstream] Cluster** (optional) — edge-cluster-local
   durability for environments with unreliable central connectivity.
-- **Ingestion Gateway** — structural validation; publishes to project-scoped NATS
-  subjects; sole HTTP entry point to the central log.
+- **Ingestion Gateway** (`billing gateway` subcommand) — structural validation;
+  publishes to project-scoped NATS subjects; sole HTTP entry point to the central
+  log.
 - **Billing Controllers** — central validation and attribution; entirely
   provider-agnostic.
 - **Provider Submission Controller** — reads attributed events from the validated
@@ -464,10 +465,11 @@ if err != nil {
 
 ### Ingestion Gateway
 
-A single centrally-deployed Gateway (horizontally scalable) serves all projects.
-It is the only HTTP surface that writes to the central log. NATS is never exposed
-outside the central platform — all edge-to-central transport is HTTPS to the
-Gateway.
+The Ingestion Gateway runs as the `billing gateway` subcommand of the billing
+binary. A single centrally-deployed instance (horizontally scalable) serves all
+projects. It is the only HTTP surface that writes to the central log. NATS is
+never exposed outside the central platform — all edge-to-central transport is
+HTTPS to the Gateway.
 
 The Gateway determines the target project from the `subject` field of the
 incoming CloudEvent. It has no dependency on project API servers or project-local
