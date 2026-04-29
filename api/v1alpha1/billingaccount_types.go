@@ -120,6 +120,7 @@ type BillingAccountStatus struct {
 // +kubebuilder:printcolumn:name="Currency",type=string,JSONPath=`.spec.currencyCode`
 // +kubebuilder:printcolumn:name="Projects",type=integer,JSONPath=`.status.linkedProjectsCount`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Organization"
 type BillingAccount struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

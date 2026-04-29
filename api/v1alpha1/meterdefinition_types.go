@@ -165,6 +165,7 @@ type MeterDefinitionStatus struct {
 // +kubebuilder:printcolumn:name="Meter",type=string,JSONPath=`.spec.meterName`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.spec.phase`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Platform"
 type MeterDefinition struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
