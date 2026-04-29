@@ -21,3 +21,6 @@ cover.out
 
 # Test infrastructure
 .test-infra/
+
+# Task remote cache
+.task/
