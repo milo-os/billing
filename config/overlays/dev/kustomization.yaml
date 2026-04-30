@@ -4,9 +4,13 @@ resources:
   - ../../base/crd
   - ../../base/manager
   - ../../base/certmanager
+  - ../../gateway
+  - ../../dependencies/nats
+  - ../../dependencies/vector-agent
 
 components:
   - ../../base/webhook
+  - ../../components/nats-streams
 
 replacements:
   - source:

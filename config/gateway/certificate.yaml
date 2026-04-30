@@ -1,0 +1,20 @@
+apiVersion: cert-manager.io/v1
+kind: Certificate
+metadata:
+  name: billing-gateway-tls
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  secretName: billing-gateway-tls
+  dnsNames:
+    - billing-gateway.billing-system.svc
+    - billing-gateway.billing-system.svc.cluster.local
+  issuerRef:
+    # The existing self-signed issuer used for webhook certificates.
+    # SRE: confirm whether a separate CA issuer is needed for Vector to trust
+    # this certificate (see open question in design artifact).
+    kind: Issuer
+    name: selfsigned-issuer

@@ -3,208 +3,27 @@
 package main
 
 import (
-	"flag"
-	"fmt"
 	"os"
 
-	_ "k8s.io/client-go/plugin/pkg/client/auth"
-
-	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/apimachinery/pkg/runtime/serializer"
-	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
-	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
-	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/healthz"
-	"sigs.k8s.io/controller-runtime/pkg/log/zap"
-	"sigs.k8s.io/controller-runtime/pkg/webhook"
-
-	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
-	"go.miloapis.com/billing/internal/config"
-	"go.miloapis.com/billing/internal/controller"
-	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
-	// +kubebuilder:scaffold:imports
+	"go.miloapis.com/billing/cmd/billing/cmd"
 )
 
+// Build metadata set via -ldflags at build time. See Dockerfile.
 var (
-	scheme   = runtime.NewScheme()
-	setupLog = ctrl.Log.WithName("setup")
-	codecs   = serializer.NewCodecFactory(scheme, serializer.EnableStrict)
-
-	// Build metadata, set via -ldflags at build time. See Dockerfile.
 	version      = "dev"
 	gitCommit    = "unknown"
 	gitTreeState = "unknown"
 	buildDate    = "unknown"
 )
 
-func init() {
-	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
-
-	utilruntime.Must(config.AddToScheme(scheme))
-	utilruntime.Must(config.RegisterDefaults(scheme))
-	utilruntime.Must(billingv1alpha1.AddToScheme(scheme))
-
-	// +kubebuilder:scaffold:scheme
-}
-
 func main() {
-	var enableLeaderElection bool
-	var leaderElectionNamespace string
-	var probeAddr string
-	var serverConfigFile string
-
-	flag.StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the probe endpoint binds to.")
-	flag.BoolVar(&enableLeaderElection, "leader-elect", false,
-		"Enable leader election for controller manager. "+
-			"Enabling this will ensure there is only one active controller manager.")
-	flag.StringVar(&leaderElectionNamespace, "leader-elect-namespace", "", "The namespace to use for leader election.")
-	flag.StringVar(&serverConfigFile, "server-config", "", "path to the server config file")
-
-	opts := zap.Options{
-		Development: true,
-	}
-	opts.BindFlags(flag.CommandLine)
-	flag.Parse()
-
-	ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
-
-	setupLog.Info("starting billing",
-		"version", version,
-		"gitCommit", gitCommit,
-		"gitTreeState", gitTreeState,
-		"buildDate", buildDate,
-	)
-
-	var serverConfig config.BillingOperator
-	var configData []byte
-	if len(serverConfigFile) > 0 {
-		var err error
-		configData, err = os.ReadFile(serverConfigFile)
-		if err != nil {
-			setupLog.Error(fmt.Errorf("unable to read server config from %q", serverConfigFile), "")
-			os.Exit(1)
-		}
-	}
-
-	if err := runtime.DecodeInto(codecs.UniversalDecoder(), configData, &serverConfig); err != nil {
-		setupLog.Error(err, "unable to decode server config")
-		os.Exit(1)
-	}
-
-	setupLog.Info("server config", "config", serverConfig)
-
-	// Billing resources live in the Milo control plane, not in the cluster
-	// that hosts the controller pod. Connect directly to Milo using the
-	// configured kubeconfig, falling back to ctrl.GetConfig() for local /
-	// in-cluster development where they happen to be the same cluster.
-	cfg, err := serverConfig.RestConfig()
-	if err != nil {
-		setupLog.Error(err, "unable to load rest config")
-		os.Exit(1)
-	}
-
-	ctx := ctrl.SetupSignalHandler()
-
-	// Build a direct (non-cached) client so the metrics and webhook TLS
-	// option builders have a Secret-capable client available before the
-	// manager (and its cache) have started. The client is invoked lazily
-	// from within TLS GetCertificate callbacks, so reads happen after the
-	// manager is running.
-	bootstrapClient, err := client.New(cfg, client.Options{Scheme: scheme})
-	if err != nil {
-		setupLog.Error(err, "unable to create bootstrap client")
-		os.Exit(1)
-	}
-
-	metricsServerOptions := serverConfig.MetricsServer.Options(ctx, bootstrapClient)
-
-	var webhookServer webhook.Server
-	if serverConfig.WebhookServer != nil {
-		webhookServer = webhook.NewServer(
-			serverConfig.WebhookServer.Options(ctx, bootstrapClient),
-		)
-	} else {
-		setupLog.Info("webhookServer not configured; admission webhook server disabled")
-	}
-
-	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
-		Scheme:                  scheme,
-		Metrics:                 metricsServerOptions,
-		WebhookServer:           webhookServer,
-		HealthProbeBindAddress:  probeAddr,
-		LeaderElection:          enableLeaderElection,
-		LeaderElectionID:        "billing.miloapis.com",
-		LeaderElectionNamespace: leaderElectionNamespace,
+	root := cmd.NewRootCommand(cmd.BuildInfo{
+		Version:      version,
+		GitCommit:    gitCommit,
+		GitTreeState: gitTreeState,
+		BuildDate:    buildDate,
 	})
-	if err != nil {
-		setupLog.Error(err, "unable to start manager")
-		os.Exit(1)
-	}
-
-	if err = (&controller.BillingAccountReconciler{}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "BillingAccount")
-		os.Exit(1)
-	}
-	if err = (&controller.BillingAccountBindingReconciler{}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "BillingAccountBinding")
-		os.Exit(1)
-	}
-	if err = (&controller.MeterDefinitionReconciler{}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MeterDefinition")
-		os.Exit(1)
-	}
-	if err = (&controller.MonitoredResourceTypeReconciler{}).SetupWithManager(mgr); err != nil {
-		setupLog.Error(err, "unable to create controller", "controller", "MonitoredResourceType")
-		os.Exit(1)
-	}
-
-	if err = controller.AddIndexers(ctx, mgr); err != nil {
-		setupLog.Error(err, "unable to add indexers")
-		os.Exit(1)
-	}
-
-	if serverConfig.WebhookServer != nil {
-		if err = billingwebhooks.SetupBillingAccountWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "BillingAccount")
-			os.Exit(1)
-		}
-		if err = billingwebhooks.SetupBillingAccountBindingWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "BillingAccountBinding")
-			os.Exit(1)
-		}
-		if err = billingwebhooks.SetupMeterDefinitionWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MeterDefinition")
-			os.Exit(1)
-		}
-		if err = billingwebhooks.SetupMonitoredResourceTypeWebhookWithManager(mgr); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MonitoredResourceType")
-			os.Exit(1)
-		}
-		if err = billingwebhooks.SetupMeterDefinitionOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MeterDefinitionOwnership")
-			os.Exit(1)
-		}
-		if err = billingwebhooks.SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
-			setupLog.Error(err, "unable to create webhook", "webhook", "MonitoredResourceTypeOwnership")
-			os.Exit(1)
-		}
-	}
-
-	// +kubebuilder:scaffold:builder
-
-	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up health check")
-		os.Exit(1)
-	}
-	if err := mgr.AddReadyzCheck("readyz", healthz.Ping); err != nil {
-		setupLog.Error(err, "unable to set up ready check")
-		os.Exit(1)
-	}
-
-	setupLog.Info("starting manager")
-	if err := mgr.Start(ctx); err != nil {
-		setupLog.Error(err, "unable to start manager")
+	if err := root.Execute(); err != nil {
 		os.Exit(1)
 	}
 }

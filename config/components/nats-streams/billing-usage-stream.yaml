@@ -1,0 +1,22 @@
+apiVersion: jetstream.nats.io/v1beta2
+kind: Stream
+metadata:
+  name: billing-usage
+  namespace: nats-system
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: nats-streams
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  name: billing-usage
+  subjects:
+    - "billing.usage.>"
+  retention: limits
+  maxAge: 720h    # 30-day replay window per enhancement doc
+  maxMsgs: -1     # unlimited
+  maxBytes: -1    # unlimited
+  replicas: 1     # single-node for dev/CI; production operators manage their own cluster
+  storage: file
+  discard: old    # drop oldest messages when limits are reached
+  noAck: false    # require publisher ack; Gateway returns 200 only after durable commit
+  duplicateWindow: 10m  # NATS-level dedup on Nats-Msg-Id header (ULID); end-to-end dedup via ULID is the authoritative guarantee
