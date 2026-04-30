@@ -58,7 +58,7 @@ spec:
     # Step 2: SCENARIO A — Vector Agent restart
     #
     # Send a well-formed CloudEvent to the Vector Agent HTTP source
-    # (localhost:9880/cloudevents on the node). Kill the Vector pod.
+    # (127.0.0.1:9880/cloudevents on the node). Kill the Vector pod.
     # Confirm it restarts and the event appears in JetStream (the disk
     # buffer survives the pod restart and Vector replays on boot).
     # ------------------------------------------------------------------
@@ -87,7 +87,7 @@ spec:
                 wget -q -O- \
                   --header="Content-Type: application/cloudevents+json" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-restart-test","id":"01HVJ0000000000000000AAAA1","datacontenttype":"application/json","data":{"value":"10"}}' \
-                  http://localhost:9880/cloudevents
+                  http://127.0.0.1:9880/cloudevents
               echo "Event posted to Vector Agent"
 
     - name: vector-agent-restart-kill-pod
@@ -130,10 +130,10 @@ spec:
               # whether the JetStream stream has at least one message on the
               # expected subject.
               NATS_POD=$(kubectl get pod -n nats-system \
-                -l app.kubernetes.io/name=nats \
+                -l app.kubernetes.io/component=nats-box \
                 --no-headers -o name | head -1)
               if [ -z "$NATS_POD" ]; then
-                echo "ERROR: no nats pod found" >&2
+                echo "ERROR: no nats-box pod found" >&2
                 exit 1
               fi
 
@@ -142,7 +142,7 @@ spec:
               DEADLINE=$(($(date +%s) + 55))
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
                 MSG_COUNT=$(kubectl exec -n nats-system "$NATS_POD" -- \
-                  nats --server nats://localhost:4222 \
+                  nats --server nats://nats:4222 \
                   stream info billing-usage \
                   --json 2>/dev/null \
                   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',{}).get('messages',0))" \
@@ -211,7 +211,7 @@ spec:
                 wget -q -O- \
                   --header="Content-Type: application/cloudevents+json" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-gw-restart","id":"01HVJ0000000000000000BBBBB","datacontenttype":"application/json","data":{"value":"20"}}' \
-                  http://localhost:9880/cloudevents
+                  http://127.0.0.1:9880/cloudevents
               echo "Event posted to Vector Agent (Gateway may be restarting)"
 
     - name: gateway-restart-wait-for-recovery
@@ -227,7 +227,7 @@ spec:
                 name: billing-gateway
                 namespace: billing-system
               status:
-                (readyReplicas >= `2`): true
+                (readyReplicas >= `1`): true
 
     - name: gateway-restart-assert-event-in-jetstream
       description: |
@@ -241,10 +241,10 @@ spec:
               set -euo pipefail
 
               NATS_POD=$(kubectl get pod -n nats-system \
-                -l app.kubernetes.io/name=nats \
+                -l app.kubernetes.io/component=nats-box \
                 --no-headers -o name | head -1)
               if [ -z "$NATS_POD" ]; then
-                echo "ERROR: no nats pod found" >&2
+                echo "ERROR: no nats-box pod found" >&2
                 exit 1
               fi
 
@@ -253,7 +253,7 @@ spec:
               DEADLINE=$(($(date +%s) + 85))
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
                 MSG_COUNT=$(kubectl exec -n nats-system "$NATS_POD" -- \
-                  nats --server nats://localhost:4222 \
+                  nats --server nats://nats:4222 \
                   stream info billing-usage \
                   --json 2>/dev/null \
                   | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',{}).get('messages',0))" \
@@ -313,14 +313,16 @@ spec:
                 cat /var/run/secrets/billing-gateway/token)
 
               # POST an event with an invalid ULID id directly to the Gateway.
-              HTTP_STATUS=$(kubectl exec -n billing-system "$GATEWAY_POD" -- \
+              HTTP_STATUS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
                 wget -q -O- \
                   --server-response \
                   --header="Content-Type: application/cloudevents+json" \
                   --header="Authorization: Bearer ${TOKEN}" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-dead-letter","id":"NOT-A-VALID-ULID","datacontenttype":"application/json","data":{"value":"99"}}' \
                   https://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events \
-                  --no-check-certificate 2>&1 | grep "HTTP/" | tail -1 | awk '{print $2}' || echo "400")
+                  --no-check-certificate 2>&1 | grep -oE "HTTP/[0-9.]+ [0-9]{3}" | awk '{print $2}' | head -n 1 || true)
+              HTTP_STATUS=$(echo "$HTTP_STATUS" | tr -d '\r\n')
+              HTTP_STATUS=${HTTP_STATUS:-400}
 
               echo "Gateway responded with HTTP status: $HTTP_STATUS"
               if [ "$HTTP_STATUS" != "400" ]; then
@@ -348,9 +350,13 @@ spec:
                 exit 1
               fi
 
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+
               # Scrape the Prometheus metrics endpoint on the health probe port.
-              METRICS=$(kubectl exec -n billing-system "$GATEWAY_POD" -- \
-                wget -q -O- http://localhost:8081/metrics)
+              METRICS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                wget -q -O- http://billing-gateway.billing-system.svc:8081/metrics)
 
               echo "--- /metrics excerpt (billing_ingestion_rejections_total) ---"
               echo "$METRICS" | grep billing_ingestion_rejections_total || true

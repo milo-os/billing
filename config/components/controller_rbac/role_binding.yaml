@@ -8,7 +8,8 @@ metadata:
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
-  name: billing-controller-manager
+  name: billing
 subjects:
 - kind: ServiceAccount
   name: billing-controller-manager
+  namespace: billing-system

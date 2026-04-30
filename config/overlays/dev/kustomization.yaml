@@ -13,9 +13,36 @@ resources:
 components:
   - ../../components/namespace
   - ../../base/webhook
+  - ../../components/controller_rbac
 
 patches:
   - path: manager_pull_policy_patch.yaml
+  - target:
+      kind: Certificate
+      name: billing-serving-cert
+    patch: |-
+      - op: replace
+        path: /spec/dnsNames
+        value:
+          - billing-webhook.billing-system.svc
+          - billing-webhook.billing-system.svc.cluster.local
+  - target:
+      kind: Deployment
+      name: billing-gateway
+    patch: |-
+      - op: replace
+        path: /spec/replicas
+        value: 1
+  - target:
+      kind: HorizontalPodAutoscaler
+      name: billing-gateway
+    patch: |-
+      - op: replace
+        path: /spec/minReplicas
+        value: 1
+      - op: replace
+        path: /spec/maxReplicas
+        value: 1
 
 replacements:
   - source:
@@ -64,6 +91,3 @@ replacements:
           delimiter: '/'
           index: 1
           create: true
-
-transformers:
-  - webhook_patch.yaml

@@ -16,3 +16,7 @@ spec:
         kind: HelmRepository
         name: nats-io
         namespace: nats-system
+  values:
+    jetstream:
+      nats:
+        url: nats://nats:4222
