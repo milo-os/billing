@@ -24,3 +24,6 @@ cover.out
 
 # Task remote cache
 .task/
+
+# Claude AI
+.claude
