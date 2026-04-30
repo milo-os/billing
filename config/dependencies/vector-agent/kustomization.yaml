@@ -8,3 +8,4 @@ resources:
   - clusterrolebinding.yaml
   - configmap.yaml
   - daemonset.yaml
+  - service.yaml

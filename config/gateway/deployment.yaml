@@ -25,8 +25,10 @@ spec:
       containers:
         - name: gateway
           image: ghcr.io/milo-os/billing:dev
-          command: ["billing", "gateway"]
+          command:
+            - /billing
           args:
+            - gateway
             - --addr=:8080
             - --nats-url=nats://nats.nats-system.svc.cluster.local:4222
             - --health-probe-bind-address=:8081

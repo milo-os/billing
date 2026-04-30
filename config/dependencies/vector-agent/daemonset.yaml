@@ -35,15 +35,24 @@ spec:
                   audience: billing-gateway
                   expirationSeconds: 3600
                   path: token
+      initContainers:
+        - name: init-data
+          image: busybox:1.36
+          command: ["sh", "-c", "chown -R 1000:1000 /var/lib/vector"]
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/vector
       containers:
         - name: vector
           image: timberio/vector:0.45.0-alpine
-          args: ["--config", "/etc/vector/vector.toml"]
+          command: ["/bin/sh", "-c"]
+          args:
+            - |
+              export VECTOR_AUTH_TOKEN=$(cat /var/run/secrets/billing-gateway/token)
+              exec /usr/local/bin/vector --config /etc/vector/vector.toml
           env:
             - name: BILLING_GATEWAY_URL
               value: "https://billing-gateway.billing-system.svc.cluster.local:8080"
-            - name: SERVICE_ACCOUNT_TOKEN_PATH
-              value: /var/run/secrets/billing-gateway/token
           ports:
             - name: cloudevents
               containerPort: 9880
@@ -63,5 +72,7 @@ spec:
               cpu: 500m
               memory: 256Mi
           securityContext:
+            runAsUser: 1000
+            runAsGroup: 1000
             runAsNonRoot: true
             allowPrivilegeEscalation: false

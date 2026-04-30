@@ -24,10 +24,11 @@ data:
 
       [sinks.billing_gateway.auth]
       strategy = "bearer"
-      token = "${SERVICE_ACCOUNT_TOKEN_PATH}"
+      token = "${VECTOR_AUTH_TOKEN}"
 
       [sinks.billing_gateway.tls]
-      verify_certificate = true
+      # Set to false for local dev environment where gateway uses self-signed certificates.
+      verify_certificate = false
 
       [sinks.billing_gateway.buffer]
       type = "disk"

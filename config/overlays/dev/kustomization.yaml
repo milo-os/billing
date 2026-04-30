@@ -1,16 +1,21 @@
 namespace: billing-system
 
+images:
+  - name: ghcr.io/milo-os/billing
+    newTag: dev
+
 resources:
   - ../../base/crd
   - ../../base/manager
   - ../../base/certmanager
   - ../../gateway
-  - ../../dependencies/nats
-  - ../../dependencies/vector-agent
 
 components:
+  - ../../components/namespace
   - ../../base/webhook
-  - ../../components/nats-streams
+
+patches:
+  - path: manager_pull_policy_patch.yaml
 
 replacements:
   - source:
