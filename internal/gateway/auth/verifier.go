@@ -12,7 +12,10 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	authv1client "k8s.io/client-go/kubernetes/typed/authentication/v1"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+var log = ctrl.Log.WithName("auth")
 
 // ErrTokenNotAuthenticated is returned when a token fails authentication.
 var ErrTokenNotAuthenticated = errors.New("token not authenticated")
@@ -53,11 +56,13 @@ func (v *ServiceAccountTokenVerifier) Verify(ctx context.Context, token string) 
 		},
 	}, metav1.CreateOptions{})
 	if err != nil {
-		// Return an opaque error — do not expose internal Kubernetes API details.
+		log.Error(err, "TokenReview API call failed")
 		return fmt.Errorf("token verification failed")
 	}
 	if !review.Status.Authenticated {
+		log.V(1).Info("token not authenticated", "audience", v.audience)
 		return ErrTokenNotAuthenticated
 	}
+	log.V(1).Info("token authenticated", "user", review.Status.User.Username, "audience", v.audience)
 	return nil
 }

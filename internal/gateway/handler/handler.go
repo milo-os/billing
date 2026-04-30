@@ -9,9 +9,13 @@ import (
 	"net/http"
 	"strings"
 
+	ctrl "sigs.k8s.io/controller-runtime"
+
 	"go.miloapis.com/billing/internal/gateway/auth"
 	gwnats "go.miloapis.com/billing/internal/gateway/nats"
 )
+
+var log = ctrl.Log.WithName("handler")
 
 // ingestResponse is the JSON body for a successful single-event ingest.
 type ingestResponse struct {
@@ -72,10 +76,12 @@ func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		token := extractBearerToken(r)
 		if token == "" {
+			log.V(1).Info("auth rejected: missing bearer token", "path", r.URL.Path, "remote", r.RemoteAddr)
 			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "unauthorized")
 			return
 		}
 		if err := verifier.Verify(r.Context(), token); err != nil {
+			log.V(1).Info("auth rejected: token verification failed", "path", r.URL.Path, "remote", r.RemoteAddr, "reason", err)
 			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "unauthorized")
 			return
 		}

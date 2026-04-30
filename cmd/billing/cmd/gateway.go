@@ -3,9 +3,12 @@
 package cmd
 
 import (
+	"flag"
 	"fmt"
 
 	"github.com/spf13/cobra"
+	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	"go.miloapis.com/billing/internal/gateway"
 )
@@ -21,10 +24,16 @@ func newGatewayCommand() *cobra.Command {
 		tlsKeyFile        string
 	)
 
+	opts := zap.Options{
+		Development: true,
+	}
+
 	cmd := &cobra.Command{
 		Use:   "gateway",
 		Short: "Run the usage event ingestion gateway",
 		RunE: func(cmd *cobra.Command, args []string) error {
+			ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
+
 			if tlsCertFile == "" || tlsKeyFile == "" {
 				return fmt.Errorf("--tls-cert-file and --tls-key-file are required")
 			}
@@ -48,6 +57,10 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file (required).")
 	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file (required).")
 	_ = cmd.MarkFlagRequired("nats-url")
+
+	zapFlags := flag.NewFlagSet("zap", flag.ContinueOnError)
+	opts.BindFlags(zapFlags)
+	cmd.Flags().AddGoFlagSet(zapFlags)
 
 	return cmd
 }

@@ -10,7 +10,10 @@ import (
 
 	natsgo "github.com/nats-io/nats.go"
 	"github.com/nats-io/nats.go/jetstream"
+	ctrl "sigs.k8s.io/controller-runtime"
 )
+
+var log = ctrl.Log.WithName("nats")
 
 // Publisher abstracts JetStream event publishing.
 // Injectable for testing (a fake can return nil, timeout, or connection error).
@@ -37,10 +40,21 @@ type NATSPublisher struct {
 // Returns an error if the connection or JetStream context cannot be
 // established — callers should treat this as a fatal startup error.
 func NewNATSPublisher(url string) (*NATSPublisher, error) {
-	nc, err := natsgo.Connect(url)
+	nc, err := natsgo.Connect(url,
+		natsgo.DisconnectErrHandler(func(_ *natsgo.Conn, err error) {
+			log.Error(err, "NATS disconnected")
+		}),
+		natsgo.ReconnectHandler(func(nc *natsgo.Conn) {
+			log.Info("NATS reconnected", "url", nc.ConnectedUrl())
+		}),
+		natsgo.ClosedHandler(func(_ *natsgo.Conn) {
+			log.Info("NATS connection closed")
+		}),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("gateway: connecting to NATS at %s: %w", url, err)
 	}
+	log.Info("connected to NATS", "url", url)
 	js, err := jetstream.New(nc)
 	if err != nil {
 		return nil, fmt.Errorf("gateway: creating JetStream context: %w", err)

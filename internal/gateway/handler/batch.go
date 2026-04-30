@@ -54,13 +54,16 @@ func (h *BatchIngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 		subject := subjectFor(h.subjectPrefix, cloudEventSubjectFromRaw(raw))
 		if err := h.publisher.Publish(r.Context(), subject, raw); err != nil {
-			// On NATS failure, stop processing and return the appropriate error.
+			log.Error(err, "publish failed", "subject", subject)
 			writePublishError(w, err)
 			return
 		}
-		h.metrics.RecordAccepted(r.Context(), projectFrom(cloudEventSubjectFromRaw(raw)))
+		project := projectFrom(cloudEventSubjectFromRaw(raw))
+		h.metrics.RecordAccepted(r.Context(), project)
 		accepted++
 	}
+
+	log.V(1).Info("batch ingest complete", "accepted", accepted, "rejected", len(rejected))
 
 	resp := batchIngestResponse{
 		Accepted: accepted,

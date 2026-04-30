@@ -29,8 +29,8 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	result := validate.ValidateEvent(json.RawMessage(body))
 	if !result.Valid {
 		project := projectFrom("")
-		// Try to extract project from the partially parsed result.
 		h.metrics.RecordRejected(r.Context(), project, string(result.Reason))
+		log.V(1).Info("event rejected", "reason", result.Reason, "detail", result.Detail)
 		writeJSON(w, http.StatusBadRequest, errorResponse{
 			Code:    string(result.Reason),
 			Message: result.Detail,
@@ -40,11 +40,14 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	subject := subjectFor(h.subjectPrefix, cloudEventSubjectFromBody(body))
 	if err := h.publish(r.Context(), subject, body); err != nil {
+		log.Error(err, "publish failed", "subject", subject)
 		writePublishError(w, err)
 		return
 	}
 
-	h.metrics.RecordAccepted(r.Context(), projectFrom(cloudEventSubjectFromBody(body)))
+	project := projectFrom(cloudEventSubjectFromBody(body))
+	h.metrics.RecordAccepted(r.Context(), project)
+	log.V(1).Info("event accepted", "project", project, "subject", subject)
 	writeJSON(w, http.StatusOK, ingestResponse{Accepted: 1})
 }
 
@@ -101,4 +104,3 @@ func cloudEventSubjectFromBody(body []byte) string {
 	_ = json.Unmarshal(body, &ce)
 	return ce.Subject
 }
-
