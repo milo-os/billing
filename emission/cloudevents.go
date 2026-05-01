@@ -3,25 +3,12 @@
 package emission
 
 import (
-	"strconv"
 	"time"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
+
+	"go.miloapis.com/billing/internal/event"
 )
-
-type eventData struct {
-	Value      string            `json:"value"`
-	Dimensions map[string]string `json:"dimensions,omitempty"`
-	Resource   *resourceRefData  `json:"resource,omitempty"`
-}
-
-type resourceRefData struct {
-	Group     string `json:"group"`
-	Kind      string `json:"kind"`
-	Namespace string `json:"namespace,omitempty"`
-	Name      string `json:"name"`
-	UID       string `json:"uid"`
-}
 
 // toCloudEvent converts a validated UsageEvent into a CloudEvents v1.0 event.
 // now is the timestamp to use when ev.OccurredAt is zero.
@@ -39,8 +26,8 @@ func toCloudEvent(ev UsageEvent, now time.Time, id string) (cloudevents.Event, e
 	}
 	ce.SetTime(ts)
 
-	data := eventData{
-		Value: strconv.FormatInt(ev.Quantity, 10),
+	data := event.EventData{
+		Value: ev.Quantity,
 	}
 
 	if len(ev.Dimensions) > 0 {
@@ -48,7 +35,7 @@ func toCloudEvent(ev UsageEvent, now time.Time, id string) (cloudevents.Event, e
 	}
 
 	if ev.Resource != nil {
-		data.Resource = &resourceRefData{
+		data.Resource = &event.ResourceRef{
 			Group:     ev.Resource.Group,
 			Kind:      ev.Resource.Kind,
 			Namespace: ev.Resource.Namespace,

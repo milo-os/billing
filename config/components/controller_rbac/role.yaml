@@ -42,6 +42,12 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - secrets
+  verbs:
+  - get
+- apiGroups:
+  - ""
+  resources:
   - configmaps
   verbs:
   - create

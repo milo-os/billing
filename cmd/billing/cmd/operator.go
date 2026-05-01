@@ -3,12 +3,14 @@
 package cmd
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
+	natsgo "github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -23,6 +25,7 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/config"
 	"go.miloapis.com/billing/internal/controller"
+	"go.miloapis.com/billing/internal/controller/consumer"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
 )
 
@@ -133,6 +136,65 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				return fmt.Errorf("adding indexers: %w", err)
 			}
 
+			if err = controller.AddMeterDefinitionIndexers(ctx, mgr); err != nil {
+				return fmt.Errorf("adding MeterDefinition indexers: %w", err)
+			}
+
+			// Register the UsageConsumer if NATS is configured (opt-in).
+			if serverConfig.NATSConfig != nil {
+				setupLog.Info("NATS config present; registering UsageConsumer",
+					"url", serverConfig.NATSConfig.URL,
+				)
+
+				nc, err := natsgo.Connect(serverConfig.NATSConfig.URL,
+					natsgo.DisconnectErrHandler(func(_ *natsgo.Conn, err error) {
+						setupLog.Error(err, "NATS disconnected")
+					}),
+					natsgo.ReconnectHandler(func(nc *natsgo.Conn) {
+						setupLog.Info("NATS reconnected", "url", nc.ConnectedUrl())
+					}),
+					natsgo.ClosedHandler(func(_ *natsgo.Conn) {
+						setupLog.Info("NATS connection closed")
+					}),
+				)
+				if err != nil {
+					return fmt.Errorf("connecting to NATS at %s: %w", serverConfig.NATSConfig.URL, err)
+				}
+
+				meterCache, err := consumer.NewMeterDefinitionCache(ctx, mgr.GetCache())
+				if err != nil {
+					return fmt.Errorf("creating MeterDefinition cache: %w", err)
+				}
+
+				bindingCache, err := consumer.NewBillingAccountBindingCache(ctx, mgr.GetCache())
+				if err != nil {
+					return fmt.Errorf("creating BillingAccountBinding cache: %w", err)
+				}
+
+				usageConsumer := &consumer.UsageConsumer{
+					Cache:        mgr.GetCache(),
+					NC:           nc,
+					MeterCache:   meterCache,
+					BindingCache: bindingCache,
+					Logger:       ctrl.Log.WithName("usage-consumer"),
+				}
+				if err := mgr.Add(usageConsumer); err != nil {
+					nc.Close()
+					return fmt.Errorf("adding UsageConsumer to manager: %w", err)
+				}
+
+				// Close the NATS connection when the manager stops.
+				// mgr.Add wraps the Runnable; we schedule the close via a
+				// separate Runnable that blocks until ctx is done.
+				if err := mgr.Add(natsCloser{nc: nc}); err != nil {
+					return fmt.Errorf("adding NATS closer to manager: %w", err)
+				}
+
+				setupLog.Info("UsageConsumer registered")
+			} else {
+				setupLog.Info("natsConfig not set; UsageConsumer disabled")
+			}
+
 			if serverConfig.WebhookServer != nil {
 				if err = billingwebhooks.SetupBillingAccountWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating BillingAccount webhook: %w", err)
@@ -183,4 +245,17 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 	cmd.Flags().AddGoFlagSet(zapFlags)
 
 	return cmd
+}
+
+// natsCloser is a manager.Runnable that closes the NATS connection when the
+// manager context is cancelled, ensuring a clean shutdown after the consumer
+// has stopped.
+type natsCloser struct {
+	nc *natsgo.Conn
+}
+
+func (n natsCloser) Start(ctx context.Context) error {
+	<-ctx.Done()
+	n.nc.Close()
+	return nil
 }

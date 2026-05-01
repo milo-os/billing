@@ -43,6 +43,21 @@ type BillingOperator struct {
 	// useful for local development where the controller and API server share
 	// a cluster.
 	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
+
+	// NATSConfig configures the NATS JetStream connection used by the
+	// UsageConsumer. When unset, the consumer is not registered with the
+	// manager (opt-in via config).
+	NATSConfig *NATSConfig `json:"natsConfig,omitempty"`
+}
+
+// +k8s:deepcopy-gen=true
+
+// NATSConfig configures the NATS JetStream connection.
+type NATSConfig struct {
+	// URL is the NATS server URL (e.g. "nats://nats.nats-system.svc:4222").
+	//
+	// +kubebuilder:validation:Required
+	URL string `json:"url"`
 }
 
 // RestConfig returns the *rest.Config used to connect to the Milo API server.
