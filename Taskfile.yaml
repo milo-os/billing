@@ -247,7 +247,7 @@ tasks:
       - |
         set -e
         echo "Redeploying billing (dev)..."
-        task test-infra:kubectl -- rollout restart -n billing-system deployment/billing-controller-manager deployment/billing-gateway || echo "Deployment not found, run 'task dev:deploy' first"
+        task test-infra:kubectl -- delete pod -n billing-system -l app.kubernetes.io/name=billing --wait=false || echo "Deployment not found, run 'task dev:deploy' first"
 
         echo "Waiting for rollout..."
         task test-infra:kubectl -- rollout status -n billing-system deployment/billing-controller-manager --timeout=120s || true

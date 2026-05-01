@@ -15,6 +15,14 @@ components:
   - ../../base/webhook
   - ../../components/controller_rbac
 
+configMapGenerator:
+  - name: billing-config
+    behavior: replace
+    files:
+      - config.yaml
+    options:
+      disableNameSuffixHash: true
+
 patches:
   - path: manager_pull_policy_patch.yaml
   - target:

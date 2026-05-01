@@ -1,0 +1,7 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: consumer-e2e-account
+  namespace: default
+spec:
+  currencyCode: USD

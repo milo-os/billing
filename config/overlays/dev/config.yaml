@@ -7,4 +7,7 @@ webhookServer:
   tls:
     secretRef:
       name: billing-webhook-cert
-      namespace: kube-system
+      namespace: billing-system
+
+natsConfig:
+  url: nats://nats.nats-system.svc:4222
