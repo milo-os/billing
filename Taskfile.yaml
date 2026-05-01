@@ -9,6 +9,7 @@ vars:
   CONTROLLER_TOOLS_VERSION: "v0.16.4"
   DEFAULTER_GEN_VERSION: "v0.32.3"
   GOLANGCI_LINT_VERSION: "v2.1.5"
+  CHAINSAW_VERSION: "v0.2.13"
 
 includes:
   # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
@@ -128,11 +129,20 @@ tasks:
           mv {{.TOOL_DIR}}/golangci-lint {{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}
         fi
         ln -sf {{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}} {{.TOOL_DIR}}/golangci-lint
+        
+        # chainsaw
+        if [ ! -f "{{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}" ]; then
+          echo "Installing chainsaw {{.CHAINSAW_VERSION}}..."
+          GOBIN={{.TOOL_DIR}} go install github.com/kyverno/chainsaw@{{.CHAINSAW_VERSION}}
+          mv {{.TOOL_DIR}}/chainsaw {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
+        fi
+        ln -sf {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}} {{.TOOL_DIR}}/chainsaw
     silent: true
     status:
       - test -f {{.TOOL_DIR}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}
       - test -f {{.TOOL_DIR}}/defaulter-gen-{{.DEFAULTER_GEN_VERSION}}
       - test -f {{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}
+      - test -f {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
 
   # Development tasks
   dev:build:
@@ -184,14 +194,49 @@ tasks:
     cmds:
       - |
         set -e
-        echo "Deploying billing (dev overlay)..."
-        task test-infra:kubectl -- apply -k config/overlays/dev
-
-        echo "Waiting for billing controller..."
-        task test-infra:kubectl -- wait --for=condition=ready pod -l app=billing -n billing-system --timeout=120s || echo "Billing pods not ready yet"
+        echo "----------------------------------------------------------------------"
+        echo "🏗️  Stage 1: Deploying Base Dependencies (NATS & Vector)"
+        echo "----------------------------------------------------------------------"
+        task test-infra:kubectl -- apply -k config/dependencies/nats
+        task test-infra:kubectl -- apply -k config/dependencies/vector-agent
 
         echo ""
-        echo "Billing deployed (dev overlay)!"
+        echo "----------------------------------------------------------------------"
+        echo "⏳ Stage 2: Waiting for Infrastructure CRDs & Services"
+        echo "----------------------------------------------------------------------"
+        echo "➤ NATS JetStream CRDs..."
+        until task test-infra:kubectl -- get crd streams.jetstream.nats.io >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
+        task test-infra:kubectl -- wait --for=condition=established crd/streams.jetstream.nats.io --timeout=120s
+        task test-infra:kubectl -- apply -k config/components/nats-streams
+
+        echo "➤ Cert-Manager Deployments..."
+        task test-infra:kubectl -- rollout status -n cert-manager deployment/cert-manager --timeout=120s
+        task test-infra:kubectl -- rollout status -n cert-manager deployment/cert-manager-webhook --timeout=120s
+
+        echo "➤ Cert-Manager CRDs..."
+        until task test-infra:kubectl -- get crd certificates.cert-manager.io issuers.cert-manager.io >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
+        task test-infra:kubectl -- wait --for=condition=established crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s
+
+        echo ""
+        echo "----------------------------------------------------------------------"
+        echo "📦 Stage 3: Deploying Billing Application (Dev Overlay)"
+        echo "----------------------------------------------------------------------"
+        until task test-infra:kubectl -- apply -k config/overlays/dev; do
+          echo "  ⚠️  Apply failed (likely webhook propagation), retrying in 5s..."
+          sleep 5
+        done
+
+        echo ""
+        echo "----------------------------------------------------------------------"
+        echo "🏁 Stage 4: Finalizing & Verification"
+        echo "----------------------------------------------------------------------"
+        echo "➤ Waiting for pods to be ready..."
+        task test-infra:kubectl -- rollout status -n billing-system deployment/billing-controller-manager --timeout=120s || echo "  ❌ Controller not ready yet"
+        task test-infra:kubectl -- rollout status -n billing-system deployment/billing-gateway --timeout=120s || echo "  ❌ Gateway not ready yet"
+
+        echo ""
+        echo "✅ Billing successfully deployed in dev mode!"
+        echo "----------------------------------------------------------------------"
 
   dev:redeploy:
     desc: Quick rebuild and redeploy for dev environment
@@ -202,16 +247,92 @@ tasks:
       - |
         set -e
         echo "Redeploying billing (dev)..."
-        task test-infra:kubectl -- rollout restart -n billing-system deployment/billing || echo "Deployment not found, run 'task dev:deploy' first"
+        task test-infra:kubectl -- rollout restart -n billing-system deployment/billing-controller-manager deployment/billing-gateway || echo "Deployment not found, run 'task dev:deploy' first"
 
         echo "Waiting for rollout..."
-        task test-infra:kubectl -- rollout status -n billing-system deployment/billing --timeout=120s || true
+        task test-infra:kubectl -- rollout status -n billing-system deployment/billing-controller-manager --timeout=120s || true
+        task test-infra:kubectl -- rollout status -n billing-system deployment/billing-gateway --timeout=120s || true
         echo "Redeployment complete!"
     silent: true
+  
+  install-go-tool:
+    desc: Install a Go tool to {{.TOOL_DIR}}/{{.NAME}} (symlinked from {{.TOOL_DIR}}/{{.NAME}}-{{.VERSION}})
+    silent: true
+    internal: true
+    # vars: - Variables that need to be set when depending on this task
+    #   NAME:
+    #   PACKAGE:
+    #   VERSION:
+    cmds:
+      - mkdir -p {{.TOOL_DIR}}
+      - |
+        set -e
+        # Capture Taskfile vars into shell vars for clarity and safety in the script
+        _NAME="{{.NAME}}"
+        _PACKAGE="{{.PACKAGE}}"
+        _VERSION="{{.VERSION}}"
+        _TOOL_DIR="{{.TOOL_DIR}}"
+
+        _VERSIONED_TOOL_PATH="$_TOOL_DIR/$_NAME-$_VERSION" # e.g., ./bin/crdoc-v0.6.4
+        _SYMLINK_PATH="$_TOOL_DIR/$_NAME"                 # e.g., ./bin/crdoc (this is where go install puts it first)
+
+        # Check if the correctly versioned binary already exists
+        if [ ! -f "$_VERSIONED_TOOL_PATH" ]; then
+          echo "Downloading $_PACKAGE@$_VERSION (binary name: $_NAME) to $_VERSIONED_TOOL_PATH"
+
+          # Ensure the path where `go install` will place the binary (before mv) is clear.
+          # This is $_SYMLINK_PATH (e.g., ./bin/crdoc).
+          if [ -d "$_SYMLINK_PATH" ]; then
+            echo "Error: Target path $_SYMLINK_PATH for 'go install' is an existing directory. Please remove it manually."
+            exit 1
+          fi
+          # Remove if it's a file or symlink, to mimic `rm -f $(1)` from Makefile.
+          # This ensures 'go install' doesn't conflict with an existing symlink or wrong file.
+          echo "Preparing $_SYMLINK_PATH for new installation..."
+          rm -f "$_SYMLINK_PATH" || true
+
+          echo "Installing with GOBIN=$_TOOL_DIR..."
+          # 'go install' will place the executable (named $_NAME) into $_TOOL_DIR.
+          # This relies on $_NAME being the actual binary name derived from $_PACKAGE.
+          if ! GOBIN="$_TOOL_DIR" go install "$_PACKAGE@$_VERSION"; then
+            echo "Failed to 'go install $_PACKAGE@$_VERSION' with GOBIN=$_TOOL_DIR"
+            exit 1
+          fi
+
+          # After `go install`, the binary should be at $_SYMLINK_PATH (e.g. $_TOOL_DIR/$_NAME)
+          if [ ! -f "$_SYMLINK_PATH" ]; then
+            echo "Error: 'go install' did not produce $_SYMLINK_PATH"
+            # As a fallback, check if it was installed with the package basename if _NAME was different
+            _PKG_BASENAME=$(basename "$_PACKAGE")
+            if [ "$_PKG_BASENAME" != "$_NAME" ] && [ -f "$_TOOL_DIR/$_PKG_BASENAME" ]; then
+                echo "Found $_TOOL_DIR/$_PKG_BASENAME instead (package basename). Moving this one."
+                mv "$_TOOL_DIR/$_PKG_BASENAME" "$_VERSIONED_TOOL_PATH"
+            else
+                echo "Please ensure the NAME variable ('$_NAME') accurately matches the binary name produced by 'go install $_PACKAGE'."
+                exit 1
+            fi
+          else
+            # Binary $_SYMLINK_PATH was created as expected. Now move it to its versioned path.
+            echo "Moving installed binary from $_SYMLINK_PATH to $_VERSIONED_TOOL_PATH"
+            mv "$_SYMLINK_PATH" "$_VERSIONED_TOOL_PATH"
+          fi
+
+          # Create/update the symlink (e.g., ./bin/crdoc -> crdoc-v0.6.4)
+          # The target of the symlink is relative to _TOOL_DIR.
+          echo "Creating/updating symlink: $_SYMLINK_PATH -> $_NAME-$_VERSION (within $_TOOL_DIR)"
+          (cd "$_TOOL_DIR" && ln -sf "$_NAME-$_VERSION" "$_NAME")
+          echo "Tool $_NAME is now available at $_SYMLINK_PATH (points to $_VERSIONED_TOOL_PATH)"
+        fi
 
   # E2E Testing
   e2e:
     desc: Run chainsaw e2e tests
+    deps:
+      - task: install-go-tool
+        vars:
+          NAME: chainsaw
+          PACKAGE: github.com/kyverno/chainsaw
+          VERSION: "{{.CHAINSAW_VERSION}}"
     cmds:
-      - chainsaw test test/e2e/
+      - "{{.TOOL_DIR}}/chainsaw test {{if .CLI_ARGS}}{{.CLI_ARGS}}{{else}}test/e2e/{{end}}"
     silent: false

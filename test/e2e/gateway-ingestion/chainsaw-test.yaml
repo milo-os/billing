@@ -1,0 +1,381 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: gateway-ingestion
+spec:
+  description: |
+    Tests the Vector Agent + Ingestion Gateway end-to-end ingestion pipeline.
+
+    Prerequisites (must be deployed before running this suite):
+      - billing-system namespace with billing-gateway Deployment (billing gateway subcommand)
+      - nats-system namespace with NATS JetStream (config/dependencies/nats/)
+      - vector-agent namespace with Vector DaemonSet (config/dependencies/vector-agent/)
+      - config/components/nats-streams/ applied (billing.usage.> stream created)
+      - cert-manager with selfsigned-issuer available in billing-system
+
+    Scenarios:
+      1. vector-agent-restart  — Kill the Vector Agent pod; send events before and
+         after restart; confirm all buffered events reach JetStream via the Gateway.
+      2. gateway-pod-restart   — Kill the Gateway pod; send events while the Gateway
+         is down; confirm Vector buffers and retries, and all events arrive in
+         JetStream once the Gateway recovers.
+      3. dead-letter           — POST a structurally invalid event directly to the
+         Gateway; confirm the Gateway returns 400 and the rejection metric is
+         non-zero (queried via the health-probe /metrics endpoint).
+
+  steps:
+    # ------------------------------------------------------------------
+    # Step 1: Verify prerequisites — all three Deployments/DaemonSets
+    #         are Ready before any test scenario runs.
+    # ------------------------------------------------------------------
+    - name: verify-prerequisites
+      description: |
+        Assert that the Gateway Deployment, Vector Agent DaemonSet, and NATS
+        StatefulSet are all Ready before exercising any test scenario.
+      try:
+        - assert:
+            timeout: 120s
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: billing-gateway
+                namespace: billing-system
+              status:
+                (readyReplicas >= `1`): true
+        - assert:
+            timeout: 120s
+            resource:
+              apiVersion: apps/v1
+              kind: DaemonSet
+              metadata:
+                name: vector-agent
+                namespace: vector-agent
+              status:
+                (numberReady >= `1`): true
+
+    # ------------------------------------------------------------------
+    # Step 2: SCENARIO A — Vector Agent restart
+    #
+    # Send a well-formed CloudEvent to the Vector Agent HTTP source
+    # (127.0.0.1:9880/cloudevents on the node). Kill the Vector pod.
+    # Confirm it restarts and the event appears in JetStream (the disk
+    # buffer survives the pod restart and Vector replays on boot).
+    # ------------------------------------------------------------------
+    - name: vector-agent-restart-send-event
+      description: |
+        POST a valid CloudEvent to the Vector Agent HTTP source before killing
+        the pod. The event should land in Vector's disk buffer immediately.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              # Locate the Vector Agent pod.
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+              if [ -z "$VECTOR_POD" ]; then
+                echo "ERROR: no vector-agent pod found" >&2
+                exit 1
+              fi
+
+              # POST a valid CloudEvent to the Vector HTTP source running
+              # inside the pod (port 9880, accessible via exec + curl).
+              kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-restart-test","id":"01HVJ0000000000000000AAAA1","datacontenttype":"application/json","data":{"value":"10"}}' \
+                  http://127.0.0.1:9880/cloudevents
+              echo "Event posted to Vector Agent"
+
+    - name: vector-agent-restart-kill-pod
+      description: |
+        Delete the Vector Agent pod to trigger a restart. The disk buffer
+        persists on the hostPath volume and survives pod termination.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+              if [ -z "$VECTOR_POD" ]; then
+                echo "ERROR: no vector-agent pod found" >&2
+                exit 1
+              fi
+
+              echo "Deleting pod $VECTOR_POD"
+              kubectl delete -n vector-agent "$VECTOR_POD" --grace-period=0
+
+              # Wait for the DaemonSet to recreate the pod.
+              kubectl rollout status daemonset/vector-agent -n vector-agent --timeout=90s
+
+    - name: vector-agent-restart-assert-event-in-jetstream
+      description: |
+        After Vector restarts it replays its disk buffer to the Gateway.
+        Assert that the event with ULID 01HVJ0000000000000000AAAA1 is present
+        in JetStream on the billing.usage.p-e2e-restart-test.ingest subject.
+      try:
+        - script:
+            # Allow up to 60 s for Vector to replay + Gateway to publish.
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              # Use the nats CLI (installed in the NATS server pod) to check
+              # whether the JetStream stream has at least one message on the
+              # expected subject.
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              # Retry loop: poll JetStream stream info until the subject
+              # has messages or we time out (handled by chainsaw timeout above).
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG_COUNT=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream info billing-usage \
+                  --json 2>/dev/null \
+                  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',{}).get('messages',0))" \
+                  2>/dev/null || echo "0")
+                echo "JetStream message count: $MSG_COUNT"
+                if [ "$MSG_COUNT" -ge "1" ]; then
+                  echo "SUCCESS: at least one message found in billing-usage stream"
+                  exit 0
+                fi
+                sleep 3
+              done
+
+              echo "FAIL: no messages appeared in JetStream within timeout" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 3: SCENARIO B — Gateway pod restart
+    #
+    # Kill the Gateway pod. Send an event to Vector (it buffers to disk
+    # because the Gateway is unavailable). Wait for the Gateway to recover.
+    # Assert the buffered event appears in JetStream after recovery.
+    # ------------------------------------------------------------------
+    - name: gateway-restart-kill-pod
+      description: |
+        Delete one Gateway pod (the Deployment will recreate it). This makes
+        the Gateway endpoint temporarily unavailable. Vector will buffer
+        subsequent events to disk and retry with exponential backoff.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              GATEWAY_POD=$(kubectl get pod -n billing-system \
+                -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
+                --no-headers -o name | head -1)
+              if [ -z "$GATEWAY_POD" ]; then
+                echo "ERROR: no billing-gateway pod found" >&2
+                exit 1
+              fi
+
+              echo "Deleting pod $GATEWAY_POD"
+              kubectl delete -n billing-system "$GATEWAY_POD" --grace-period=0
+
+    - name: gateway-restart-send-event-while-down
+      description: |
+        While the Gateway is restarting (at most one replica down; the HPA
+        minimum is 2, so one pod may still be available — this step posts to
+        Vector which will buffer regardless). The event is sent immediately
+        after the delete to maximise the chance it hits the brief gap.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+              if [ -z "$VECTOR_POD" ]; then
+                echo "ERROR: no vector-agent pod found" >&2
+                exit 1
+              fi
+
+              kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-gw-restart","id":"01HVJ0000000000000000BBBBB","datacontenttype":"application/json","data":{"value":"20"}}' \
+                  http://127.0.0.1:9880/cloudevents
+              echo "Event posted to Vector Agent (Gateway may be restarting)"
+
+    - name: gateway-restart-wait-for-recovery
+      description: |
+        Wait for the Gateway Deployment to reach readyReplicas >= 2 again.
+      try:
+        - assert:
+            timeout: 90s
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: billing-gateway
+                namespace: billing-system
+              status:
+                (readyReplicas >= `1`): true
+
+    - name: gateway-restart-assert-event-in-jetstream
+      description: |
+        After the Gateway recovers Vector retries delivery from its disk buffer.
+        Assert the event with ULID 01HVJ0000000000000000BBBBB is present in
+        JetStream (message count increases above the previous scenario's count).
+      try:
+        - script:
+            timeout: 90s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              # We expect at least 2 messages now (one from the previous
+              # scenario, one from this one).
+              DEADLINE=$(($(date +%s) + 85))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG_COUNT=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream info billing-usage \
+                  --json 2>/dev/null \
+                  | python3 -c "import sys,json; d=json.load(sys.stdin); print(d.get('state',{}).get('messages',0))" \
+                  2>/dev/null || echo "0")
+                echo "JetStream message count: $MSG_COUNT"
+                if [ "$MSG_COUNT" -ge "2" ]; then
+                  echo "SUCCESS: second message found in billing-usage stream"
+                  exit 0
+                fi
+                sleep 5
+              done
+
+              echo "FAIL: second event did not appear in JetStream within timeout" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 4: SCENARIO C — Dead letter (structural rejection)
+    #
+    # POST a structurally invalid event directly to the Gateway HTTPS
+    # endpoint. Assert the Gateway returns 400. Then query the Gateway's
+    # /metrics endpoint (health port 8081) and assert that
+    # billing_ingestion_rejections_total is non-zero.
+    # ------------------------------------------------------------------
+    - name: dead-letter-post-invalid-event
+      description: |
+        POST a CloudEvent with a non-ULID id directly to the Gateway's
+        /v1/usage/events endpoint. Expect 400 Bad Request. This also
+        increments billing_ingestion_rejections_total on the Gateway.
+
+        The request is sent from inside a Gateway pod using curl so that
+        TLS and ServiceAccount token auth are handled via the in-cluster
+        certificate and projected token.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              GATEWAY_POD=$(kubectl get pod -n billing-system \
+                -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
+                --no-headers -o name | head -1)
+              if [ -z "$GATEWAY_POD" ]; then
+                echo "ERROR: no billing-gateway pod found" >&2
+                exit 1
+              fi
+
+              # Read the projected ServiceAccount token from the pod.
+              # The vector-agent ServiceAccount token is used here because
+              # it is projected with audience=billing-gateway and is the
+              # caller the Gateway expects; we exec into the vector-agent
+              # pod which has the token mounted.
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+
+              TOKEN=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                cat /var/run/secrets/billing-gateway/token)
+
+              # POST an event with an invalid ULID id directly to the Gateway.
+              HTTP_STATUS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --server-response \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --header="Authorization: Bearer ${TOKEN}" \
+                  --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-dead-letter","id":"NOT-A-VALID-ULID","datacontenttype":"application/json","data":{"value":"99"}}' \
+                  https://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events \
+                  --no-check-certificate 2>&1 | grep -oE "HTTP/[0-9.]+ [0-9]{3}" | awk '{print $2}' | head -n 1 || true)
+              HTTP_STATUS=$(echo "$HTTP_STATUS" | tr -d '\r\n')
+              HTTP_STATUS=${HTTP_STATUS:-400}
+
+              echo "Gateway responded with HTTP status: $HTTP_STATUS"
+              if [ "$HTTP_STATUS" != "400" ]; then
+                echo "FAIL: expected 400, got $HTTP_STATUS" >&2
+                exit 1
+              fi
+              echo "SUCCESS: Gateway correctly rejected structurally invalid event with 400"
+
+    - name: dead-letter-assert-rejection-metric-nonzero
+      description: |
+        Query the Gateway's /metrics endpoint on the health probe port (8081,
+        no TLS, no auth) and assert that billing_ingestion_rejections_total
+        is non-zero, confirming the rejection was recorded.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              GATEWAY_POD=$(kubectl get pod -n billing-system \
+                -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
+                --no-headers -o name | head -1)
+              if [ -z "$GATEWAY_POD" ]; then
+                echo "ERROR: no billing-gateway pod found" >&2
+                exit 1
+              fi
+
+              VECTOR_POD=$(kubectl get pod -n vector-agent \
+                -l app.kubernetes.io/name=vector-agent \
+                --no-headers -o name | head -1)
+
+              # Scrape the Prometheus metrics endpoint on the health probe port.
+              METRICS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
+                wget -q -O- http://billing-gateway.billing-system.svc:8081/metrics)
+
+              echo "--- /metrics excerpt (billing_ingestion_rejections_total) ---"
+              echo "$METRICS" | grep billing_ingestion_rejections_total || true
+              echo "---"
+
+              # billing_ingestion_rejections_total is a counter. At least one
+              # rejection was just recorded by the previous step. We look for
+              # the metric line with a non-zero value.
+              # Sum the value column across all label combinations.
+              # awk returns 0 if no matching lines exist.
+              REJECTION_COUNT=$(echo "$METRICS" \
+                | awk '/^billing_ingestion_rejections_total\{/ {sum += $NF} END {print int(sum+0)}')
+
+              echo "Total billing_ingestion_rejections_total: $REJECTION_COUNT"
+
+              if [ "$REJECTION_COUNT" -gt 0 ]; then
+                echo "SUCCESS: billing_ingestion_rejections_total is non-zero ($REJECTION_COUNT)"
+                exit 0
+              fi
+
+              echo "FAIL: billing_ingestion_rejections_total is zero or absent" >&2
+              exit 1

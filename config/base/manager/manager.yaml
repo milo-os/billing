@@ -41,6 +41,7 @@ spec:
       - command:
         - /billing
         args:
+          - operator
           - --leader-elect
           - --leader-elect-namespace=kube-system
           - --health-probe-bind-address=:8081

@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: vector-agent-config
+  namespace: vector-agent
+  labels:
+    app.kubernetes.io/name: vector-agent
+    app.kubernetes.io/managed-by: kustomize
+data:
+  vector.toml: |
+    [sources.billing_sdk]
+    type = "http_server"
+    address = "0.0.0.0:9880"
+    path = "/cloudevents"
+    decoding.codec = "json"
+
+    [sinks.billing_gateway]
+    type = "http"
+    inputs = ["billing_sdk"]
+    uri = "${BILLING_GATEWAY_URL}/v1/usage/events"
+    method = "post"
+    encoding.codec = "json"
+    framing.method = "newline_delimited"
+
+      [sinks.billing_gateway.auth]
+      strategy = "bearer"
+      token = "${VECTOR_AUTH_TOKEN}"
+
+      [sinks.billing_gateway.tls]
+      # Set to false for local dev environment where gateway uses self-signed certificates.
+      verify_certificate = false
+
+      [sinks.billing_gateway.buffer]
+      type = "disk"
+      max_size = 1073741824
+      when_full = "block"
+
+      [sinks.billing_gateway.request.retry_policy]
+      max_retries = 30
+      initial_backoff_secs = 1
+      max_backoff_secs = 60
+      jitter_mode = "full"

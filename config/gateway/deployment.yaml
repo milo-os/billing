@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-gateway
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing
+      app.kubernetes.io/component: gateway
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: billing
+        app.kubernetes.io/component: gateway
+    spec:
+      serviceAccountName: billing-gateway
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: gateway
+          image: ghcr.io/milo-os/billing:dev
+          command:
+            - /billing
+          args:
+            - gateway
+            - --addr=:8080
+            - --nats-url=nats://nats.nats-system.svc.cluster.local:4222
+            - --health-probe-bind-address=:8081
+            - --tls-cert-file=/etc/tls/tls.crt
+            - --tls-key-file=/etc/tls/tls.key
+          ports:
+            - name: ingest
+              containerPort: 8080
+              protocol: TCP
+            - name: health
+              containerPort: 8081
+              protocol: TCP
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: health
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          volumeMounts:
+            - name: tls
+              mountPath: /etc/tls
+              readOnly: true
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 1000m
+              memory: 512Mi
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+      volumes:
+        - name: tls
+          secret:
+            secretName: billing-gateway-tls
+      terminationGracePeriodSeconds: 30

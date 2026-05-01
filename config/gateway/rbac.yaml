@@ -1,0 +1,31 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: billing-gateway
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+rules:
+  # The Gateway calls the Kubernetes TokenReview API to verify projected
+  # ServiceAccount tokens from Vector Agent pods.
+  - apiGroups: ["authentication.k8s.io"]
+    resources: ["tokenreviews"]
+    verbs: ["create"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: billing-gateway
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: billing-gateway
+subjects:
+  - kind: ServiceAccount
+    name: billing-gateway
+    namespace: billing-system

@@ -1,0 +1,12 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: vector-agent
+  labels:
+    app.kubernetes.io/name: vector-agent
+    app.kubernetes.io/managed-by: kustomize
+rules:
+  # Read node metadata for enrichment in Vector transforms.
+  - apiGroups: [""]
+    resources: ["nodes"]
+    verbs: ["get", "list", "watch"]
