@@ -12,7 +12,9 @@ spec:
   includedPermissions:
     - billing.miloapis.com/billingaccounts.create
     - billing.miloapis.com/billingaccounts.update
+    - billing.miloapis.com/billingaccounts.patch
     - billing.miloapis.com/billingaccounts.delete
     - billing.miloapis.com/billingaccountbindings.create
     - billing.miloapis.com/billingaccountbindings.update
+    - billing.miloapis.com/billingaccountbindings.patch
     - billing.miloapis.com/billingaccountbindings.delete

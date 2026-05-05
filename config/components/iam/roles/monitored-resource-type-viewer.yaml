@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-monitored-resource-type-viewer
+  annotations:
+    kubernetes.io/display-name: Monitored Resource Type Viewer
+    kubernetes.io/description: "View access to all monitored resource type resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/monitoredresourcetypes.list
+    - billing.miloapis.com/monitoredresourcetypes.get
+    - billing.miloapis.com/monitoredresourcetypes.watch

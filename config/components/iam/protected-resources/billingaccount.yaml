@@ -16,7 +16,6 @@ spec:
     - patch
     - delete
     - watch
-    - updateStatus
   parentResources:
     - apiGroup: resourcemanager.miloapis.com
       kind: Organization

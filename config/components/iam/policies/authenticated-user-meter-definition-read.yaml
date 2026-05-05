@@ -1,0 +1,14 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: PolicyBinding
+metadata:
+  name: authenticated-user-meter-definition-read
+spec:
+  roleRef:
+    name: billing.miloapis.com-meter-definition-viewer
+  subjects:
+    - kind: Group
+      name: "system:authenticated"
+  resourceSelector:
+    resourceKind:
+      apiGroup: "billing.miloapis.com"
+      kind: MeterDefinition

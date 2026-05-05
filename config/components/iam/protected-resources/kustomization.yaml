@@ -8,3 +8,5 @@
 resources:
   - billingaccount.yaml
   - billingaccountbinding.yaml
+  - meterdefinition.yaml
+  - monitoredresourcetype.yaml
