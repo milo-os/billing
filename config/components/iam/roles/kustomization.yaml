@@ -6,3 +6,7 @@
 resources:
   - billing-admin.yaml
   - billing-viewer.yaml
+  - meter-definition-admin.yaml
+  - meter-definition-viewer.yaml
+  - monitored-resource-type-admin.yaml
+  - monitored-resource-type-viewer.yaml

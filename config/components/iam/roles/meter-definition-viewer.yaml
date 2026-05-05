@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-meter-definition-viewer
+  annotations:
+    kubernetes.io/display-name: Meter Definition Viewer
+    kubernetes.io/description: "View access to all meter definition resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/meterdefinitions.list
+    - billing.miloapis.com/meterdefinitions.get
+    - billing.miloapis.com/meterdefinitions.watch

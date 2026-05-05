@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-monitored-resource-type-admin
+  annotations:
+    kubernetes.io/display-name: Monitored Resource Type Admin
+    kubernetes.io/description: "Full access to all monitored resource type resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-monitored-resource-type-viewer
+  includedPermissions:
+    - billing.miloapis.com/monitoredresourcetypes.create
+    - billing.miloapis.com/monitoredresourcetypes.update
+    - billing.miloapis.com/monitoredresourcetypes.patch
+    - billing.miloapis.com/monitoredresourcetypes.delete

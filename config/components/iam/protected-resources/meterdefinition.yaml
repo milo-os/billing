@@ -1,13 +1,13 @@
 apiVersion: iam.miloapis.com/v1alpha1
 kind: ProtectedResource
 metadata:
-  name: billing.miloapis.com-billingaccountbinding
+  name: billing.miloapis.com-meterdefinition
 spec:
   serviceRef:
     name: "billing.miloapis.com"
-  kind: BillingAccountBinding
-  plural: billingaccountbindings
-  singular: billingaccountbinding
+  kind: MeterDefinition
+  plural: meterdefinitions
+  singular: meterdefinition
   permissions:
     - list
     - get
@@ -18,4 +18,4 @@ spec:
     - watch
   parentResources:
     - apiGroup: resourcemanager.miloapis.com
-      kind: Organization
+      kind: Platform

@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-meter-definition-admin
+  annotations:
+    kubernetes.io/display-name: Meter Definition Admin
+    kubernetes.io/description: "Full access to all meter definition resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-meter-definition-viewer
+  includedPermissions:
+    - billing.miloapis.com/meterdefinitions.create
+    - billing.miloapis.com/meterdefinitions.update
+    - billing.miloapis.com/meterdefinitions.patch
+    - billing.miloapis.com/meterdefinitions.delete
