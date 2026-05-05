@@ -54,7 +54,7 @@ func Run(ctx context.Context, cfg Config) error {
 
 	// 3. Build NATSPublisher (fatal on error).
 	serverLog.Info("connecting to NATS", "url", cfg.NATSUrl)
-	publisher, err := gwnats.NewNATSPublisher(cfg.NATSUrl)
+	publisher, err := gwnats.NewNATSPublisher(cfg.NATSUrl, cfg.NATSCAFile, cfg.NATSCertFile, cfg.NATSKeyFile)
 	if err != nil {
 		serverLog.Error(err, "failed to connect to NATS", "url", cfg.NATSUrl)
 		return fmt.Errorf("connecting to NATS: %w", err)
@@ -90,24 +90,34 @@ func Run(ctx context.Context, cfg Config) error {
 	healthMux.Handle("GET /readyz", handler.NewReadyHandler(publisher))
 	healthMux.Handle("GET /metrics", promhttp.Handler())
 
-	// 7. Load TLS config for ingest server.
-	serverLog.Info("loading TLS certificate", "certFile", cfg.TLSCertFile)
-	tlsCert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
-	if err != nil {
-		serverLog.Error(err, "failed to load TLS certificate", "certFile", cfg.TLSCertFile, "keyFile", cfg.TLSKeyFile)
-		return fmt.Errorf("loading TLS certificate: %w", err)
-	}
-	tlsCfg := &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-		MinVersion:   tls.VersionTLS12,
-	}
-	serverLog.Info("TLS certificate loaded")
+	// 7. Load TLS config for ingest server (optional).
+	var ingestServer *http.Server
+	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
+		serverLog.Info("loading TLS certificate", "certFile", cfg.TLSCertFile)
+		tlsCert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
+		if err != nil {
+			serverLog.Error(err, "failed to load TLS certificate", "certFile", cfg.TLSCertFile, "keyFile", cfg.TLSKeyFile)
+			return fmt.Errorf("loading TLS certificate: %w", err)
+		}
+		tlsCfg := &tls.Config{
+			Certificates: []tls.Certificate{tlsCert},
+			MinVersion:   tls.VersionTLS12,
+		}
+		serverLog.Info("TLS certificate loaded")
 
-	ingestServer := &http.Server{
-		Addr:      cfg.Addr,
-		Handler:   ingestMux,
-		TLSConfig: tlsCfg,
+		ingestServer = &http.Server{
+			Addr:      cfg.Addr,
+			Handler:   ingestMux,
+			TLSConfig: tlsCfg,
+		}
+	} else {
+		serverLog.Info("no TLS certificate provided; starting ingest server (HTTP)")
+		ingestServer = &http.Server{
+			Addr:    cfg.Addr,
+			Handler: ingestMux,
+		}
 	}
+
 	healthServer := &http.Server{
 		Addr:    cfg.HealthAddr,
 		Handler: healthMux,
@@ -117,10 +127,18 @@ func Run(ctx context.Context, cfg Config) error {
 	errCh := make(chan error, 2)
 
 	go func() {
-		serverLog.Info("starting ingest server (TLS)", "addr", cfg.Addr)
-		if err := ingestServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverLog.Error(err, "ingest server stopped unexpectedly")
-			errCh <- fmt.Errorf("ingest server: %w", err)
+		if ingestServer.TLSConfig != nil {
+			serverLog.Info("starting ingest server (TLS)", "addr", cfg.Addr)
+			if err := ingestServer.ListenAndServeTLS("", ""); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverLog.Error(err, "ingest server stopped unexpectedly")
+				errCh <- fmt.Errorf("ingest server: %w", err)
+			}
+		} else {
+			serverLog.Info("starting ingest server (HTTP)", "addr", cfg.Addr)
+			if err := ingestServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				serverLog.Error(err, "ingest server stopped unexpectedly")
+				errCh <- fmt.Errorf("ingest server: %w", err)
+			}
 		}
 	}()
 

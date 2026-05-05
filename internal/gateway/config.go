@@ -15,8 +15,14 @@ type Config struct {
 	Audience string
 	// HealthAddr is the health/readiness probe address (default :8081).
 	HealthAddr string
-	// TLSCertFile is the path to the TLS certificate file (required).
+	// TLSCertFile is the path to the TLS certificate file (required for HTTPS).
 	TLSCertFile string
-	// TLSKeyFile is the path to the TLS private key file (required).
+	// TLSKeyFile is the path to the TLS private key file (required for HTTPS).
 	TLSKeyFile string
+	// NATSCAFile is the path to the NATS CA certificate file.
+	NATSCAFile string
+	// NATSCertFile is the path to the NATS client certificate file.
+	NATSCertFile string
+	// NATSKeyFile is the path to the NATS client private key file.
+	NATSKeyFile string
 }

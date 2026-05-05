@@ -82,6 +82,9 @@ spec:
         - name: webhook-cert
           mountPath: /tmp/k8s-webhook-server/serving-certs
           readOnly: true
+        - name: nats-certs
+          mountPath: /etc/nats-certs
+          readOnly: true
       serviceAccountName: billing-controller-manager
       terminationGracePeriodSeconds: 10
       volumes:
@@ -96,3 +99,12 @@ spec:
           secretName: billing-webhook-cert
           defaultMode: 420
           optional: true
+      - name: nats-certs
+        csi:
+          driver: csi.cert-manager.io
+          readOnly: true
+          volumeAttributes:
+            csi.cert-manager.io/issuer-name: nats
+            csi.cert-manager.io/issuer-kind: ClusterIssuer
+            csi.cert-manager.io/common-name: billing-operator.nats.client
+            csi.cert-manager.io/subject-organizations: datum

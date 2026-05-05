@@ -52,7 +52,7 @@ spec:
               exec /usr/local/bin/vector --config /etc/vector/vector.toml
           env:
             - name: BILLING_GATEWAY_URL
-              value: "https://billing-gateway.billing-system.svc.cluster.local:8080"
+              value: "http://billing-gateway.billing-system.svc.cluster.local:8080"
           ports:
             - name: cloudevents
               containerPort: 9880

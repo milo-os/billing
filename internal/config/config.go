@@ -58,6 +58,15 @@ type NATSConfig struct {
 	//
 	// +kubebuilder:validation:Required
 	URL string `json:"url"`
+
+	// CAFile is the path to the NATS CA certificate file.
+	CAFile string `json:"caFile,omitempty"`
+
+	// CertFile is the path to the NATS client certificate file.
+	CertFile string `json:"certFile,omitempty"`
+
+	// KeyFile is the path to the NATS client private key file.
+	KeyFile string `json:"keyFile,omitempty"`
 }
 
 // RestConfig returns the *rest.Config used to connect to the Milo API server.

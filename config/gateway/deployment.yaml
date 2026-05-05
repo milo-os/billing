@@ -30,10 +30,11 @@ spec:
           args:
             - gateway
             - --addr=:8080
-            - --nats-url=nats://nats.nats-system.svc.cluster.local:4222
+            - --nats-url=tls://nats.nats-system.svc.cluster.local:4222
+            - --nats-ca-file=/etc/nats-certs/ca.crt
+            - --nats-cert-file=/etc/nats-certs/tls.crt
+            - --nats-key-file=/etc/nats-certs/tls.key
             - --health-probe-bind-address=:8081
-            - --tls-cert-file=/etc/tls/tls.crt
-            - --tls-key-file=/etc/tls/tls.key
           ports:
             - name: ingest
               containerPort: 8080
@@ -54,8 +55,8 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - name: tls
-              mountPath: /etc/tls
+            - name: nats-certs
+              mountPath: /etc/nats-certs
               readOnly: true
           resources:
             requests:
@@ -70,7 +71,13 @@ spec:
               drop:
                 - "ALL"
       volumes:
-        - name: tls
-          secret:
-            secretName: billing-gateway-tls
+        - name: nats-certs
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/issuer-name: nats
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/common-name: billing-gateway.nats.client
+              csi.cert-manager.io/subject-organizations: datum
       terminationGracePeriodSeconds: 30

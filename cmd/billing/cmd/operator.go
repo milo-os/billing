@@ -146,7 +146,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					"url", serverConfig.NATSConfig.URL,
 				)
 
-				nc, err := natsgo.Connect(serverConfig.NATSConfig.URL,
+				natsOpts := []natsgo.Option{
 					natsgo.DisconnectErrHandler(func(_ *natsgo.Conn, err error) {
 						setupLog.Error(err, "NATS disconnected")
 					}),
@@ -156,7 +156,14 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					natsgo.ClosedHandler(func(_ *natsgo.Conn) {
 						setupLog.Info("NATS connection closed")
 					}),
-				)
+				}
+
+				if serverConfig.NATSConfig.CAFile != "" && serverConfig.NATSConfig.CertFile != "" && serverConfig.NATSConfig.KeyFile != "" {
+					natsOpts = append(natsOpts, natsgo.RootCAs(serverConfig.NATSConfig.CAFile))
+					natsOpts = append(natsOpts, natsgo.ClientCert(serverConfig.NATSConfig.CertFile, serverConfig.NATSConfig.KeyFile))
+				}
+
+				nc, err := natsgo.Connect(serverConfig.NATSConfig.URL, natsOpts...)
 				if err != nil {
 					return fmt.Errorf("connecting to NATS at %s: %w", serverConfig.NATSConfig.URL, err)
 				}

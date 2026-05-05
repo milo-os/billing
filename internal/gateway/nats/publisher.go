@@ -39,8 +39,8 @@ type NATSPublisher struct {
 // NewNATSPublisher dials NATS and returns a NATSPublisher.
 // Returns an error if the connection or JetStream context cannot be
 // established — callers should treat this as a fatal startup error.
-func NewNATSPublisher(url string) (*NATSPublisher, error) {
-	nc, err := natsgo.Connect(url,
+func NewNATSPublisher(url, caFile, certFile, keyFile string) (*NATSPublisher, error) {
+	opts := []natsgo.Option{
 		natsgo.DisconnectErrHandler(func(_ *natsgo.Conn, err error) {
 			log.Error(err, "NATS disconnected")
 		}),
@@ -50,7 +50,14 @@ func NewNATSPublisher(url string) (*NATSPublisher, error) {
 		natsgo.ClosedHandler(func(_ *natsgo.Conn) {
 			log.Info("NATS connection closed")
 		}),
-	)
+	}
+
+	if caFile != "" && certFile != "" && keyFile != "" {
+		opts = append(opts, natsgo.RootCAs(caFile))
+		opts = append(opts, natsgo.ClientCert(certFile, keyFile))
+	}
+
+	nc, err := natsgo.Connect(url, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("gateway: connecting to NATS at %s: %w", url, err)
 	}

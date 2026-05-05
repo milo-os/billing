@@ -4,7 +4,6 @@ package cmd
 
 import (
 	"flag"
-	"fmt"
 
 	"github.com/spf13/cobra"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -22,6 +21,9 @@ func newGatewayCommand() *cobra.Command {
 		healthAddr        string
 		tlsCertFile       string
 		tlsKeyFile        string
+		natsCAFile        string
+		natsCertFile      string
+		natsKeyFile       string
 	)
 
 	opts := zap.Options{
@@ -34,9 +36,6 @@ func newGatewayCommand() *cobra.Command {
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
-			if tlsCertFile == "" || tlsKeyFile == "" {
-				return fmt.Errorf("--tls-cert-file and --tls-key-file are required")
-			}
 			return gateway.Run(cmd.Context(), gateway.Config{
 				Addr:              addr,
 				NATSUrl:           natsURL,
@@ -45,6 +44,9 @@ func newGatewayCommand() *cobra.Command {
 				HealthAddr:        healthAddr,
 				TLSCertFile:       tlsCertFile,
 				TLSKeyFile:        tlsKeyFile,
+				NATSCAFile:        natsCAFile,
+				NATSCertFile:      natsCertFile,
+				NATSKeyFile:       natsKeyFile,
 			})
 		},
 	}
@@ -54,8 +56,11 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&natsSubjectPrefix, "nats-subject-prefix", "billing.usage", "NATS subject prefix.")
 	cmd.Flags().StringVar(&audience, "token-review-audience", "billing-gateway", "Expected TokenReview audience.")
 	cmd.Flags().StringVar(&healthAddr, "health-probe-bind-address", ":8081", "Health/readiness probe address.")
-	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file (required).")
-	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file (required).")
+	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file.")
+	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file.")
+	cmd.Flags().StringVar(&natsCAFile, "nats-ca-file", "", "Path to NATS CA certificate file.")
+	cmd.Flags().StringVar(&natsCertFile, "nats-cert-file", "", "Path to NATS client certificate file.")
+	cmd.Flags().StringVar(&natsKeyFile, "nats-key-file", "", "Path to NATS client private key file.")
 	_ = cmd.MarkFlagRequired("nats-url")
 
 	zapFlags := flag.NewFlagSet("zap", flag.ContinueOnError)
