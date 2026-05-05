@@ -2,7 +2,6 @@ apiVersion: apps/v1
 kind: DaemonSet
 metadata:
   name: vector-agent
-  namespace: vector-agent
   labels:
     app.kubernetes.io/name: vector-agent
     app.kubernetes.io/managed-by: kustomize
