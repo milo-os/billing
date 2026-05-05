@@ -108,3 +108,4 @@ spec:
             csi.cert-manager.io/issuer-kind: ClusterIssuer
             csi.cert-manager.io/common-name: billing-operator.nats.client
             csi.cert-manager.io/subject-organizations: datum
+            csi.cert-manager.io/fs-group: "65532"

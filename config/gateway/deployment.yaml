@@ -80,4 +80,5 @@ spec:
               csi.cert-manager.io/issuer-kind: ClusterIssuer
               csi.cert-manager.io/common-name: billing-gateway.nats.client
               csi.cert-manager.io/subject-organizations: datum
+              csi.cert-manager.io/fs-group: "65532"
       terminationGracePeriodSeconds: 30
