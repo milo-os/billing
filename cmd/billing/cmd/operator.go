@@ -141,9 +141,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			}
 
 			// Register the UsageConsumer if NATS is configured (opt-in).
-			if serverConfig.NATSConfig != nil {
+			if serverConfig.Nats.URL != "" {
 				setupLog.Info("NATS config present; registering UsageConsumer",
-					"url", serverConfig.NATSConfig.URL,
+					"url", serverConfig.Nats.URL,
 				)
 
 				natsOpts := []natsgo.Option{
@@ -158,14 +158,14 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					}),
 				}
 
-				if serverConfig.NATSConfig.CAFile != "" && serverConfig.NATSConfig.CertFile != "" && serverConfig.NATSConfig.KeyFile != "" {
-					natsOpts = append(natsOpts, natsgo.RootCAs(serverConfig.NATSConfig.CAFile))
-					natsOpts = append(natsOpts, natsgo.ClientCert(serverConfig.NATSConfig.CertFile, serverConfig.NATSConfig.KeyFile))
+				if serverConfig.Nats.CAFile != "" && serverConfig.Nats.CertFile != "" && serverConfig.Nats.KeyFile != "" {
+					natsOpts = append(natsOpts, natsgo.RootCAs(serverConfig.Nats.CAFile))
+					natsOpts = append(natsOpts, natsgo.ClientCert(serverConfig.Nats.CertFile, serverConfig.Nats.KeyFile))
 				}
 
-				nc, err := natsgo.Connect(serverConfig.NATSConfig.URL, natsOpts...)
+				nc, err := natsgo.Connect(serverConfig.Nats.URL, natsOpts...)
 				if err != nil {
-					return fmt.Errorf("connecting to NATS at %s: %w", serverConfig.NATSConfig.URL, err)
+					return fmt.Errorf("connecting to NATS at %s: %w", serverConfig.Nats.URL, err)
 				}
 
 				meterCache, err := consumer.NewMeterDefinitionCache(ctx, mgr.GetCache())

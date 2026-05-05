@@ -44,10 +44,9 @@ type BillingOperator struct {
 	// a cluster.
 	KubeconfigPath string `json:"kubeconfigPath,omitempty"`
 
-	// NATSConfig configures the NATS JetStream connection used by the
-	// UsageConsumer. When unset, the consumer is not registered with the
-	// manager (opt-in via config).
-	NATSConfig *NATSConfig `json:"natsConfig,omitempty"`
+	// Nats configures the NATS JetStream connection used by the
+	// UsageConsumer.
+	Nats NATSConfig `json:"nats"`
 }
 
 // +k8s:deepcopy-gen=true
