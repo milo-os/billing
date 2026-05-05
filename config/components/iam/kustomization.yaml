@@ -10,6 +10,3 @@ kind: Component
 resources:
   - protected-resources/
   - roles/
-
-components:
-  - policies/
