@@ -8,7 +8,7 @@ resources:
   - ../../base/crd
   - ../../base/manager
   - ../../base/certmanager
-  - ../../gateway
+  - ../../base/gateway
 
 components:
   - ../../components/namespace

@@ -8,3 +8,7 @@ resources:
   - service.yaml
   - deployment.yaml
   - hpa.yaml
+
+images:
+  - name: ghcr.io/milo-os/billing
+    newTag: latest
