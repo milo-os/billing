@@ -1,0 +1,21 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: ResourceRegistration
+metadata:
+  name: feature-cloud-portal-usage-metering
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: cloud-portal-usage-metering
+spec:
+  consumerType:
+    apiGroup: resourcemanager.miloapis.com
+    kind: Organization
+  type: Feature
+  resourceType: features.miloapis.com/cloud-portal-usage-metering
+  description: "Controls visibility of the Usage & Metering tab in the Datum Cloud portal."
+  baseUnit: feature
+  displayUnit: features
+  unitConversionFactor: 1
+  claimingResources:
+    - apiGroup: features.miloapis.com
+      kind: FeatureGrant
