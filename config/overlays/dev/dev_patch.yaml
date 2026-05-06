@@ -31,6 +31,10 @@ spec:
           volumeMounts:
             - $patch: delete
               name: nats-certs
+            - $patch: delete
+              name: gateway-certs
       volumes:
         - $patch: delete
           name: nats-certs
+        - $patch: delete
+          name: gateway-certs
