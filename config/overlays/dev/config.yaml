@@ -9,5 +9,5 @@ webhookServer:
       name: billing-webhook-cert
       namespace: billing-system
 
-natsConfig:
+nats:
   url: nats://nats.nats-system.svc:4222

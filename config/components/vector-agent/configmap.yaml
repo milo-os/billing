@@ -11,15 +11,14 @@ data:
     type = "http_server"
     address = "0.0.0.0:9880"
     path = "/cloudevents"
-    decoding.codec = "json"
+    decoding.codec = "bytes"
 
     [sinks.billing_gateway]
     type = "http"
     inputs = ["billing_sdk"]
     uri = "${BILLING_GATEWAY_URL}/v1/usage/events"
     method = "post"
-    encoding.codec = "json"
-    framing.method = "newline_delimited"
+    encoding.codec = "raw_message"
 
       [sinks.billing_gateway.auth]
       strategy = "bearer"
