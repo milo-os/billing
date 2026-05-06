@@ -198,6 +198,7 @@ tasks:
         echo "🏗️  Stage 1: Deploying Base Dependencies (NATS & Vector)"
         echo "----------------------------------------------------------------------"
         task test-infra:kubectl -- apply -k config/dependencies/nats
+        task test-infra:kubectl -- apply -f config/components/namespace/namespace.yaml
         task test-infra:kubectl -- apply -k config/components/vector-agent
 
         echo ""

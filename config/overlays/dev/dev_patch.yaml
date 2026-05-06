@@ -1,0 +1,36 @@
+# This patch file contains general development overrides (like imagePullPolicy).
+# Note: Volume and volumeMount deletions for the manager are handled via 
+# JSON patches in kustomization.yaml to avoid Strategic Merge Patch regressions.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-controller-manager
+spec:
+  template:
+    spec:
+      containers:
+        - name: manager
+          imagePullPolicy: Never
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-gateway
+  namespace: billing-system
+spec:
+  template:
+    spec:
+      containers:
+        - name: gateway
+          imagePullPolicy: Never
+          args:
+            - gateway
+            - --addr=:8080
+            - --nats-url=nats://nats.nats-system.svc:4222
+            - --health-probe-bind-address=:8081
+          volumeMounts:
+            - $patch: delete
+              name: nats-certs
+      volumes:
+        - $patch: delete
+          name: nats-certs

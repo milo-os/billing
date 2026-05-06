@@ -24,7 +24,19 @@ configMapGenerator:
       disableNameSuffixHash: true
 
 patches:
-  - path: manager_pull_policy_patch.yaml
+  - path: dev_patch.yaml
+  # We use JSON patches for volume removal because Strategic Merge Patches
+  # can sometimes clear the entire volumeMounts list instead of just deleting
+  # the targeted item. These surgical removals ensure the nats-certs (index 2)
+  # are removed while keeping the critical /config and webhook certs.
+  - target:
+      kind: Deployment
+      name: billing-controller-manager
+    patch: |-
+      - op: remove
+        path: /spec/template/spec/containers/0/volumeMounts/2
+      - op: remove
+        path: /spec/template/spec/volumes/2
   - target:
       kind: Certificate
       name: billing-serving-cert

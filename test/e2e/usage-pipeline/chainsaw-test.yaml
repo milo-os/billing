@@ -1,0 +1,137 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: usage-pipeline
+spec:
+  description: |
+    Full E2E workflow for the usage pipeline:
+    1. Create MeterDefinitions, BillingAccounts, and Bindings.
+    2. Send a valid event to Vector Agent (mimicking emission SDK).
+    3. Assert the event is attributed and reaches the .valid JetStream subject.
+    4. Send an invalid event (unknown meter).
+    5. Assert the event reaches the .quarantine.unknown_meter subject.
+  steps:
+    - name: create-resources
+      try:
+        - apply:
+            file: resources.yaml
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-account
+                namespace: usage-pipeline-test
+              status:
+                phase: Ready
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                name: e2e-binding
+                namespace: usage-pipeline-test
+              status:
+                phase: Active
+
+    - name: send-valid-event
+      description: |
+        Send a valid event to Vector Agent.
+        Project: projects/p-e2e-usage-pipeline
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+              
+              # Generate a unique ULID (26 chars: 10 timestamp + 16 randomness)
+              # We use a fixed prefix to ensure it's valid Crockford's Base32.
+              export LC_ALL=C
+              VALID_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
+              echo "Generated Valid ID: $VALID_ID"
+              echo "$VALID_ID" > /tmp/valid_id.txt
+
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/name=vector-agent --no-headers -o name | head -1)
+              echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$VALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100"}}' > event.json
+              kubectl cp event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/event.json"
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-file=/tmp/event.json \
+                  http://127.0.0.1:9880/cloudevents
+
+    - name: assert-valid-event-attributed
+      description: |
+        Verify that the event reached the billing.usage.p-e2e-usage-pipeline.valid subject.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+              VALID_ID=$(cat /tmp/valid_id.txt)
+              NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
+              
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                if kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  sub billing.usage.p-e2e-usage-pipeline.valid \
+                  --count 1 --timeout 5s 2>/dev/null | grep -q "$VALID_ID"; then
+                  echo "SUCCESS: event $VALID_ID found in valid queue"
+                  exit 0
+                fi
+                echo "Waiting for event $VALID_ID..."
+                sleep 2
+              done
+              echo "FAIL: event $VALID_ID did not reach valid queue" >&2
+              exit 1
+
+    - name: send-invalid-event
+      description: |
+        Send an invalid event (unknown meter) to Vector Agent.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+              export LC_ALL=C
+              INVALID_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
+              echo "Generated Invalid ID: $INVALID_ID"
+              echo "$INVALID_ID" > /tmp/invalid_id.txt
+
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/name=vector-agent --no-headers -o name | head -1)
+              echo '{"specversion":"1.0","type":"non-existent-meter","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$INVALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100"}}' > invalid_event.json
+              kubectl cp invalid_event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/invalid_event.json"
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-file=/tmp/invalid_event.json \
+                  http://127.0.0.1:9880/cloudevents
+
+    - name: assert-event-quarantined
+      description: |
+        Verify that the event reached the billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter subject.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+              INVALID_ID=$(cat /tmp/invalid_id.txt)
+              NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
+              
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                if kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  sub billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter \
+                  --count 1 --timeout 5s 2>/dev/null | grep -q "$INVALID_ID"; then
+                  echo "SUCCESS: event $INVALID_ID found in quarantine queue"
+                  exit 0
+                fi
+                echo "Waiting for event $INVALID_ID in quarantine..."
+                sleep 2
+              done
+              echo "FAIL: event $INVALID_ID did not reach quarantine" >&2
+              exit 1

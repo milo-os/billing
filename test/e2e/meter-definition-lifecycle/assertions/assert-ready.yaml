@@ -7,3 +7,6 @@ status:
     - type: Ready
       status: "True"
       reason: MeterDefinitionReady
+    - type: Published
+      status: "True"
+      reason: MeterDefinitionPublished

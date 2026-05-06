@@ -17,3 +17,5 @@ spec:
   billing:
     consumedUnit: s
     pricingUnit: h
+  monitoredResourceTypes:
+    - instance

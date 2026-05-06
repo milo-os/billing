@@ -9,7 +9,7 @@ spec:
     Prerequisites (must be deployed before running this suite):
       - billing-system namespace with billing-gateway Deployment (billing gateway subcommand)
       - nats-system namespace with NATS JetStream (config/dependencies/nats/)
-      - vector-agent namespace with Vector DaemonSet (config/dependencies/vector-agent/)
+      - billing-system namespace with Vector DaemonSet (config/dependencies/vector-agent/)
       - config/components/nats-streams/ applied (billing.usage.> stream created)
       - cert-manager with selfsigned-issuer available in billing-system
 
@@ -50,7 +50,7 @@ spec:
               kind: DaemonSet
               metadata:
                 name: vector-agent
-                namespace: vector-agent
+                namespace: billing-system
               status:
                 (numberReady >= `1`): true
 
@@ -73,7 +73,7 @@ spec:
               set -euo pipefail
 
               # Locate the Vector Agent pod.
-              VECTOR_POD=$(kubectl get pod -n vector-agent \
+              VECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=vector-agent \
                 --no-headers -o name | head -1)
               if [ -z "$VECTOR_POD" ]; then
@@ -83,7 +83,7 @@ spec:
 
               # POST a valid CloudEvent to the Vector HTTP source running
               # inside the pod (port 9880, accessible via exec + curl).
-              kubectl exec -n vector-agent "$VECTOR_POD" -- \
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
                 wget -q -O- \
                   --header="Content-Type: application/cloudevents+json" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-restart-test","id":"01HVJ0000000000000000AAAA1","datacontenttype":"application/json","data":{"value":"10"}}' \
@@ -100,7 +100,7 @@ spec:
             content: |
               set -euo pipefail
 
-              VECTOR_POD=$(kubectl get pod -n vector-agent \
+              VECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=vector-agent \
                 --no-headers -o name | head -1)
               if [ -z "$VECTOR_POD" ]; then
@@ -109,10 +109,10 @@ spec:
               fi
 
               echo "Deleting pod $VECTOR_POD"
-              kubectl delete -n vector-agent "$VECTOR_POD" --grace-period=0
+              kubectl delete -n billing-system "$VECTOR_POD" --grace-period=0
 
               # Wait for the DaemonSet to recreate the pod.
-              kubectl rollout status daemonset/vector-agent -n vector-agent --timeout=90s
+              kubectl rollout status daemonset/vector-agent -n billing-system --timeout=90s
 
     - name: vector-agent-restart-assert-event-in-jetstream
       description: |
@@ -199,7 +199,7 @@ spec:
             content: |
               set -euo pipefail
 
-              VECTOR_POD=$(kubectl get pod -n vector-agent \
+              VECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=vector-agent \
                 --no-headers -o name | head -1)
               if [ -z "$VECTOR_POD" ]; then
@@ -207,7 +207,7 @@ spec:
                 exit 1
               fi
 
-              kubectl exec -n vector-agent "$VECTOR_POD" -- \
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
                 wget -q -O- \
                   --header="Content-Type: application/cloudevents+json" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-e2e-gw-restart","id":"01HVJ0000000000000000BBBBB","datacontenttype":"application/json","data":{"value":"20"}}' \
@@ -305,24 +305,22 @@ spec:
               # it is projected with audience=billing-gateway and is the
               # caller the Gateway expects; we exec into the vector-agent
               # pod which has the token mounted.
-              VECTOR_POD=$(kubectl get pod -n vector-agent \
+              VECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=vector-agent \
                 --no-headers -o name | head -1)
 
-              TOKEN=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
+              TOKEN=$(kubectl exec -n billing-system "$VECTOR_POD" -- \
                 cat /var/run/secrets/billing-gateway/token)
 
               # POST an event with an invalid ULID id directly to the Gateway.
-              HTTP_STATUS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
-                wget -q -O- \
-                  --server-response \
+              # We use http because the Gateway in this environment is not configured with TLS certs.
+              RESPONSE=$(kubectl exec -n billing-system "$VECTOR_POD" -- \
+                wget -q -S -O- \
                   --header="Content-Type: application/cloudevents+json" \
                   --header="Authorization: Bearer ${TOKEN}" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-dead-letter","id":"NOT-A-VALID-ULID","datacontenttype":"application/json","data":{"value":"99"}}' \
-                  https://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events \
-                  --no-check-certificate 2>&1 | grep -oE "HTTP/[0-9.]+ [0-9]{3}" | awk '{print $2}' | head -n 1 || true)
-              HTTP_STATUS=$(echo "$HTTP_STATUS" | tr -d '\r\n')
-              HTTP_STATUS=${HTTP_STATUS:-400}
+                  http://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events 2>&1 || true)
+              HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP/" | awk '{print $2}' | head -1 | tr -d '\r\n')
 
               echo "Gateway responded with HTTP status: $HTTP_STATUS"
               if [ "$HTTP_STATUS" != "400" ]; then
@@ -350,32 +348,28 @@ spec:
                 exit 1
               fi
 
-              VECTOR_POD=$(kubectl get pod -n vector-agent \
+              VECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=vector-agent \
                 --no-headers -o name | head -1)
 
               # Scrape the Prometheus metrics endpoint on the health probe port.
-              METRICS=$(kubectl exec -n vector-agent "$VECTOR_POD" -- \
-                wget -q -O- http://billing-gateway.billing-system.svc:8081/metrics)
+              # We retry because OTel metrics may take a moment to be exported/scraped.
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                METRICS=$(kubectl exec -n billing-system "$VECTOR_POD" -- \
+                  wget -q -O- http://billing-gateway.billing-system.svc:8081/metrics 2>/dev/null || true)
 
-              echo "--- /metrics excerpt (billing_ingestion_rejections_total) ---"
-              echo "$METRICS" | grep billing_ingestion_rejections_total || true
-              echo "---"
+                if [ -n "$METRICS" ]; then
+                  REJECTION_COUNT=$(echo "$METRICS" \
+                    | awk '/^billing_ingestion_rejections_total/ {sum += $NF} END {print int(sum+0)}')
+                  echo "Current billing_ingestion_rejections_total: $REJECTION_COUNT"
+                  if [ "$REJECTION_COUNT" -gt 0 ]; then
+                    echo "SUCCESS: billing_ingestion_rejections_total is non-zero ($REJECTION_COUNT)"
+                    exit 0
+                  fi
+                fi
+                sleep 5
+              done
 
-              # billing_ingestion_rejections_total is a counter. At least one
-              # rejection was just recorded by the previous step. We look for
-              # the metric line with a non-zero value.
-              # Sum the value column across all label combinations.
-              # awk returns 0 if no matching lines exist.
-              REJECTION_COUNT=$(echo "$METRICS" \
-                | awk '/^billing_ingestion_rejections_total\{/ {sum += $NF} END {print int(sum+0)}')
-
-              echo "Total billing_ingestion_rejections_total: $REJECTION_COUNT"
-
-              if [ "$REJECTION_COUNT" -gt 0 ]; then
-                echo "SUCCESS: billing_ingestion_rejections_total is non-zero ($REJECTION_COUNT)"
-                exit 0
-              fi
-
-              echo "FAIL: billing_ingestion_rejections_total is zero or absent" >&2
+              echo "FAIL: billing_ingestion_rejections_total remained zero or absent within timeout" >&2
               exit 1
