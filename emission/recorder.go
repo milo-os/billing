@@ -33,13 +33,13 @@ func (lr *lockedRand) Read(p []byte) (int, error) {
 	return lr.src.Read(p) //nolint:staticcheck // math/rand.Rand.Read is sufficient for ULID entropy
 }
 
-// VectorRecorder implements Recorder by forwarding events to the node-local
-// Vector Agent over HTTP with bounded exponential backoff retry.
+// UsageRecorder implements Recorder by forwarding events to the usage endpoint
+// over HTTP with bounded exponential backoff retry.
 //
-// VectorRecorder is safe for concurrent use from multiple goroutines. The
+// UsageRecorder is safe for concurrent use from multiple goroutines. The
 // HTTP client and entropy source are shared; all per-call state is
 // stack-allocated.
-type VectorRecorder struct {
+type UsageRecorder struct {
 	endpoint string
 	policy   RetryPolicy
 	client   *http.Client
@@ -47,19 +47,19 @@ type VectorRecorder struct {
 	metrics  *sdkMetrics
 }
 
-// NewVectorRecorder creates a Recorder that forwards events to the
-// node-local Vector Agent.
+// NewUsageRecorder creates a Recorder that forwards events to the usage
+// endpoint.
 //
-// NewVectorRecorder returns an error if counter registration with the
+// NewUsageRecorder returns an error if counter registration with the
 // configured MeterProvider fails. In practice this only occurs when the
 // provider itself is misconfigured.
 //
 // Example:
 //
-//	r, err := emission.NewVectorRecorder(
-//	    emission.WithVectorEndpoint("http://localhost:9880/cloudevents"),
+//	r, err := emission.NewUsageRecorder(
+//	    emission.WithEndpoint("http://localhost:9880/cloudevents"),
 //	)
-func NewVectorRecorder(opts ...Option) (*VectorRecorder, error) {
+func NewUsageRecorder(opts ...Option) (*UsageRecorder, error) {
 	cfg := defaultRecorderConfig()
 	for _, o := range opts {
 		o(&cfg)
@@ -77,8 +77,8 @@ func NewVectorRecorder(opts ...Option) (*VectorRecorder, error) {
 
 	src := rand.New(rand.NewSource(time.Now().UnixNano())) //nolint:gosec // non-crypto use: ULID entropy
 
-	return &VectorRecorder{
-		endpoint: cfg.vectorEndpoint,
+	return &UsageRecorder{
+		endpoint: cfg.endpoint,
 		policy:   cfg.retryPolicy,
 		client:   cfg.httpClient,
 		entropy:  &lockedRand{src: src},
@@ -87,21 +87,19 @@ func NewVectorRecorder(opts ...Option) (*VectorRecorder, error) {
 }
 
 // Record validates the event, wraps it in a CloudEvents envelope, and POSTs
-// it to the Vector Agent. The same ULID is reused across retry attempts to
+// it to the usage endpoint. The same ULID is reused across retry attempts to
 // allow downstream deduplication.
-func (r *VectorRecorder) Record(ctx context.Context, ev UsageEvent) error {
+func (r *UsageRecorder) Record(ctx context.Context, ev UsageEvent) error {
 	if err := validate(ev); err != nil {
 		return err
 	}
 
-	now := time.Now()
-
 	// Generate the ULID once; all retry attempts share the same id so that
 	// downstream stages can deduplicate retried deliveries.
-	id := ulid.MustNew(ulid.Timestamp(now), r.entropy).String()
+	id := ulid.MustNew(ulid.Timestamp(time.Now()), r.entropy).String()
 
 	for attempt := 1; ; attempt++ {
-		ce, err := toCloudEvent(ev, now, id)
+		ce, err := toCloudEvent(ev, id)
 		if err != nil {
 			return fmt.Errorf("emission: building CloudEvent: %w", err)
 		}
@@ -128,8 +126,8 @@ func (r *VectorRecorder) Record(ctx context.Context, ev UsageEvent) error {
 		if doErr != nil {
 			// Connection-level error; treat as transient.
 			if attempt >= r.policy.MaxAttempts {
-				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "vector_unavailable")))
-				return fmt.Errorf("emission: vector unavailable after %d attempts: %w", attempt, doErr)
+				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "endpoint_unavailable")))
+				return fmt.Errorf("emission: endpoint unavailable after %d attempts: %w", attempt, doErr)
 			}
 			if err := r.sleep(ctx, attempt); err != nil {
 				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "context_canceled")))
@@ -147,8 +145,8 @@ func (r *VectorRecorder) Record(ctx context.Context, ev UsageEvent) error {
 
 		case statusCode == 429 || statusCode >= 500:
 			if attempt >= r.policy.MaxAttempts {
-				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "vector_unavailable")))
-				return fmt.Errorf("emission: vector returned %d after %d attempts", statusCode, attempt)
+				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "endpoint_unavailable")))
+				return fmt.Errorf("emission: endpoint returned %d after %d attempts", statusCode, attempt)
 			}
 			if err := r.sleep(ctx, attempt); err != nil {
 				r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "context_canceled")))
@@ -156,17 +154,17 @@ func (r *VectorRecorder) Record(ctx context.Context, ev UsageEvent) error {
 			}
 
 		default:
-			// 4xx (not 429): permanent rejection, dead letter.
-			r.metrics.deadLetter.Add(ctx, 1)
-			r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "dead_letter")))
-			return fmt.Errorf("emission: vector permanently rejected event: HTTP %d", statusCode)
+			// 4xx (not 429): permanently rejected, not retried.
+			r.metrics.rejected.Add(ctx, 1)
+			r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "rejected")))
+			return fmt.Errorf("emission: permanently rejected event: HTTP %d", statusCode)
 		}
 	}
 }
 
 // sleep waits for the backoff duration computed from the attempt number,
 // returning ctx.Err() if the context is cancelled during the wait.
-func (r *VectorRecorder) sleep(ctx context.Context, attempt int) error {
+func (r *UsageRecorder) sleep(ctx context.Context, attempt int) error {
 	delay := computeBackoff(r.policy, attempt, r.entropy)
 	timer := time.NewTimer(delay)
 	defer timer.Stop()

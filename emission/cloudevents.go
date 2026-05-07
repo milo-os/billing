@@ -3,28 +3,20 @@
 package emission
 
 import (
-	"time"
-
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 
 	"go.miloapis.com/billing/internal/event"
 )
 
 // toCloudEvent converts a validated UsageEvent into a CloudEvents v1.0 event.
-// now is the timestamp to use when ev.OccurredAt is zero.
 // id is a pre-generated ULID string.
-func toCloudEvent(ev UsageEvent, now time.Time, id string) (cloudevents.Event, error) {
+func toCloudEvent(ev UsageEvent, id string) (cloudevents.Event, error) {
 	ce := cloudevents.NewEvent()
 	ce.SetID(id)
 	ce.SetType(ev.Meter)
 	ce.SetSource(ev.Source)
-	ce.SetSubject(ev.Project.Name)
-
-	ts := ev.OccurredAt
-	if ts.IsZero() {
-		ts = now
-	}
-	ce.SetTime(ts)
+	ce.SetSubject("projects/" + ev.Project.Name)
+	ce.SetTime(ev.OccurredAt)
 
 	data := event.EventData{
 		Value: ev.Quantity,

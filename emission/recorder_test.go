@@ -24,10 +24,11 @@ import (
 // validEvent returns a minimal valid UsageEvent for reuse across tests.
 func validEvent() emission.UsageEvent {
 	return emission.UsageEvent{
-		Meter:    "compute.miloapis.com/instance/cpu-seconds",
-		Project:  emission.ProjectRef{Name: "projects/p-abc"},
-		Source:   "//compute.miloapis.com/controllers/instance-reconciler",
-		Quantity: 42,
+		Meter:      "compute.miloapis.com/instance/cpu-seconds",
+		Project:    emission.ProjectRef{Name: "p-abc"},
+		Source:     "//compute.miloapis.com/controllers/instance-reconciler",
+		Quantity:   42,
+		OccurredAt: time.Now(),
 	}
 }
 
@@ -69,9 +70,9 @@ func collectCounterValue(t *testing.T, reader *sdkmetric.ManualReader, counterNa
 func TestRecord_ValidationErrors(t *testing.T) {
 	mp, _ := newTestProvider()
 
-	r, err := emission.NewVectorRecorder(emission.WithMeterProvider(mp))
+	r, err := emission.NewUsageRecorder(emission.WithMeterProvider(mp))
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	tests := []struct {
@@ -90,13 +91,8 @@ func TestRecord_ValidationErrors(t *testing.T) {
 			wantErr: "Project.Name",
 		},
 		{
-			name:    "malformed Project.Name",
-			mutate:  func(ev *emission.UsageEvent) { ev.Project.Name = "bad-format" },
-			wantErr: "Project.Name",
-		},
-		{
-			name:    "project name with extra slash",
-			mutate:  func(ev *emission.UsageEvent) { ev.Project.Name = "projects/a/b" },
+			name:    "Project.Name with slash",
+			mutate:  func(ev *emission.UsageEvent) { ev.Project.Name = "projects/p-abc" },
 			wantErr: "Project.Name",
 		},
 		{
@@ -118,6 +114,11 @@ func TestRecord_ValidationErrors(t *testing.T) {
 			name:    "negative Quantity",
 			mutate:  func(ev *emission.UsageEvent) { ev.Quantity = -1 },
 			wantErr: "Quantity",
+		},
+		{
+			name:    "zero OccurredAt",
+			mutate:  func(ev *emission.UsageEvent) { ev.OccurredAt = time.Time{} },
+			wantErr: "OccurredAt",
 		},
 	}
 
@@ -147,15 +148,15 @@ func TestRecord_ValidationSucceeds_ValidProjectNames(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	r, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	r, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
-	valid := []string{"projects/p-abc", "projects/123", "projects/my-project-id"}
+	valid := []string{"p-abc", "123", "my-project-id"}
 	for _, name := range valid {
 		ev := validEvent()
 		ev.Project.Name = name
@@ -180,19 +181,19 @@ func TestRecord_CloudEventsMapping(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	occurredAt := time.Date(2026, 4, 30, 12, 0, 0, 0, time.UTC)
 
 	ev := emission.UsageEvent{
 		Meter:      "compute.miloapis.com/instance/cpu-seconds",
-		Project:    emission.ProjectRef{Name: "projects/p-abc"},
+		Project:    emission.ProjectRef{Name: "p-abc"},
 		Source:     "//compute.miloapis.com/controllers/instance-reconciler",
 		Quantity:   42,
 		OccurredAt: occurredAt,
@@ -206,13 +207,9 @@ func TestRecord_CloudEventsMapping(t *testing.T) {
 		},
 	}
 
-	before := time.Now()
 	if err := rec.Record(context.Background(), ev); err != nil {
 		t.Fatalf("Record: %v", err)
 	}
-	after := time.Now()
-	_ = before
-	_ = after
 
 	// Verify Content-Type header.
 	if ct := captured.Header.Get("Content-Type"); ct != "application/cloudevents+json" {
@@ -228,7 +225,7 @@ func TestRecord_CloudEventsMapping(t *testing.T) {
 	assertEqual(t, "specversion", "1.0", ce["specversion"])
 	assertEqual(t, "type", ev.Meter, ce["type"])
 	assertEqual(t, "source", ev.Source, ce["source"])
-	assertEqual(t, "subject", ev.Project.Name, ce["subject"])
+	assertEqual(t, "subject", "projects/p-abc", ce["subject"])
 	assertEqual(t, "datacontenttype", "application/json", ce["datacontenttype"])
 
 	// id must be present and non-empty.
@@ -280,49 +277,40 @@ func TestRecord_CloudEventsMapping(t *testing.T) {
 	assertEqual(t, "data.resource.uid", "uid-123", res["uid"])
 }
 
-func TestRecord_OccurredAt_DefaultsToNow(t *testing.T) {
-	var capturedBody []byte
-
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		body, _ := io.ReadAll(r.Body)
-		capturedBody = body
+func TestRecord_OccurredAt_Required(t *testing.T) {
+	// The HTTP server must never be called when OccurredAt is zero.
+	called := false
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		called = true
 		w.WriteHeader(http.StatusOK)
 	}))
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	ev := validEvent()
-	// OccurredAt is zero; must default to time.Now() at Record() call time.
+	ev.OccurredAt = time.Time{} // zero value
 
-	before := time.Now().Truncate(time.Second)
-	if err := rec.Record(context.Background(), ev); err != nil {
-		t.Fatalf("Record: %v", err)
+	err = rec.Record(context.Background(), ev)
+	if err == nil {
+		t.Fatal("expected ValidationError, got nil")
 	}
-	after := time.Now().Add(time.Second)
-
-	var ce map[string]interface{}
-	if err := json.Unmarshal(capturedBody, &ce); err != nil {
-		t.Fatalf("parsing CE body: %v", err)
+	var ve *emission.ValidationError
+	if !errorAs(err, &ve) {
+		t.Fatalf("expected *ValidationError, got %T: %v", err, err)
 	}
-
-	ceTime, ok := ce["time"].(string)
-	if !ok {
-		t.Fatal("time field missing")
+	if ve.Field != "OccurredAt" {
+		t.Errorf("expected Field %q, got %q", "OccurredAt", ve.Field)
 	}
-	parsed, err := time.Parse(time.RFC3339, ceTime)
-	if err != nil {
-		t.Fatalf("time field not RFC 3339: %v", err)
-	}
-	if parsed.Before(before) || parsed.After(after) {
-		t.Errorf("defaulted time %v not in window [%v, %v]", parsed, before, after)
+	if called {
+		t.Error("HTTP server should not have been called for zero OccurredAt")
 	}
 }
 
@@ -337,12 +325,12 @@ func TestRecord_OptionalFields_Omitted(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	// No Dimensions, no Resource.
@@ -392,8 +380,8 @@ func TestRecord_IDReusedAcrossRetries(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  5,
@@ -403,7 +391,7 @@ func TestRecord_IDReusedAcrossRetries(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	if err := rec.Record(context.Background(), validEvent()); err != nil {
@@ -430,12 +418,12 @@ func TestRecord_Success_2xx(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	if err := rec.Record(context.Background(), validEvent()); err != nil {
@@ -453,8 +441,8 @@ func TestRecord_Retry_5xx_ExhaustsRetries(t *testing.T) {
 	defer srv.Close()
 
 	mp, reader := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  3,
@@ -464,7 +452,7 @@ func TestRecord_Retry_5xx_ExhaustsRetries(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	err = rec.Record(context.Background(), validEvent())
@@ -491,8 +479,8 @@ func TestRecord_Retry_429(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  3,
@@ -502,7 +490,7 @@ func TestRecord_Retry_429(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	err = rec.Record(context.Background(), validEvent())
@@ -515,7 +503,7 @@ func TestRecord_Retry_429(t *testing.T) {
 	}
 }
 
-func TestRecord_DeadLetter_4xx_NoRetry(t *testing.T) {
+func TestRecord_Rejected_4xx_NoRetry(t *testing.T) {
 	var callCount int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -525,8 +513,8 @@ func TestRecord_DeadLetter_4xx_NoRetry(t *testing.T) {
 	defer srv.Close()
 
 	mp, reader := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  5,
@@ -536,7 +524,7 @@ func TestRecord_DeadLetter_4xx_NoRetry(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	err = rec.Record(context.Background(), validEvent())
@@ -549,16 +537,16 @@ func TestRecord_DeadLetter_4xx_NoRetry(t *testing.T) {
 		t.Errorf("expected exactly 1 attempt (no retry), got %d", n)
 	}
 
-	if count := collectCounterValue(t, reader, "billing_sdk_dead_letter_total"); count != 1 {
-		t.Errorf("billing_sdk_dead_letter_total = %d, want 1", count)
+	if count := collectCounterValue(t, reader, "billing_sdk_rejected_total"); count != 1 {
+		t.Errorf("billing_sdk_rejected_total = %d, want 1", count)
 	}
 	if count := collectCounterValue(t, reader, "billing_sdk_record_errors_total"); count != 1 {
 		t.Errorf("billing_sdk_record_errors_total = %d, want 1", count)
 	}
 }
 
-func TestRecord_4xx_Not429_IsDeadLetter_Not_404(t *testing.T) {
-	// 404 is also a 4xx that should dead-letter without retry.
+func TestRecord_Rejected_4xx_Not404(t *testing.T) {
+	// 404 is also a 4xx that should be permanently rejected without retry.
 	var callCount int32
 
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -568,8 +556,8 @@ func TestRecord_4xx_Not429_IsDeadLetter_Not_404(t *testing.T) {
 	defer srv.Close()
 
 	mp, _ := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  5,
@@ -579,7 +567,7 @@ func TestRecord_4xx_Not429_IsDeadLetter_Not_404(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	if err := rec.Record(context.Background(), validEvent()); err == nil {
@@ -600,8 +588,8 @@ func TestRecord_ContextCancelledDuringSleep(t *testing.T) {
 	defer srv.Close()
 
 	mp, reader := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  5,
@@ -611,7 +599,7 @@ func TestRecord_ContextCancelledDuringSleep(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 150*time.Millisecond)
@@ -635,15 +623,15 @@ func TestRecord_ContextCancelledDuringSleep(t *testing.T) {
 	}
 }
 
-func TestRecord_MetricsRecordErrors_VectorUnavailable(t *testing.T) {
+func TestRecord_MetricsRecordErrors_EndpointUnavailable(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}))
 	defer srv.Close()
 
 	mp, reader := newTestProvider()
-	rec, err := emission.NewVectorRecorder(
-		emission.WithVectorEndpoint(srv.URL),
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
 		emission.WithMeterProvider(mp),
 		emission.WithRetryPolicy(emission.RetryPolicy{
 			MaxAttempts:  2,
@@ -653,7 +641,7 @@ func TestRecord_MetricsRecordErrors_VectorUnavailable(t *testing.T) {
 		}),
 	)
 	if err != nil {
-		t.Fatalf("NewVectorRecorder: %v", err)
+		t.Fatalf("NewUsageRecorder: %v", err)
 	}
 
 	rec.Record(context.Background(), validEvent()) //nolint:errcheck // error expected
@@ -661,9 +649,9 @@ func TestRecord_MetricsRecordErrors_VectorUnavailable(t *testing.T) {
 	if count := collectCounterValue(t, reader, "billing_sdk_record_errors_total"); count != 1 {
 		t.Errorf("billing_sdk_record_errors_total = %d, want 1", count)
 	}
-	// dead letter must NOT be incremented on 5xx.
-	if count := collectCounterValue(t, reader, "billing_sdk_dead_letter_total"); count != 0 {
-		t.Errorf("billing_sdk_dead_letter_total = %d, want 0", count)
+	// rejected must NOT be incremented on 5xx.
+	if count := collectCounterValue(t, reader, "billing_sdk_rejected_total"); count != 0 {
+		t.Errorf("billing_sdk_rejected_total = %d, want 0", count)
 	}
 }
 

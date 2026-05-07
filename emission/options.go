@@ -9,12 +9,12 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// Option configures a VectorRecorder. Options are applied in order at
-// construction time via NewVectorRecorder.
+// Option configures a UsageRecorder. Options are applied in order at
+// construction time via NewUsageRecorder.
 type Option func(*recorderConfig)
 
 // RetryPolicy controls the bounded exponential backoff applied by
-// VectorRecorder when Vector returns a transient error.
+// UsageRecorder when the endpoint returns a transient error.
 type RetryPolicy struct {
 	// MaxAttempts is the total number of attempts (1 initial + N-1 retries).
 	// Must be >= 1. Default: 5.
@@ -40,32 +40,32 @@ var defaultRetryPolicy = RetryPolicy{
 	JitterFactor: 0.25,
 }
 
-// recorderConfig holds the resolved configuration for a VectorRecorder.
+// recorderConfig holds the resolved configuration for a UsageRecorder.
 // It is unexported; callers must use Option functions to set values.
 type recorderConfig struct {
-	vectorEndpoint string
-	retryPolicy    RetryPolicy
-	meterProvider  metric.MeterProvider
-	httpClient     *http.Client
+	endpoint      string
+	retryPolicy   RetryPolicy
+	meterProvider metric.MeterProvider
+	httpClient    *http.Client
 }
 
 func defaultRecorderConfig() recorderConfig {
 	return recorderConfig{
-		vectorEndpoint: "http://localhost:9880/cloudevents",
-		retryPolicy:    defaultRetryPolicy,
-		meterProvider:  nil, // falls back to otel.GetMeterProvider()
-		httpClient:     &http.Client{Timeout: 10 * time.Second},
+		endpoint:      "http://localhost:9880/cloudevents",
+		retryPolicy:   defaultRetryPolicy,
+		meterProvider: nil, // falls back to otel.GetMeterProvider()
+		httpClient:    &http.Client{Timeout: 10 * time.Second},
 	}
 }
 
-// WithVectorEndpoint overrides the default Vector Agent HTTP endpoint.
+// WithEndpoint overrides the default usage endpoint URL.
 //
-// The default is http://localhost:9880/cloudevents, which matches the Vector
-// Agent DaemonSet configuration shipped in feat-002. Override this in
-// environments where the port or path differs.
-func WithVectorEndpoint(addr string) Option {
+// The default is http://localhost:9880/cloudevents, which matches the
+// DaemonSet configuration shipped in feat-002. Override this in environments
+// where the port or path differs.
+func WithEndpoint(addr string) Option {
 	return func(c *recorderConfig) {
-		c.vectorEndpoint = addr
+		c.endpoint = addr
 	}
 }
 
@@ -80,8 +80,8 @@ func WithRetryPolicy(p RetryPolicy) Option {
 	}
 }
 
-// WithHTTPClient overrides the HTTP client used to POST events to the Vector
-// Agent. Use this to inject a custom transport, set timeouts, or provide a
+// WithHTTPClient overrides the HTTP client used to POST events to the usage
+// endpoint. Use this to inject a custom transport, set timeouts, or provide a
 // test double without starting a real HTTP server.
 func WithHTTPClient(c *http.Client) Option {
 	return func(cfg *recorderConfig) {
@@ -91,7 +91,7 @@ func WithHTTPClient(c *http.Client) Option {
 
 // WithMeterProvider sets the OTel MeterProvider used for SDK metrics.
 //
-// When not supplied, VectorRecorder falls back to the global OTel provider
+// When not supplied, UsageRecorder falls back to the global OTel provider
 // (otel.GetMeterProvider()). Inject a custom provider in tests to assert
 // counter increments without a live Prometheus exporter.
 func WithMeterProvider(mp metric.MeterProvider) Option {

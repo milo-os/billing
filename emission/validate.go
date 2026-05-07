@@ -5,14 +5,12 @@ package emission
 import (
 	"fmt"
 	"net/url"
-	"regexp"
+	"strings"
 )
-
-var projectNameRe = regexp.MustCompile(`^projects/[^/]+$`)
 
 // ValidationError describes a structural validation failure in a UsageEvent.
 // It is returned by Record() when the event fails synchronous validation
-// before any write to Vector.
+// before any write to the endpoint.
 type ValidationError struct {
 	// Field is the name of the offending UsageEvent field (e.g. "Meter").
 	Field string
@@ -36,8 +34,8 @@ func validate(ev UsageEvent) error {
 		return &ValidationError{Field: "Project.Name", Message: "must not be empty"}
 	}
 
-	if !projectNameRe.MatchString(ev.Project.Name) {
-		return &ValidationError{Field: "Project.Name", Message: "must match projects/{id} format"}
+	if strings.ContainsRune(ev.Project.Name, '/') {
+		return &ValidationError{Field: "Project.Name", Message: "must be a plain project name, not a resource path"}
 	}
 
 	if ev.Source == "" {
@@ -53,6 +51,10 @@ func validate(ev UsageEvent) error {
 
 	if ev.Quantity <= 0 {
 		return &ValidationError{Field: "Quantity", Message: "must be greater than zero"}
+	}
+
+	if ev.OccurredAt.IsZero() {
+		return &ValidationError{Field: "OccurredAt", Message: "must not be zero"}
 	}
 
 	return nil

@@ -6,10 +6,10 @@ import (
 	"go.opentelemetry.io/otel/metric"
 )
 
-// sdkMetrics holds the two OTel counters emitted by VectorRecorder.
+// sdkMetrics holds the two OTel counters emitted by UsageRecorder.
 type sdkMetrics struct {
 	recordErrors metric.Int64Counter // billing_sdk_record_errors_total
-	deadLetter   metric.Int64Counter // billing_sdk_dead_letter_total
+	rejected     metric.Int64Counter // billing_sdk_rejected_total
 }
 
 // newSDKMetrics registers both counters against the provided MeterProvider.
@@ -27,9 +27,9 @@ func newSDKMetrics(mp metric.MeterProvider) (*sdkMetrics, error) {
 		return nil, err
 	}
 
-	deadLetter, err := meter.Int64Counter(
-		"billing_sdk_dead_letter_total",
-		metric.WithDescription("Total number of events permanently rejected by Vector (HTTP 4xx, not 429)."),
+	rejected, err := meter.Int64Counter(
+		"billing_sdk_rejected_total",
+		metric.WithDescription("Total number of events permanently dropped by the endpoint (HTTP 4xx, not 429)."),
 		metric.WithUnit("{event}"),
 	)
 	if err != nil {
@@ -38,6 +38,6 @@ func newSDKMetrics(mp metric.MeterProvider) (*sdkMetrics, error) {
 
 	return &sdkMetrics{
 		recordErrors: recordErrors,
-		deadLetter:   deadLetter,
+		rejected:     rejected,
 	}, nil
 }

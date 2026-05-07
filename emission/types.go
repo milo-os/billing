@@ -11,13 +11,9 @@ import (
 
 // UsageEvent is a billable usage event to be recorded by the Emission SDK.
 //
-// All fields except Dimensions, Resource, and OccurredAt are required.
+// All fields except Dimensions and Resource are required.
 // Record() returns a ValidationError if a required field is absent or
 // malformed.
-//
-// OccurredAt defaults to time.Now() captured at Record() call time when the
-// zero value is provided. This minimises timestamp skew for callers that
-// construct UsageEvent ahead of the actual Record() call.
 type UsageEvent struct {
 	// Meter is the canonical meter name (e.g.
 	// "compute.miloapis.com/instance/cpu-seconds"). Must be non-empty.
@@ -41,15 +37,14 @@ type UsageEvent struct {
 	// this usage. May be nil.
 	Resource *ResourceRef
 
-	// OccurredAt is when the usage occurred. When zero, Record() defaults
-	// to time.Now() at call time.
+	// OccurredAt is when the usage occurred. Required. Must be non-zero.
 	OccurredAt time.Time
 }
 
 // ProjectRef identifies the project responsible for the usage.
 type ProjectRef struct {
-	// Name is the resource name of the project in projects/{id} format
-	// (e.g. "projects/p-abc"). Must be non-empty and match the pattern.
+	// Name is the plain project name (e.g. "p-abc"), not the full resource
+	// path. Must be non-empty and must not contain a slash.
 	Name string
 }
 
