@@ -2,6 +2,8 @@ apiVersion: quota.miloapis.com/v1alpha1
 kind: ResourceRegistration
 metadata:
   name: feature-cloud-portal-usage-metering-dashboard
+  annotations:
+    kubernetes.io/display-name: Cloud Portal Usage Metering Dashboard
   labels:
     app.kubernetes.io/name: billing
     app.kubernetes.io/component: feature-flags
