@@ -33,8 +33,6 @@ const (
 	ConsumerFetchTimeout = 5 * time.Second
 
 	// IngestSubjectFilter covers all project ingest subjects via wildcard.
-	// The consumer extracts the project name from msg.Subject at index 2
-	// (billing.usage.{project}.ingest → split on "." → [billing usage {project} ingest]).
 	IngestSubjectFilter = "billing.usage.*.ingest"
 
 	// publishTimeout is the per-publish context deadline, consistent with the
@@ -183,23 +181,18 @@ func (c *UsageConsumer) processMessage(
 ) error {
 	log := c.Logger.WithName("usage-consumer")
 
-	// Extract project name from subject: billing.usage.{project}.ingest
-	parts := strings.Split(msg.Subject(), ".")
-	if len(parts) != 4 {
-		// Malformed subject — quarantine is not possible without a project name.
-		// Ack to prevent infinite redelivery.
-		log.Error(fmt.Errorf("unexpected subject format"), "dropping malformed message",
-			"subject", msg.Subject(),
-		)
-		return msg.Ack()
-	}
-	project := parts[2]
-
 	// Deserialize the CloudEvent payload.
 	var ce cloudevents.Event
 	if err := json.Unmarshal(msg.Data(), &ce); err != nil {
-		log.Error(err, "failed to unmarshal event; dropping",
-			"project", project,
+		log.Error(err, "failed to unmarshal event; dropping", "subject", msg.Subject())
+		return msg.Ack()
+	}
+
+	// Extract project from the CloudEvent subject: "projects/{project-name}".
+	// The gateway validates and enforces this format before publishing to ingest.
+	project := strings.TrimPrefix(ce.Subject(), "projects/")
+	if project == ce.Subject() || project == "" {
+		log.Error(fmt.Errorf("invalid CloudEvent subject %q", ce.Subject()), "dropping message",
 			"subject", msg.Subject(),
 		)
 		return msg.Ack()
@@ -230,7 +223,7 @@ func (c *UsageConsumer) processMessage(
 	pubCtx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 
-	if _, err := js.Publish(pubCtx, validSubject, enriched); err != nil {
+	if _, err := js.Publish(pubCtx, validSubject, enriched, msgID(ce.ID())); err != nil {
 		return fmt.Errorf("publishing to %s: %w", validSubject, err)
 	}
 
@@ -265,7 +258,7 @@ func (c *UsageConsumer) quarantine(
 	pubCtx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 
-	if _, err := js.Publish(pubCtx, quarantineSubject, payload); err != nil {
+	if _, err := js.Publish(pubCtx, quarantineSubject, payload, msgID(ce.ID())); err != nil {
 		return fmt.Errorf("publishing to quarantine subject %s: %w", quarantineSubject, err)
 	}
 
@@ -280,4 +273,10 @@ func (c *UsageConsumer) quarantine(
 	)
 
 	return msg.Ack()
+}
+
+// msgID returns a PublishOpt that sets Nats-Msg-Id to the given CloudEvent ID,
+// enabling deduplication on downstream JetStream streams.
+func msgID(id string) jetstream.PublishOpt {
+	return jetstream.WithMsgID(id)
 }

@@ -19,4 +19,4 @@ spec:
   storage: file
   discard: old    # drop oldest messages when limits are reached
   noAck: false    # require publisher ack; Gateway returns 200 only after durable commit
-  duplicateWindow: 10m  # NATS-level dedup on Nats-Msg-Id header (ULID); end-to-end dedup via ULID is the authoritative guarantee
+  duplicateWindow: 72h  # NATS-level dedup on Nats-Msg-Id header (CloudEvent ID); covers 3-day replay/retry window

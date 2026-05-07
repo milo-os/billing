@@ -135,6 +135,7 @@ func newFakeCache(synced bool) *fakeCache {
 // project and blocks until JetStream acknowledges the write.
 func mustPublishIngest(t *testing.T, nc *natsgo.Conn, project string, ce cloudevents.Event) {
 	t.Helper()
+	ce.SetSubject("projects/" + project)
 	js, err := nc.JetStream()
 	if err != nil {
 		t.Fatalf("creating JetStream context: %v", err)
