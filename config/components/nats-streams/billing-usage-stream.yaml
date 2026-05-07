@@ -2,7 +2,7 @@ apiVersion: jetstream.nats.io/v1beta2
 kind: Stream
 metadata:
   name: billing-usage
-  namespace: nats-system
+  namespace: billing-system
   labels:
     app.kubernetes.io/name: billing
     app.kubernetes.io/component: nats-streams
