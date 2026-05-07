@@ -6,7 +6,7 @@ spec:
   description: |
     Full E2E workflow for the usage pipeline:
     1. Create MeterDefinitions, BillingAccounts, and Bindings.
-    2. Send a valid event to Vector Agent (mimicking emission SDK).
+    2. Send a valid event to billing-usage-collector (mimicking emission SDK).
     3. Assert the event is attributed and reaches the .valid JetStream subject.
     4. Send an invalid event (unknown meter).
     5. Assert the event reaches the .quarantine.unknown_meter subject.
@@ -38,7 +38,7 @@ spec:
 
     - name: send-valid-event
       description: |
-        Send a valid event to Vector Agent.
+        Send a valid event to billing-usage-collector.
         Project: projects/p-e2e-usage-pipeline
       try:
         - script:
@@ -46,6 +46,9 @@ spec:
             content: |
               set -euo pipefail
               
+              # Give the gateway a moment to sync its cache of the new resources
+              sleep 5
+
               # Generate a unique ULID (26 chars: 10 timestamp + 16 randomness)
               # We use a fixed prefix to ensure it's valid Crockford's Base32.
               export LC_ALL=C
@@ -53,7 +56,7 @@ spec:
               echo "Generated Valid ID: $VALID_ID"
               echo "$VALID_ID" > /tmp/valid_id.txt
 
-              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/name=vector-agent --no-headers -o name | head -1)
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
               echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$VALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100"}}' > event.json
               kubectl cp event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/event.json"
               kubectl exec -n billing-system "$VECTOR_POD" -- \
@@ -90,7 +93,7 @@ spec:
 
     - name: send-invalid-event
       description: |
-        Send an invalid event (unknown meter) to Vector Agent.
+        Send an invalid event (unknown meter) to billing-usage-collector.
       try:
         - script:
             timeout: 30s
@@ -101,7 +104,7 @@ spec:
               echo "Generated Invalid ID: $INVALID_ID"
               echo "$INVALID_ID" > /tmp/invalid_id.txt
 
-              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/name=vector-agent --no-headers -o name | head -1)
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
               echo '{"specversion":"1.0","type":"non-existent-meter","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$INVALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100"}}' > invalid_event.json
               kubectl cp invalid_event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/invalid_event.json"
               kubectl exec -n billing-system "$VECTOR_POD" -- \

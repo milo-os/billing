@@ -1,0 +1,11 @@
+apiVersion: source.toolkit.fluxcd.io/v1
+kind: HelmRepository
+metadata:
+  name: vector
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing-usage-collector
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  interval: 1h
+  url: https://helm.vector.dev
