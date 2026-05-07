@@ -74,8 +74,8 @@ type UsageConsumer struct {
 	// Logger is the structured logger for this consumer.
 	Logger logr.Logger
 
-	// rejections is the OTel Counter for validation/attribution rejections.
-	rejections metric.Int64Counter
+	// metrics holds the OTel counters for this consumer.
+	metrics consumerMetrics
 }
 
 // Start implements manager.Runnable. It is called by the manager after leader
@@ -93,11 +93,11 @@ func (c *UsageConsumer) Start(ctx context.Context) error {
 	if mp == nil {
 		mp = noop.NewMeterProvider()
 	}
-	counter, err := registerMetrics(mp)
+	metrics, err := registerMetrics(mp)
 	if err != nil {
 		return fmt.Errorf("consumer: registering metrics: %w", err)
 	}
-	c.rejections = counter
+	c.metrics = metrics
 
 	// Wait for the informer cache to sync before processing any events.
 	// This prevents false UNKNOWN_METER quarantine due to an unsynced cache.
@@ -185,6 +185,7 @@ func (c *UsageConsumer) processMessage(
 	var ce cloudevents.Event
 	if err := json.Unmarshal(msg.Data(), &ce); err != nil {
 		log.Error(err, "failed to unmarshal event; dropping", "subject", msg.Subject())
+		recordMalformed(ctx, c.metrics, MalformedReasonUnmarshal)
 		return msg.Ack()
 	}
 
@@ -195,6 +196,7 @@ func (c *UsageConsumer) processMessage(
 		log.Error(fmt.Errorf("invalid CloudEvent subject %q", ce.Subject()), "dropping message",
 			"subject", msg.Subject(),
 		)
+		recordMalformed(ctx, c.metrics, MalformedReasonInvalidSubject)
 		return msg.Ack()
 	}
 
@@ -262,7 +264,7 @@ func (c *UsageConsumer) quarantine(
 		return fmt.Errorf("publishing to quarantine subject %s: %w", quarantineSubject, err)
 	}
 
-	recordRejection(ctx, c.rejections, project, reason)
+	recordRejection(ctx, c.metrics, project, reason)
 
 	log.Info("event quarantined",
 		"project", project,
