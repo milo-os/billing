@@ -17,11 +17,9 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/event"
@@ -90,30 +88,25 @@ func createBillingUsageStream(t *testing.T, nc *natsgo.Conn) {
 // --------------------------------------------------------------------------
 // Fake cache.Cache implementation
 //
-// UsageConsumer.Start uses two methods from cache.Cache:
-//  1. WaitForCacheSync(ctx) — to block until the informer is ready.
-//  2. Get (via client.Reader) — passed to attribute() so it can look up
-//     BillingAccount objects.
-//
-// All other cache.Cache / cache.Informers methods are stubbed as no-ops.
+// UsageConsumer.Start only uses WaitForCacheSync from cache.Cache. All other
+// methods are stubbed as no-ops.
 // --------------------------------------------------------------------------
 
 // fakeCache satisfies cache.Cache for consumer tests.
 // synced controls the WaitForCacheSync return value.
-// reader is the client.Reader used for Get calls (attribute step).
 type fakeCache struct {
 	synced bool
-	reader client.Reader
 }
 
 var _ cache.Cache = (*fakeCache)(nil)
 
-// client.Reader
-func (c *fakeCache) Get(ctx context.Context, key client.ObjectKey, obj client.Object, opts ...client.GetOption) error {
-	return c.reader.Get(ctx, key, obj, opts...)
+// client.Reader stubs — not called by the consumer after the attribution
+// refactor; implemented only to satisfy the cache.Cache interface.
+func (c *fakeCache) Get(_ context.Context, _ client.ObjectKey, _ client.Object, _ ...client.GetOption) error {
+	return nil
 }
-func (c *fakeCache) List(ctx context.Context, list client.ObjectList, opts ...client.ListOption) error {
-	return c.reader.List(ctx, list, opts...)
+func (c *fakeCache) List(_ context.Context, _ client.ObjectList, _ ...client.ListOption) error {
+	return nil
 }
 
 // cache.Informers
@@ -130,14 +123,8 @@ func (c *fakeCache) IndexField(_ context.Context, _ client.Object, _ string, _ c
 	return nil
 }
 
-// newFakeCache returns a fakeCache backed by a controller-runtime fake client
-// pre-populated with the supplied BillingAccount objects.
-func newFakeCache(synced bool, accounts ...billingv1alpha1.BillingAccount) *fakeCache {
-	b := fake.NewClientBuilder().WithScheme(newTestScheme())
-	for i := range accounts {
-		b = b.WithObjects(&accounts[i])
-	}
-	return &fakeCache{synced: synced, reader: b.Build()}
+func newFakeCache(synced bool) *fakeCache {
+	return &fakeCache{synced: synced}
 }
 
 // --------------------------------------------------------------------------
@@ -185,6 +172,7 @@ func buildConsumer(
 	fc *fakeCache,
 	mc *MeterDefinitionCache,
 	bc *BillingAccountBindingCache,
+	ac *BillingAccountCache,
 ) *UsageConsumer {
 	t.Helper()
 	return &UsageConsumer{
@@ -192,6 +180,7 @@ func buildConsumer(
 		NC:            nc,
 		MeterCache:    mc,
 		BindingCache:  bc,
+		AccountCache:  ac,
 		MeterProvider: noop.NewMeterProvider(),
 		Logger:        logr.Discard(),
 	}
@@ -252,10 +241,6 @@ var (
 	_ metric.Int64Counter  = (*countingInt64Counter)(nil)
 )
 
-// Suppress unused import; runtime is needed by the scheme helper in
-// attribute_test.go (same package).
-var _ = runtime.NewScheme
-
 // --------------------------------------------------------------------------
 // Unit test: WaitForCacheSync failure returns an error.
 // --------------------------------------------------------------------------
@@ -265,7 +250,7 @@ func TestUsageConsumer_CacheSyncFailure_ReturnsError(t *testing.T) {
 	createBillingUsageStream(t, nc)
 
 	fc := newFakeCache(false /* never syncs */)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache())
+	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache(), newTestAccountCache())
 
 	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
 	defer cancel()
@@ -285,7 +270,7 @@ func TestUsageConsumer_GracefulShutdown(t *testing.T) {
 	createBillingUsageStream(t, nc)
 
 	fc := newFakeCache(true)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache())
+	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache(), newTestAccountCache())
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
@@ -316,8 +301,8 @@ func TestUsageConsumer_HappyPath_PublishesToValid(t *testing.T) {
 	binding := activeBinding("binding-1", "proj-abc", "acct-1")
 	account := readyAccount("acct-1")
 
-	fc := newFakeCache(true, account)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(binding))
+	fc := newFakeCache(true)
+	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(binding), newTestAccountCache(account))
 
 	validCh := subscribeSubject(t, nc, "billing.usage.proj-abc.valid")
 
@@ -357,7 +342,7 @@ func TestUsageConsumer_UnknownMeter_QuarantinesCorrectly(t *testing.T) {
 	createBillingUsageStream(t, nc)
 
 	fc := newFakeCache(true)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache())
+	c := buildConsumer(t, nc, fc, newTestMeterCache(), newTestBindingCache(), newTestAccountCache())
 
 	quarantineCh := subscribeSubject(t, nc, "billing.usage.proj-abc.quarantine.unknown_meter")
 
@@ -388,7 +373,7 @@ func TestUsageConsumer_InvalidDimensions_QuarantinesCorrectly(t *testing.T) {
 
 	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
 	fc := newFakeCache(true)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache())
+	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(), newTestAccountCache())
 
 	quarantineCh := subscribeSubject(t, nc, "billing.usage.proj-abc.quarantine.invalid_dimensions")
 
@@ -423,7 +408,7 @@ func TestUsageConsumer_NoBinding_QuarantinesAttributionFailure(t *testing.T) {
 
 	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
 	fc := newFakeCache(true) // no bindings
-	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache())
+	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(), newTestAccountCache())
 
 	quarantineCh := subscribeSubject(t, nc, "billing.usage.proj-abc.quarantine.attribution_failure")
 
@@ -455,14 +440,9 @@ func TestUsageConsumer_ArchivedAccount_QuarantinesAttributionFailure(t *testing.
 
 	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
 	binding := activeBinding("binding-1", "proj-archived", "acct-archived")
-	archivedAccount := billingv1alpha1.BillingAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: "acct-archived", Namespace: "default"},
-		Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
-		Status:     billingv1alpha1.BillingAccountStatus{Phase: billingv1alpha1.BillingAccountPhaseArchived},
-	}
-
-	fc := newFakeCache(true, archivedAccount)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(binding))
+	// Account is not inserted into the cache because it is not Ready.
+	fc := newFakeCache(true)
+	c := buildConsumer(t, nc, fc, newTestMeterCache(md), newTestBindingCache(binding), newTestAccountCache())
 
 	quarantineCh := subscribeSubject(t, nc, "billing.usage.proj-archived.quarantine.attribution_failure")
 
@@ -499,6 +479,7 @@ func TestUsageConsumer_RejectionCounter_IncrementsPerEvent(t *testing.T) {
 		NC:            nc,
 		MeterCache:    newTestMeterCache(), // empty → all events → UNKNOWN_METER
 		BindingCache:  newTestBindingCache(),
+		AccountCache:  newTestAccountCache(),
 		MeterProvider: mp,
 		Logger:        logr.Discard(),
 	}
@@ -572,8 +553,8 @@ func TestUsageConsumer_DeprecatedMeter_PassesValidation(t *testing.T) {
 	binding := activeBinding("binding-1", "proj-deprecated", "acct-1")
 	account := readyAccount("acct-1")
 
-	fc := newFakeCache(true, account)
-	c := buildConsumer(t, nc, fc, newTestMeterCache(deprecatedMD), newTestBindingCache(binding))
+	fc := newFakeCache(true)
+	c := buildConsumer(t, nc, fc, newTestMeterCache(deprecatedMD), newTestBindingCache(binding), newTestAccountCache(account))
 
 	validCh := subscribeSubject(t, nc, "billing.usage.proj-deprecated.valid")
 

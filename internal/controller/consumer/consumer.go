@@ -48,7 +48,7 @@ const (
 // subjects.
 type UsageConsumer struct {
 	// Cache is the controller-runtime cache, shared with the reconcilers.
-	// Used for WaitForCacheSync and BillingAccount lookups in attribution.
+	// Used for WaitForCacheSync.
 	Cache cache.Cache
 
 	// NC is the shared NATS connection.
@@ -60,6 +60,10 @@ type UsageConsumer struct {
 	// BindingCache is the watch-backed Active BillingAccountBinding index,
 	// keyed by spec.projectRef.name.
 	BindingCache *BillingAccountBindingCache
+
+	// AccountCache is the watch-backed Ready BillingAccount index,
+	// keyed by metadata.name.
+	AccountCache *BillingAccountCache
 
 	// MeterProvider is the OTel MeterProvider used to register metrics.
 	// When nil the consumer uses the noop provider (metrics are discarded).
@@ -208,10 +212,7 @@ func (c *UsageConsumer) processMessage(
 	}
 
 	// Stage 2: Attribution.
-	ar, err := attribute(ctx, project, c.BindingCache, c.Cache)
-	if err != nil {
-		return fmt.Errorf("attribute: %w", err)
-	}
+	ar := attribute(project, c.BindingCache, c.AccountCache)
 	if !ar.OK {
 		return c.quarantine(ctx, js, msg, &ce, project, ar.Reason)
 	}

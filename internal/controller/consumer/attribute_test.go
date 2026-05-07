@@ -3,22 +3,13 @@
 package consumer
 
 import (
-	"context"
 	"testing"
 	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime"
-	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
-
-func newTestScheme() *runtime.Scheme {
-	s := runtime.NewScheme()
-	_ = billingv1alpha1.AddToScheme(s)
-	return s
-}
 
 func newTestBindingCache(bindings ...billingv1alpha1.BillingAccountBinding) *BillingAccountBindingCache {
 	bc := &BillingAccountBindingCache{activeByProject: make(map[string]*billingv1alpha1.BillingAccountBinding)}
@@ -28,17 +19,12 @@ func newTestBindingCache(bindings ...billingv1alpha1.BillingAccountBinding) *Bil
 	return bc
 }
 
-func fakeClientWithAccounts(accounts ...billingv1alpha1.BillingAccount) *fake.ClientBuilder {
-	objs := make([]runtime.Object, len(accounts))
+func newTestAccountCache(accounts ...billingv1alpha1.BillingAccount) *BillingAccountCache {
+	ac := &BillingAccountCache{readyByKey: make(map[string]*billingv1alpha1.BillingAccount)}
 	for i := range accounts {
-		objs[i] = &accounts[i]
+		ac.upsert(&accounts[i])
 	}
-	_ = objs
-	b := fake.NewClientBuilder().WithScheme(newTestScheme())
-	for i := range accounts {
-		b = b.WithObjects(&accounts[i])
-	}
-	return b
+	return ac
 }
 
 func activeBinding(name, project, account string) billingv1alpha1.BillingAccountBinding {
@@ -67,12 +53,9 @@ func TestAttribute_ActiveBinding_Matches(t *testing.T) {
 	account := readyAccount("acct-1")
 
 	bc := newTestBindingCache(binding)
-	c := fakeClientWithAccounts(account).Build()
+	ac := newTestAccountCache(account)
 
-	result, err := attribute(context.Background(), "my-project", bc, c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := attribute("my-project", bc, ac)
 	if !result.OK {
 		t.Errorf("expected attribution OK, got reason=%s", result.Reason)
 	}
@@ -83,11 +66,9 @@ func TestAttribute_ActiveBinding_Matches(t *testing.T) {
 
 func TestAttribute_NoActiveBinding_Fails(t *testing.T) {
 	bc := newTestBindingCache() // empty
+	ac := newTestAccountCache()
 
-	result, err := attribute(context.Background(), "my-project", bc, fake.NewClientBuilder().WithScheme(newTestScheme()).Build())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := attribute("my-project", bc, ac)
 	if result.OK {
 		t.Error("expected attribution to fail when no active binding exists")
 	}
@@ -101,11 +82,9 @@ func TestAttribute_SupersededBinding_NotUsed(t *testing.T) {
 	binding.Status.Phase = billingv1alpha1.BillingAccountBindingPhaseSuperseded
 
 	bc := newTestBindingCache(binding) // superseded bindings are not indexed
+	ac := newTestAccountCache()
 
-	result, err := attribute(context.Background(), "my-project", bc, fake.NewClientBuilder().WithScheme(newTestScheme()).Build())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := attribute("my-project", bc, ac)
 	if result.OK {
 		t.Error("expected attribution to fail when only a superseded binding exists")
 	}
@@ -113,19 +92,11 @@ func TestAttribute_SupersededBinding_NotUsed(t *testing.T) {
 
 func TestAttribute_NonReadyAccount_Fails(t *testing.T) {
 	binding := activeBinding("binding-1", "my-project", "acct-suspended")
-	account := billingv1alpha1.BillingAccount{
-		ObjectMeta: metav1.ObjectMeta{Name: "acct-suspended", Namespace: "default"},
-		Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
-		Status:     billingv1alpha1.BillingAccountStatus{Phase: billingv1alpha1.BillingAccountPhaseSuspended},
-	}
-
+	// Account is not inserted into the cache because it is not Ready.
 	bc := newTestBindingCache(binding)
-	c := fakeClientWithAccounts(account).Build()
+	ac := newTestAccountCache()
 
-	result, err := attribute(context.Background(), "my-project", bc, c)
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := attribute("my-project", bc, ac)
 	if result.OK {
 		t.Error("expected attribution to fail for non-Ready billing account")
 	}
@@ -136,16 +107,15 @@ func TestAttribute_NonReadyAccount_Fails(t *testing.T) {
 
 func TestAttribute_BindingCacheEvictsOnPhaseTransition(t *testing.T) {
 	binding := activeBinding("binding-1", "proj", "acct-1")
+	account := readyAccount("acct-1")
 	bc := newTestBindingCache(binding)
+	ac := newTestAccountCache(account)
 
 	// Transition to Superseded — cache should evict it.
 	binding.Status.Phase = billingv1alpha1.BillingAccountBindingPhaseSuperseded
 	bc.upsert(&binding)
 
-	result, err := attribute(context.Background(), "proj", bc, fake.NewClientBuilder().WithScheme(newTestScheme()).Build())
-	if err != nil {
-		t.Fatalf("unexpected error: %v", err)
-	}
+	result := attribute("proj", bc, ac)
 	if result.OK {
 		t.Error("expected attribution to fail after binding transitioned to Superseded")
 	}

@@ -178,11 +178,17 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					return fmt.Errorf("creating BillingAccountBinding cache: %w", err)
 				}
 
+				accountCache, err := consumer.NewBillingAccountCache(ctx, mgr.GetCache())
+				if err != nil {
+					return fmt.Errorf("creating BillingAccount cache: %w", err)
+				}
+
 				usageConsumer := &consumer.UsageConsumer{
 					Cache:        mgr.GetCache(),
 					NC:           nc,
 					MeterCache:   meterCache,
 					BindingCache: bindingCache,
+					AccountCache: accountCache,
 					Logger:       ctrl.Log.WithName("usage-consumer"),
 				}
 				if err := mgr.Add(usageConsumer); err != nil {
