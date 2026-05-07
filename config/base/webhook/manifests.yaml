@@ -8,7 +8,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: billing-webhook
       namespace: system
       path: /mutate-billing-miloapis-com-v1alpha1-billingaccount
   failurePolicy: Fail
@@ -34,7 +34,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: billing-webhook
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-billingaccount
   failurePolicy: Fail
@@ -55,7 +55,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: billing-webhook
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-billingaccountbinding
   failurePolicy: Fail
@@ -76,7 +76,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: billing-webhook
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-meterdefinition
   failurePolicy: Fail
@@ -97,7 +97,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: webhook-service
+      name: billing-webhook
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-monitoredresourcetype
   failurePolicy: Fail
