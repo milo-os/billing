@@ -19,7 +19,6 @@ spec:
         app.kubernetes.io/name: billing
         app.kubernetes.io/component: gateway
     spec:
-      serviceAccountName: billing-gateway
       securityContext:
         runAsNonRoot: true
       containers:

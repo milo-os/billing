@@ -9,14 +9,12 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	prometheusexporter "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
-	"k8s.io/client-go/kubernetes"
-
-	"go.miloapis.com/billing/internal/gateway/auth"
 	"go.miloapis.com/billing/internal/gateway/handler"
 	gwnats "go.miloapis.com/billing/internal/gateway/nats"
 )
@@ -28,31 +26,13 @@ var serverLog = ctrl.Log.WithName("gateway")
 func Run(ctx context.Context, cfg Config) error {
 	serverLog.Info("starting billing gateway",
 		"addr", cfg.Addr,
-		"healthAddr", cfg.HealthAddr,
+		"healthProbeAddr", cfg.HealthProbeAddr,
+		"metricsAddr", cfg.MetricsAddr,
 		"natsURL", cfg.NATSUrl,
 		"natsSubjectPrefix", cfg.NATSSubjectPrefix,
-		"audience", cfg.Audience,
 	)
 
-	// 1. Build Kubernetes client.
-	serverLog.Info("loading kubeconfig")
-	restCfg, err := ctrl.GetConfig()
-	if err != nil {
-		serverLog.Error(err, "failed to load kubeconfig")
-		return fmt.Errorf("loading kubeconfig: %w", err)
-	}
-	k8sClient, err := kubernetes.NewForConfig(restCfg)
-	if err != nil {
-		serverLog.Error(err, "failed to create Kubernetes client")
-		return fmt.Errorf("creating Kubernetes client: %w", err)
-	}
-	serverLog.Info("Kubernetes client ready")
-
-	// 2. Build TokenVerifier.
-	verifier := auth.NewServiceAccountTokenVerifier(k8sClient, cfg.Audience)
-	serverLog.Info("token verifier ready", "audience", cfg.Audience)
-
-	// 3. Build NATSPublisher (fatal on error).
+	// 1. Build NATSPublisher (fatal on error).
 	serverLog.Info("connecting to NATS", "url", cfg.NATSUrl)
 	publisher, err := gwnats.NewNATSPublisher(cfg.NATSUrl, cfg.NATSCAFile, cfg.NATSCertFile, cfg.NATSKeyFile)
 	if err != nil {
@@ -60,7 +40,9 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("connecting to NATS: %w", err)
 	}
 
-	// 4. Build OTel metrics with Prometheus exporter.
+	// 2. Build OTel metrics with Prometheus exporter.
+	// prometheusexporter.New() registers with prometheus.DefaultRegisterer, which
+	// controller-runtime's metrics server exposes via promhttp.Handler().
 	serverLog.Info("initializing metrics")
 	promExporter, err := prometheusexporter.New()
 	if err != nil {
@@ -77,26 +59,57 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	serverLog.Info("metrics ready")
 
-	// 5. Build ingest mux (TLS + auth middleware).
+	// 3. Build the controller-runtime manager for health probes and metrics.
+	// The manager owns /healthz, /readyz, and /metrics — the gateway does not
+	// run controllers or a cache, so we disable leader election.
+	restCfg, err := ctrl.GetConfig()
+	if err != nil {
+		serverLog.Error(err, "failed to load kubeconfig")
+		return fmt.Errorf("loading kubeconfig: %w", err)
+	}
+
+	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
+		HealthProbeBindAddress: cfg.HealthProbeAddr,
+		Metrics: metricsserver.Options{
+			BindAddress: cfg.MetricsAddr,
+		},
+		LeaderElection: false,
+	})
+	if err != nil {
+		serverLog.Error(err, "failed to create manager")
+		return fmt.Errorf("creating manager: %w", err)
+	}
+
+	// 4. Register health checks with the manager.
+	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
+		return fmt.Errorf("registering healthz check: %w", err)
+	}
+	// The gateway is only ready when the NATS upstream is connected.
+	if err := mgr.AddReadyzCheck("nats", func(_ *http.Request) error {
+		if !publisher.Healthy() {
+			return errors.New("NATS connection is not healthy")
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("registering nats readyz check: %w", err)
+	}
+
+	// 5. Build ingest mux. Authentication is handled by the upstream Envoy
+	// gateway; no auth middleware is applied here.
 	ingestMux := http.NewServeMux()
 	ingestMux.Handle("POST /v1/usage/events",
-		handler.AuthMiddleware(verifier, handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix)))
+		handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
 	ingestMux.Handle("POST /v1/usage/events:batchIngest",
-		handler.AuthMiddleware(verifier, handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix)))
+		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
 
-	// 6. Build health/metrics mux (no TLS, no auth).
-	healthMux := http.NewServeMux()
-	healthMux.Handle("GET /healthz", handler.NewHealthHandler())
-	healthMux.Handle("GET /readyz", handler.NewReadyHandler(publisher))
-	healthMux.Handle("GET /metrics", promhttp.Handler())
-
-	// 7. Load TLS config for ingest server (optional).
+	// 6. Optionally load TLS for the ingest server.
 	var ingestServer *http.Server
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
 		serverLog.Info("loading TLS certificate", "certFile", cfg.TLSCertFile)
 		tlsCert, err := tls.LoadX509KeyPair(cfg.TLSCertFile, cfg.TLSKeyFile)
 		if err != nil {
-			serverLog.Error(err, "failed to load TLS certificate", "certFile", cfg.TLSCertFile, "keyFile", cfg.TLSKeyFile)
+			serverLog.Error(err, "failed to load TLS certificate",
+				"certFile", cfg.TLSCertFile, "keyFile", cfg.TLSKeyFile)
 			return fmt.Errorf("loading TLS certificate: %w", err)
 		}
 		tlsCfg := &tls.Config{
@@ -104,7 +117,6 @@ func Run(ctx context.Context, cfg Config) error {
 			MinVersion:   tls.VersionTLS12,
 		}
 		serverLog.Info("TLS certificate loaded")
-
 		ingestServer = &http.Server{
 			Addr:      cfg.Addr,
 			Handler:   ingestMux,
@@ -118,13 +130,21 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
-	healthServer := &http.Server{
-		Addr:    cfg.HealthAddr,
-		Handler: healthMux,
-	}
+	// 7. Start the manager and ingest server concurrently.
+	// The manager owns health/metrics; the ingest server handles usage events.
+	// Both are shut down when ctx is cancelled or either returns an error.
+	mgrCtx, cancelMgr := context.WithCancel(ctx)
+	defer cancelMgr()
 
-	// 8. Start servers and block until context is cancelled or a server fails.
 	errCh := make(chan error, 2)
+
+	go func() {
+		serverLog.Info("starting manager (health/metrics)")
+		if err := mgr.Start(mgrCtx); err != nil {
+			serverLog.Error(err, "manager stopped unexpectedly")
+			errCh <- fmt.Errorf("manager: %w", err)
+		}
+	}()
 
 	go func() {
 		if ingestServer.TLSConfig != nil {
@@ -142,19 +162,11 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}()
 
-	go func() {
-		serverLog.Info("starting health server", "addr", cfg.HealthAddr)
-		if err := healthServer.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			serverLog.Error(err, "health server stopped unexpectedly")
-			errCh <- fmt.Errorf("health server: %w", err)
-		}
-	}()
-
 	select {
 	case <-ctx.Done():
-		serverLog.Info("shutting down gateway servers")
+		serverLog.Info("shutting down gateway")
 		_ = ingestServer.Shutdown(context.Background())
-		_ = healthServer.Shutdown(context.Background())
+		cancelMgr()
 		serverLog.Info("gateway stopped")
 		return nil
 	case err := <-errCh:

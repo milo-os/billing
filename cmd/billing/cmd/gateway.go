@@ -17,8 +17,8 @@ func newGatewayCommand() *cobra.Command {
 		addr              string
 		natsURL           string
 		natsSubjectPrefix string
-		audience          string
-		healthAddr        string
+		healthProbeAddr   string
+		metricsAddr       string
 		tlsCertFile       string
 		tlsKeyFile        string
 		natsCAFile        string
@@ -40,8 +40,8 @@ func newGatewayCommand() *cobra.Command {
 				Addr:              addr,
 				NATSUrl:           natsURL,
 				NATSSubjectPrefix: natsSubjectPrefix,
-				Audience:          audience,
-				HealthAddr:        healthAddr,
+				HealthProbeAddr:   healthProbeAddr,
+				MetricsAddr:       metricsAddr,
 				TLSCertFile:       tlsCertFile,
 				TLSKeyFile:        tlsKeyFile,
 				NATSCAFile:        natsCAFile,
@@ -54,8 +54,8 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&addr, "addr", ":8080", "HTTP listen address for ingest endpoints.")
 	cmd.Flags().StringVar(&natsURL, "nats-url", "", "NATS JetStream URL (required).")
 	cmd.Flags().StringVar(&natsSubjectPrefix, "nats-subject-prefix", "billing.usage", "NATS subject prefix.")
-	cmd.Flags().StringVar(&audience, "token-review-audience", "billing-gateway", "Expected TokenReview audience.")
-	cmd.Flags().StringVar(&healthAddr, "health-probe-bind-address", ":8081", "Health/readiness probe address.")
+	cmd.Flags().StringVar(&healthProbeAddr, "health-probe-bind-address", ":8081", "Health/readiness probe address.")
+	cmd.Flags().StringVar(&metricsAddr, "metrics-bind-address", ":8082", "Prometheus metrics address. Set to 0 to disable.")
 	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file.")
 	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file.")
 	cmd.Flags().StringVar(&natsCAFile, "nats-ca-file", "", "Path to NATS CA certificate file.")

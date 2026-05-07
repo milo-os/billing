@@ -11,7 +11,6 @@ import (
 
 	ctrl "sigs.k8s.io/controller-runtime"
 
-	"go.miloapis.com/billing/internal/gateway/auth"
 	gwnats "go.miloapis.com/billing/internal/gateway/nats"
 )
 
@@ -47,16 +46,6 @@ type Metrics interface {
 	RecordRejected(ctx context.Context, project, reason string)
 }
 
-// extractBearerToken extracts the token from an "Authorization: Bearer <token>"
-// header. Returns empty string if the header is missing or malformed.
-func extractBearerToken(r *http.Request) string {
-	auth := r.Header.Get("Authorization")
-	if !strings.HasPrefix(auth, "Bearer ") {
-		return ""
-	}
-	return strings.TrimPrefix(auth, "Bearer ")
-}
-
 // writeJSON writes v as JSON with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
 	w.Header().Set("Content-Type", "application/json")
@@ -67,26 +56,6 @@ func writeJSON(w http.ResponseWriter, status int, v any) {
 // writeError writes a structured error response.
 func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorResponse{Code: code, Message: message})
-}
-
-// AuthMiddleware returns an http.Handler middleware that verifies the bearer
-// token on every request. The token value is never logged or reflected in any
-// response body.
-func AuthMiddleware(verifier auth.TokenVerifier, next http.Handler) http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		token := extractBearerToken(r)
-		if token == "" {
-			log.V(1).Info("auth rejected: missing bearer token", "path", r.URL.Path, "remote", r.RemoteAddr)
-			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "unauthorized")
-			return
-		}
-		if err := verifier.Verify(r.Context(), token); err != nil {
-			log.V(1).Info("auth rejected: token verification failed", "path", r.URL.Path, "remote", r.RemoteAddr, "reason", err)
-			writeError(w, http.StatusUnauthorized, "UNAUTHENTICATED", "unauthorized")
-			return
-		}
-		next.ServeHTTP(w, r)
-	})
 }
 
 // subjectFor derives the NATS subject from the CloudEvent subject field and the

@@ -37,16 +37,6 @@ spec:
       create: true
       name: billing-usage-collector
 
-    # Read the projected billing-gateway ServiceAccount token and expose it
-    # as VECTOR_AUTH_TOKEN before starting Vector.
-    command:
-      - /bin/sh
-      - -c
-    args:
-      - |
-        export VECTOR_AUTH_TOKEN=$(cat /var/run/secrets/billing-gateway/token)
-        exec /usr/local/bin/vector --config /etc/vector/vector.yaml
-
     env:
       - name: BILLING_GATEWAY_URL
         value: "http://billing-gateway.billing-system.svc.cluster.local:8080"
@@ -83,9 +73,6 @@ spec:
           batch:
             max_events: 100
             timeout_secs: 1
-          auth:
-            strategy: bearer
-            token: "${VECTOR_AUTH_TOKEN}"
           tls:
             verify_certificate: true
           buffer:
@@ -113,19 +100,6 @@ spec:
         volumeMounts:
           - name: data
             mountPath: /var/lib/vector
-
-    extraVolumes:
-      - name: billing-token
-        projected:
-          sources:
-            - serviceAccountToken:
-                audience: billing-gateway
-                expirationSeconds: 3600
-                path: token
-
-    extraVolumeMounts:
-      - name: billing-token
-        mountPath: /var/run/secrets/billing-gateway
 
     podSecurityContext:
       runAsUser: 1000

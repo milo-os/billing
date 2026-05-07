@@ -12,16 +12,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"go.miloapis.com/billing/internal/gateway/auth"
 	"go.miloapis.com/billing/internal/gateway/handler"
 	gwnats "go.miloapis.com/billing/internal/gateway/nats"
 )
 
 // --- fakes ---
-
-type fakeVerifier struct{ err error }
-
-func (f *fakeVerifier) Verify(_ context.Context, _ string) error { return f.err }
 
 type fakePublisher struct {
 	err     error
@@ -80,15 +75,11 @@ func validEventJSON(overrides map[string]any) []byte {
 }
 
 func makeIngestRequest(body []byte) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/v1/usage/events", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer valid-token")
-	return req
+	return httptest.NewRequest(http.MethodPost, "/v1/usage/events", bytes.NewReader(body))
 }
 
 func makeBatchRequest(body []byte) *http.Request {
-	req := httptest.NewRequest(http.MethodPost, "/v1/usage/events:batchIngest", bytes.NewReader(body))
-	req.Header.Set("Authorization", "Bearer valid-token")
-	return req
+	return httptest.NewRequest(http.MethodPost, "/v1/usage/events:batchIngest", bytes.NewReader(body))
 }
 
 func responseBody(t *testing.T, rec *httptest.ResponseRecorder) []byte {
@@ -98,41 +89,6 @@ func responseBody(t *testing.T, rec *httptest.ResponseRecorder) []byte {
 		t.Fatalf("reading response body: %v", err)
 	}
 	return b
-}
-
-// --- auth middleware tests ---
-
-func TestAuthMiddleware_missingHeader(t *testing.T) {
-	verifier := &fakeVerifier{err: nil}
-	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	h := handler.AuthMiddleware(verifier, next)
-
-	req := httptest.NewRequest(http.MethodPost, "/v1/usage/events", nil)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", rec.Code)
-	}
-}
-
-func TestAuthMiddleware_badToken(t *testing.T) {
-	verifier := &fakeVerifier{err: auth.ErrTokenNotAuthenticated}
-	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	h := handler.AuthMiddleware(verifier, next)
-
-	req := httptest.NewRequest(http.MethodPost, "/v1/usage/events", bytes.NewReader([]byte("{}")))
-	req.Header.Set("Authorization", "Bearer bad-token")
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, req)
-
-	if rec.Code != http.StatusUnauthorized {
-		t.Errorf("expected 401, got %d", rec.Code)
-	}
 }
 
 // --- IngestHandler tests ---
@@ -303,36 +259,5 @@ func TestBatchIngestHandler_notArray_400(t *testing.T) {
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
-	}
-}
-
-// --- health handler tests ---
-
-func TestHealthHandler_200(t *testing.T) {
-	h := handler.NewHealthHandler()
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/healthz", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rec.Code)
-	}
-}
-
-func TestReadyHandler_healthy_200(t *testing.T) {
-	checker := &fakePublisher{healthy: true}
-	h := handler.NewReadyHandler(checker)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if rec.Code != http.StatusOK {
-		t.Errorf("expected 200, got %d", rec.Code)
-	}
-}
-
-func TestReadyHandler_unhealthy_503(t *testing.T) {
-	checker := &fakePublisher{healthy: false}
-	h := handler.NewReadyHandler(checker)
-	rec := httptest.NewRecorder()
-	h.ServeHTTP(rec, httptest.NewRequest(http.MethodGet, "/readyz", nil))
-	if rec.Code != http.StatusServiceUnavailable {
-		t.Errorf("expected 503, got %d", rec.Code)
 	}
 }

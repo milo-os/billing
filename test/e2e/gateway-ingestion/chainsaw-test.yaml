@@ -282,42 +282,24 @@ spec:
         POST a CloudEvent with a non-ULID id directly to the Gateway's
         /v1/usage/events endpoint. Expect 400 Bad Request. This also
         increments billing_ingestion_rejections_total on the Gateway.
-
-        The request is sent from inside a Gateway pod using curl so that
-        TLS and ServiceAccount token auth are handled via the in-cluster
-        certificate and projected token.
       try:
         - script:
             timeout: 30s
             content: |
               set -euo pipefail
 
-              GATEWAY_POD=$(kubectl get pod -n billing-system \
-                -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
-                --no-headers -o name | head -1)
-              if [ -z "$GATEWAY_POD" ]; then
-                echo "ERROR: no billing-gateway pod found" >&2
-                exit 1
-              fi
-
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
                 --no-headers -o name | head -1)
-
-              # Read the projected ServiceAccount token from the pod.
-              # The billing-usage-collector ServiceAccount token is used here because
-              # it is projected with audience=billing-gateway and is the
-              # caller the Gateway expects; we exec into the billing-usage-collector
-              # pod which has the token mounted.
-              TOKEN=$(kubectl exec -n billing-system "$COLLECTOR_POD" -- \
-                cat /var/run/secrets/billing-gateway/token)
+              if [ -z "$COLLECTOR_POD" ]; then
+                echo "ERROR: no billing-usage-collector pod found" >&2
+                exit 1
+              fi
 
               # POST an event with an invalid ULID id directly to the Gateway.
-              # We use http because the Gateway in this environment is not configured with TLS certs.
               RESPONSE=$(kubectl exec -n billing-system "$COLLECTOR_POD" -- \
                 wget -q -S -O- \
                   --header="Content-Type: application/cloudevents+json" \
-                  --header="Authorization: Bearer ${TOKEN}" \
                   --post-data='{"specversion":"1.0","type":"com.example.cpu","source":"/services/example","subject":"projects/p-dead-letter","id":"NOT-A-VALID-ULID","datacontenttype":"application/json","data":{"value":"99"}}' \
                   http://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events 2>&1 || true)
               HTTP_STATUS=$(echo "$RESPONSE" | grep "HTTP/" | awk '{print $2}' | head -1 | tr -d '\r\n')
