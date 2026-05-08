@@ -75,11 +75,11 @@ func TestValidateBillingAccountCreate(t *testing.T) {
 
 func TestValidateBillingAccountUpdate_CurrencyImmutability(t *testing.T) {
 	tests := []struct {
-		name       string
-		oldPhase   billingv1alpha1.BillingAccountPhase
-		oldCurr    string
-		newCurr    string
-		wantErr    bool
+		name     string
+		oldPhase billingv1alpha1.BillingAccountPhase
+		oldCurr  string
+		newCurr  string
+		wantErr  bool
 	}{
 		{
 			name:     "allow currency change in Provisioning",

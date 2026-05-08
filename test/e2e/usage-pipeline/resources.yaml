@@ -1,0 +1,57 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: usage-pipeline-test
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MonitoredResourceType
+metadata:
+  name: e2e-compute
+spec:
+  resourceTypeName: e2e-compute
+  displayName: E2E Compute
+  phase: Published
+  gvk:
+    group: compute.miloapis.com
+    kind: Instance
+  labels:
+    - name: project_id
+      description: Project ID
+    - name: zone
+      description: Availability zone
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MeterDefinition
+metadata:
+  name: e2e-cpu-seconds
+spec:
+  meterName: e2e-cpu-seconds
+  displayName: E2E CPU Seconds
+  phase: Published
+  measurement:
+    aggregation: Sum
+    unit: s
+  billing:
+    consumedUnit: s
+    pricingUnit: s
+  monitoredResourceTypes:
+    - e2e-compute
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: e2e-account
+  namespace: usage-pipeline-test
+spec:
+  currencyCode: USD
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccountBinding
+metadata:
+  name: e2e-binding
+  namespace: usage-pipeline-test
+spec:
+  billingAccountRef:
+    name: e2e-account
+  projectRef:
+    name: p-e2e-usage-pipeline

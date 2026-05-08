@@ -1,0 +1,400 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: usage-consumer
+spec:
+  description: |
+    Tests the UsageConsumer Central Validation and Attribution pipeline.
+
+    Prerequisites (must be deployed before running this suite):
+      - billing-system namespace with billing-operator Deployment running
+      - nats-system namespace with NATS JetStream (config/dependencies/nats/)
+      - nats-box pod in nats-system for CLI operations
+      - billing-usage stream covering billing.usage.> already created
+
+    Scenarios:
+      1. valid-event         — Published MeterDefinition + Active BillingAccountBinding
+                               → event routed to billing.usage.p-e2e-consumer.valid
+                               with billingAccountRef set.
+      2. unknown-meter       — Event type with no matching Published MeterDefinition
+                               → quarantined at billing.usage.p-e2e-consumer.quarantine.unknown_meter
+      3. invalid-dimensions  — Event with dimension key not declared on the meter
+                               → quarantined at billing.usage.p-e2e-consumer.quarantine.invalid_dimensions
+      4. attribution-failure — Valid meter, but project p-e2e-noattr has no Active binding
+                               → quarantined at billing.usage.p-e2e-noattr.quarantine.attribution_failure
+
+  steps:
+    # ------------------------------------------------------------------
+    # Step 1: Verify prerequisites
+    # ------------------------------------------------------------------
+    - name: verify-prerequisites
+      description: Assert the billing-operator Deployment is Ready before any scenario runs.
+      try:
+        - assert:
+            timeout: 120s
+            resource:
+              apiVersion: apps/v1
+              kind: Deployment
+              metadata:
+                name: billing-controller-manager
+                namespace: billing-system
+              status:
+                (readyReplicas >= `1`): true
+
+    # ------------------------------------------------------------------
+    # Step 1.1: Purge NATS subjects to ensure no stale data
+    # ------------------------------------------------------------------
+    - name: cleanup-nats
+      description: Purge old test data from the billing-usage stream to avoid false positives.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "WARNING: no nats-box pod found, skipping purge"
+                exit 0
+              fi
+
+              echo "Purging test subjects..."
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats --server nats://nats:4222 \
+                stream purge billing-usage \
+                --filter "billing.usage.p-e2e-consumer.>" -f || true
+
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats --server nats://nats:4222 \
+                stream purge billing-usage \
+                --filter "billing.usage.p-e2e-noattr.>" -f || true
+
+    # ------------------------------------------------------------------
+    # Step 1.2: Wait for Webhook Readiness
+    # ------------------------------------------------------------------
+    - name: wait-for-webhook
+      description: Wait for the admission webhook to be serving (prevents TLS errors).
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+              echo "Checking webhook connectivity via dry-run..."
+              for i in $(seq 1 20); do
+                if kubectl create -f 01-setup-meter.yaml --dry-run=server >/dev/null 2>&1; then
+                  echo "SUCCESS: Webhook is ready"
+                  exit 0
+                fi
+                echo "Waiting for webhook (attempt $i/20)..."
+                sleep 3
+              done
+              echo "ERROR: Webhook did not become ready in time" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 2: Create MeterDefinition fixture
+    # ------------------------------------------------------------------
+    - name: setup-meter
+      description: Create the Published MeterDefinition for cpu-seconds (01-setup-meter.yaml).
+      try:
+        - create:
+            file: 01-setup-meter.yaml
+
+    # ------------------------------------------------------------------
+    # Step 3: Create BillingAccount and wait for Ready
+    # ------------------------------------------------------------------
+    - name: setup-account
+      description: Create the BillingAccount and assert it reaches Ready phase.
+      try:
+        - create:
+            file: 02-setup-account.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: consumer-e2e-account
+                namespace: default
+              status:
+                phase: Ready
+
+    # ------------------------------------------------------------------
+    # Step 4: Create BillingAccountBinding and wait for Active
+    # ------------------------------------------------------------------
+    - name: setup-binding
+      description: Create the BillingAccountBinding for p-e2e-consumer and assert Active.
+      try:
+        - create:
+            file: 03-setup-binding.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                name: consumer-e2e-binding
+                namespace: default
+              status:
+                phase: Active
+
+    # ------------------------------------------------------------------
+    # Step 5: SCENARIO 1 — valid-event
+    #
+    # Publish a well-formed event for the Published cpu-seconds meter and
+    # project p-e2e-consumer (which has an Active binding to consumer-e2e-account).
+    # The consumer must route it to the .valid subject and set billingAccountRef.
+    # ------------------------------------------------------------------
+    - name: valid-event-publish
+      description: Publish a valid ingest event to billing.usage.p-e2e-consumer.ingest.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats pub \
+                  --server nats://nats:4222 \
+                  billing.usage.p-e2e-consumer.ingest \
+                  '{"specversion":"1.0","id":"01HXYZ0000000000000001VLD","type":"compute.miloapis.com/instance/cpu-seconds","source":"/services/compute","datacontenttype":"application/json","time":"2026-05-01T00:00:00Z","data":{"value":"3600","dimensions":{"region":"us-east-1"}}}'
+              echo "Published valid ingest event (id=01HXYZ0000000000000001VLD)"
+
+    - name: valid-event-assert
+      description: |
+        Poll billing.usage.p-e2e-consumer.valid until the consumer routes the
+        event there. Assert the message body contains the event ID and
+        billingAccountRef=consumer-e2e-account.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream get billing-usage \
+                  --last-for "billing.usage.p-e2e-consumer.valid" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "01HXYZ0000000000000001VLD"; then
+                  echo "SUCCESS: event found on billing.usage.p-e2e-consumer.valid"
+                  if echo "$MSG" | grep -q "consumer-e2e-account"; then
+                    echo "SUCCESS: billingAccountRef=consumer-e2e-account confirmed"
+                    exit 0
+                  else
+                    echo "ERROR: billingAccountRef missing from message body!" >&2
+                    exit 1
+                  fi
+                fi
+                sleep 3
+              done
+
+              echo "FAIL: event did not appear on billing.usage.p-e2e-consumer.valid within timeout" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 6: SCENARIO 2 — unknown-meter
+    #
+    # Publish an event whose type has no matching Published MeterDefinition.
+    # The consumer must quarantine it under the unknown_meter reason.
+    # ------------------------------------------------------------------
+    - name: unknown-meter-publish
+      description: Publish an event with an unregistered meter type.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats pub \
+                  --server nats://nats:4222 \
+                  billing.usage.p-e2e-consumer.ingest \
+                  '{"specversion":"1.0","id":"01HXYZ0000000000000002UNK","type":"unknown.meter/does/not/exist","source":"/services/compute","datacontenttype":"application/json","time":"2026-05-01T00:00:00Z","data":{"value":"100"}}'
+              echo "Published unknown-meter event (id=01HXYZ0000000000000002UNK)"
+
+    - name: unknown-meter-assert
+      description: Assert the event is quarantined at billing.usage.p-e2e-consumer.quarantine.unknown_meter.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream get billing-usage \
+                  --last-for "billing.usage.p-e2e-consumer.quarantine.unknown_meter" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "01HXYZ0000000000000002UNK"; then
+                  echo "SUCCESS: event quarantined at unknown_meter"
+                  exit 0
+                fi
+                sleep 3
+              done
+
+              echo "FAIL: event did not appear at quarantine.unknown_meter within timeout" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 7: SCENARIO 3 — invalid-dimensions
+    #
+    # Publish an event with dimension key "unknownDim" which is not declared
+    # in the cpu-seconds MeterDefinition (only "region" is allowed).
+    # The consumer must quarantine it under invalid_dimensions.
+    # ------------------------------------------------------------------
+    - name: invalid-dimensions-publish
+      description: Publish an event with an undeclared dimension key (unknownDim).
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats pub \
+                  --server nats://nats:4222 \
+                  billing.usage.p-e2e-consumer.ingest \
+                  '{"specversion":"1.0","id":"01HXYZ0000000000000003DIM","type":"compute.miloapis.com/instance/cpu-seconds","source":"/services/compute","datacontenttype":"application/json","time":"2026-05-01T00:00:00Z","data":{"value":"60","dimensions":{"region":"us-east-1","unknownDim":"bad"}}}'
+              echo "Published invalid-dimensions event (id=01HXYZ0000000000000003DIM)"
+
+    - name: invalid-dimensions-assert
+      description: Assert the event is quarantined at billing.usage.p-e2e-consumer.quarantine.invalid_dimensions.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream get billing-usage \
+                  --last-for "billing.usage.p-e2e-consumer.quarantine.invalid_dimensions" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "01HXYZ0000000000000003DIM"; then
+                  echo "SUCCESS: event quarantined at invalid_dimensions"
+                  exit 0
+                fi
+                sleep 3
+              done
+
+              echo "FAIL: event did not appear at quarantine.invalid_dimensions within timeout" >&2
+              exit 1
+
+    # ------------------------------------------------------------------
+    # Step 8: SCENARIO 4 — attribution-failure
+    #
+    # Publish a structurally valid event for project p-e2e-noattr, which
+    # has no BillingAccountBinding. The consumer must quarantine it under
+    # attribution_failure since it cannot resolve a billing account.
+    # ------------------------------------------------------------------
+    - name: attribution-failure-publish
+      description: Publish a valid event for project p-e2e-noattr (no Active binding exists).
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats pub \
+                  --server nats://nats:4222 \
+                  billing.usage.p-e2e-noattr.ingest \
+                  '{"specversion":"1.0","id":"01HXYZ0000000000000004ATR","type":"compute.miloapis.com/instance/cpu-seconds","source":"/services/compute","datacontenttype":"application/json","time":"2026-05-01T00:00:00Z","data":{"value":"300","dimensions":{"region":"us-east-1"}}}'
+              echo "Published attribution-failure event (id=01HXYZ0000000000000004ATR)"
+
+    - name: attribution-failure-assert
+      description: Assert the event is quarantined at billing.usage.p-e2e-noattr.quarantine.attribution_failure.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -euo pipefail
+
+              NATS_POD=$(kubectl get pod -n nats-system \
+                -l app.kubernetes.io/component=nats-box \
+                --no-headers -o name | head -1)
+              if [ -z "$NATS_POD" ]; then
+                echo "ERROR: no nats-box pod found" >&2
+                exit 1
+              fi
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  stream get billing-usage \
+                  --last-for "billing.usage.p-e2e-noattr.quarantine.attribution_failure" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "01HXYZ0000000000000004ATR"; then
+                  echo "SUCCESS: event quarantined at attribution_failure"
+                  exit 0
+                fi
+                sleep 3
+              done
+
+              echo "FAIL: event did not appear at quarantine.attribution_failure within timeout" >&2
+              exit 1

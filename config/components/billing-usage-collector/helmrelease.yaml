@@ -1,0 +1,143 @@
+apiVersion: helm.toolkit.fluxcd.io/v2
+kind: HelmRelease
+metadata:
+  name: billing-usage-collector
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing-usage-collector
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  interval: 5m
+  timeout: 2m
+
+  chart:
+    spec:
+      chart: vector
+      version: 0.52.x
+      sourceRef:
+        kind: HelmRepository
+        name: vector
+        namespace: billing-system
+      interval: 1h
+
+  values:
+    # role controls the rendered workload kind:
+    #   Agent                -> DaemonSet  (one pod per node, hostPath buffer)
+    #   Stateless-Aggregator -> Deployment (replicated, emptyDir buffer)
+    #   Aggregator           -> StatefulSet (replicated, PVC buffer)
+    role: Agent
+
+    image:
+      tag: "0.55.0-alpine"
+
+    tolerations:
+      - operator: Exists
+
+    serviceAccount:
+      create: true
+      name: billing-usage-collector
+
+    env:
+      - name: BILLING_GATEWAY_URL
+        value: "http://billing-gateway.billing-system.svc.cluster.local:8080"
+
+    customConfig:
+      data_dir: "/vector-data-dir"
+      sources:
+        billing_sdk:
+          type: http_server
+          address: "0.0.0.0:9880"
+          path: "/cloudevents"
+          decoding:
+            codec: json
+      transforms:
+        clean_cloudevents:
+          type: remap
+          inputs:
+            - billing_sdk
+          source: |
+            # Only keep the original CloudEvent fields
+            # Vector adds 'timestamp' and 'host' by default
+            del(.timestamp)
+            del(.host)
+            del(.source_type)
+      sinks:
+        billing_gateway:
+          type: http
+          inputs:
+            - clean_cloudevents
+          uri: "${BILLING_GATEWAY_URL}/v1/usage/events:batchIngest"
+          method: post
+          encoding:
+            codec: json
+          batch:
+            max_events: 100
+            timeout_secs: 1
+          tls:
+            verify_certificate: true
+          buffer:
+            type: disk
+            max_size: 1073741824
+            when_full: block
+          request:
+            retry_policy:
+              max_retries: 30
+              initial_backoff_secs: 1
+              max_backoff_secs: 60
+              jitter_mode: full
+              
+    initContainers:
+      - name: init-data
+        image: busybox:1.36
+        securityContext:
+          runAsUser: 0
+          runAsNonRoot: false
+          privileged: true
+        command:
+          - sh
+          - -c
+          - chown -R 1000:1000 /var/lib/vector
+        volumeMounts:
+          - name: data
+            mountPath: /var/lib/vector
+
+    podSecurityContext:
+      runAsUser: 1000
+      runAsGroup: 1000
+      runAsNonRoot: true
+
+    securityContext:
+      allowPrivilegeEscalation: false
+
+    resources:
+      requests:
+        cpu: 50m
+        memory: 64Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+
+    service:
+      enabled: true
+      type: ClusterIP
+      # Ensures pods talk to the agent on their local node, avoiding
+      # cross-node traffic and reducing latency for high-throughput usage events.
+      internalTrafficPolicy: Local
+      ports:
+        - name: cloudevents
+          port: 9880
+          protocol: TCP
+          targetPort: 9880
+
+    podMonitor:
+      enabled: true
+
+  install:
+    crds: Create
+    createNamespace: false
+
+  upgrade:
+    crds: CreateReplace
+
+  uninstall:
+    keepHistory: false

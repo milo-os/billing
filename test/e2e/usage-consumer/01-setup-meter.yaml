@@ -1,0 +1,19 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MeterDefinition
+metadata:
+  name: consumer-e2e-cpu-seconds
+spec:
+  meterName: compute.miloapis.com/instance/cpu-seconds
+  displayName: Compute Instance CPU Seconds (E2E)
+  description: E2E fixture for consumer validation tests.
+  phase: Published
+  measurement:
+    aggregation: Sum
+    unit: s
+    dimensions:
+      - region
+  billing:
+    consumedUnit: s
+    pricingUnit: h
+  monitoredResourceTypes:
+    - instance

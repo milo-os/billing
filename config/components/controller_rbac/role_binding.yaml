@@ -12,3 +12,4 @@ roleRef:
 subjects:
 - kind: ServiceAccount
   name: billing-controller-manager
+  namespace: billing-system
