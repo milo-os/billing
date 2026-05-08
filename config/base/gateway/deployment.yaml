@@ -28,14 +28,31 @@ spec:
             - /billing
           args:
             - gateway
-            - --addr=:8080
-            - --nats-url=tls://nats.nats-system.svc.cluster.local:4222
-            - --nats-ca-file=/etc/nats-certs/ca.crt
-            - --nats-cert-file=/etc/nats-certs/tls.crt
-            - --nats-key-file=/etc/nats-certs/tls.key
-            - --tls-cert-file=/etc/gateway-certs/tls.crt
-            - --tls-key-file=/etc/gateway-certs/tls.key
-            - --health-probe-bind-address=:8081
+            - --addr=$(ADDR)
+            - --nats-url=$(NATS_URL)
+            - --nats-ca-file=$(NATS_CA_FILE)
+            - --nats-cert-file=$(NATS_CERT_FILE)
+            - --nats-key-file=$(NATS_KEY_FILE)
+            - --tls-cert-file=$(TLS_CERT_FILE)
+            - --tls-key-file=$(TLS_KEY_FILE)
+            - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
+          env:
+            - name: ADDR
+              value: ":8080"
+            - name: NATS_URL
+              value: "tls://nats.nats-system.svc.cluster.local:4222"
+            - name: NATS_CA_FILE
+              value: "/etc/nats-certs/ca.crt"
+            - name: NATS_CERT_FILE
+              value: "/etc/nats-certs/tls.crt"
+            - name: NATS_KEY_FILE
+              value: "/etc/nats-certs/tls.key"
+            - name: TLS_CERT_FILE
+              value: "/etc/gateway-certs/tls.crt"
+            - name: TLS_KEY_FILE
+              value: "/etc/gateway-certs/tls.key"
+            - name: HEALTH_PROBE_BIND_ADDRESS
+              value: ":8081"
           ports:
             - name: ingest
               containerPort: 8080
@@ -59,9 +76,6 @@ spec:
             - name: nats-certs
               mountPath: /etc/nats-certs
               readOnly: true
-            - name: gateway-certs
-              mountPath: /etc/gateway-certs
-              readOnly: true
           resources:
             requests:
               cpu: 100m
@@ -84,13 +98,5 @@ spec:
               csi.cert-manager.io/issuer-kind: ClusterIssuer
               csi.cert-manager.io/common-name: billing-gateway.nats.client
               csi.cert-manager.io/subject-organizations: datum
-              csi.cert-manager.io/fs-group: "65532"
-        - name: gateway-certs
-          csi:
-            driver: csi.cert-manager.io
-            readOnly: true
-            volumeAttributes:
-              csi.cert-manager.io/issuer-name: selfsigned-issuer
-              csi.cert-manager.io/dns-names: "billing-gateway.billing-system.svc,billing-gateway.billing-system.svc.cluster.local"
               csi.cert-manager.io/fs-group: "65532"
       terminationGracePeriodSeconds: 30
