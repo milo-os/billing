@@ -124,6 +124,51 @@ onto `PaymentMethod` status.
 The following sequence describes the full end-to-end flow using Stripe as the
 provider.
 
+```mermaid
+sequenceDiagram
+    actor Owner as Account Owner
+    participant Portal
+    participant BillingSvc as Billing Service
+    participant StripeProv as stripe-provider
+    participant Stripe
+
+    Note over BillingSvc: PaymentMethodClass pre-configured by operator
+
+    Owner->>Portal: Add payment method
+    Portal->>BillingSvc: Create PaymentMethod
+    BillingSvc->>BillingSvc: Inject paymentMethodClassRef<br/>(defaulting webhook)
+    BillingSvc-->>Portal: PaymentMethod (phase: Pending)
+
+    StripeProv->>BillingSvc: Watch PaymentMethod (phase: Pending)
+    StripeProv->>BillingSvc: Create StripePaymentMethod
+    StripeProv->>Stripe: Create SetupIntent
+    Stripe-->>StripeProv: clientSecret
+    StripeProv->>BillingSvc: StripePaymentMethod (phase: AwaitingConfirmation, clientSecret)
+    StripeProv->>BillingSvc: Patch PaymentMethod (phase: AwaitingConfirmation)
+
+    Portal->>BillingSvc: Read PaymentMethodClass
+    BillingSvc-->>Portal: publishableKey
+    Portal->>BillingSvc: Read StripePaymentMethod
+    BillingSvc-->>Portal: clientSecret
+    Portal->>Owner: Render card collection UI (Stripe Elements)
+    Owner->>Stripe: Enter card details
+    Stripe-->>Owner: Collection confirmed
+
+    Stripe->>StripeProv: Webhook: setup_intent.succeeded
+    StripeProv->>Stripe: Retrieve payment method details
+    Stripe-->>StripeProv: brand, last4, expiry
+    StripeProv->>BillingSvc: StripePaymentMethod (phase: Active, instrument details)
+    StripeProv->>BillingSvc: Patch PaymentMethod (phase: Active, normalized details)
+    BillingSvc->>BillingSvc: Update BillingAccount<br/>DefaultPaymentMethodReady condition
+
+    Portal->>BillingSvc: Read PaymentMethod
+    BillingSvc-->>Portal: phase: Active, card details
+    Portal->>Owner: Show confirmed payment method
+    Owner->>Portal: Set as default
+    Portal->>BillingSvc: Update BillingAccount.spec.defaultPaymentMethodRef
+    BillingSvc->>BillingSvc: Validate PaymentMethod is Active<br/>Set DefaultPaymentMethodReady: True
+```
+
 **1. Operator configures a PaymentMethodClass.**
 
 A platform operator creates a `PaymentMethodClass` that names the Stripe provider
