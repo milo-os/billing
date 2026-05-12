@@ -32,6 +32,7 @@ latest-milestone: "v0"
 - [Future Work](#future-work)
 - [Drawbacks](#drawbacks)
 - [Alternatives](#alternatives)
+  - [Provider Config on PaymentMethodClass Spec](#provider-config-on-paymentmethodclass-spec)
   - [Provider Field as Enum on PaymentMethod](#provider-field-as-enum-on-paymentmethod)
   - [Single CRD with Provider Config](#single-crd-with-provider-config)
   - [Billing Service Owns All Provider Integrations](#billing-service-owns-all-provider-integrations)
@@ -43,15 +44,17 @@ latest-milestone: "v0"
 Payment methods enable billing accounts to be associated with a payment
 instrument so that charges can be processed on their behalf. This enhancement
 introduces three cooperating resources: a cluster-scoped `PaymentMethodClass`
-configured by operators that selects a provider and carries its SDK
-configuration; a namespace-scoped `PaymentMethod` that consumers create to
-associate a payment instrument with a billing account; and a provider-specific
-resource (e.g. `StripePaymentMethod`) owned by the provider controller that
-drives the collection flow and stores all provider-specific state.
+configured by operators that names a provider and references a provider-specific
+configuration resource via `spec.parametersRef`; a namespace-scoped
+`PaymentMethod` that consumers create to associate a payment instrument with a
+billing account; and a provider-specific resource (e.g. `StripePaymentMethod`)
+owned by the provider controller that drives the collection flow and stores all
+provider-specific state.
 
-Stripe is the reference implementation. The design is intentionally extensible:
-adding a new payment provider requires no changes to the billing service or the
-`PaymentMethod` API.
+Stripe is the reference implementation. The design follows the same
+`parametersRef` extensibility pattern as the Kubernetes Gateway API: adding a
+new payment provider requires no changes to the billing service or the
+`PaymentMethod` or `PaymentMethodClass` schemas.
 
 ## Motivation
 
@@ -132,7 +135,7 @@ sequenceDiagram
     participant StripeProv as stripe-provider
     participant Stripe
 
-    Note over BillingSvc: PaymentMethodClass pre-configured by operator
+    Note over BillingSvc,StripeProv: Operator pre-configures PaymentMethodClass + StripeProviderConfig
 
     Owner->>Portal: Add payment method
     Portal->>BillingSvc: Create PaymentMethod
@@ -147,7 +150,9 @@ sequenceDiagram
     StripeProv->>BillingSvc: Patch PaymentMethod (phase: AwaitingConfirmation)
 
     Portal->>BillingSvc: Read PaymentMethodClass
-    BillingSvc-->>Portal: publishableKey
+    BillingSvc-->>Portal: parametersRef → StripeProviderConfig
+    Portal->>StripeProv: Read StripeProviderConfig
+    StripeProv-->>Portal: publishableKey
     Portal->>BillingSvc: Read StripePaymentMethod
     BillingSvc-->>Portal: clientSecret
     Portal->>Owner: Render card collection UI (Stripe Elements)
@@ -169,11 +174,22 @@ sequenceDiagram
     BillingSvc->>BillingSvc: Validate PaymentMethod is Active<br/>Set DefaultPaymentMethodReady: True
 ```
 
-**1. Operator configures a PaymentMethodClass.**
+**1. Operator configures a PaymentMethodClass and StripeProviderConfig.**
 
-A platform operator creates a `PaymentMethodClass` that names the Stripe provider
-and carries the Stripe publishable key. The class is annotated as the cluster
-default so the billing service webhook can inject it automatically.
+A platform operator creates a `StripeProviderConfig` (owned by the
+stripe-provider) carrying the Stripe publishable key, then creates a
+`PaymentMethodClass` that names the Stripe provider and references the config
+via `spec.parametersRef`. The class is annotated as the cluster default so the
+billing service webhook can inject it automatically.
+
+```yaml
+apiVersion: stripe.billing.miloapis.com/v1alpha1
+kind: StripeProviderConfig
+metadata:
+  name: default
+spec:
+  publishableKey: "pk_live_..."
+```
 
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
@@ -184,8 +200,10 @@ metadata:
     billing.miloapis.com/is-default-class: "true"
 spec:
   provider: stripe
-  stripe:
-    publishableKey: "pk_live_..."
+  parametersRef:
+    group: stripe.billing.miloapis.com
+    kind: StripeProviderConfig
+    name: default
 ```
 
 **2. Portal creates a PaymentMethod.**
@@ -270,22 +288,27 @@ status:
 The stripe-provider also advances `PaymentMethod` phase to `AwaitingConfirmation`
 to signal to other observers that a setup is in progress.
 
-**6. Portal reads PaymentMethodClass, then StripePaymentMethod.**
+**6. Portal reads PaymentMethodClass, follows parametersRef, then reads StripePaymentMethod.**
 
 The portal reads `spec.paymentMethodClassRef` from the `PaymentMethod` to
 discover which class is in use, then reads that `PaymentMethodClass` to get the
-provider name and SDK configuration:
+provider name and `parametersRef`:
 
 ```json
 {
   "spec": {
     "provider": "stripe",
-    "stripe": { "publishableKey": "pk_live_..." }
+    "parametersRef": {
+      "group": "stripe.billing.miloapis.com",
+      "kind": "StripeProviderConfig",
+      "name": "default"
+    }
   }
 }
 ```
 
-With the publishable key, the portal initializes Stripe.js. It then watches
+The portal follows `parametersRef` to read `StripeProviderConfig` and retrieve
+the publishable key, then initializes Stripe.js. It then watches
 `StripePaymentMethod` for `corp-visa` until `status.phase == AwaitingConfirmation`
 and reads `status.setupIntent.clientSecret` to render the card collection UI.
 Card data flows directly from the user's browser to Stripe — it never passes
@@ -388,8 +411,11 @@ contains normalized instrument data regardless of which provider collected it.
   details in a provider-agnostic schema that all backend services can read
   without importing provider-specific types.
 - **Provider extensibility without billing service changes.** Adding a new
-  payment provider requires a new provider service and a new `PaymentMethodClass`
-  — no changes to the billing service CRD, controllers, or webhooks.
+  payment provider requires a new provider service, a new provider config
+  resource, and a new `PaymentMethodClass` — no changes to the billing service
+  CRD, controllers, or webhooks. `PaymentMethodClass` carries no provider-specific
+  fields; all provider config lives in the provider-owned resource referenced via
+  `spec.parametersRef`.
 - **Cascading deletion.** Deleting a `PaymentMethod` cascades to the
   provider-specific resource via Kubernetes ownerReferences, giving the provider
   controller the opportunity to clean up provider-side state via a finalizer.
@@ -429,32 +455,37 @@ Three resource types cooperate to implement the payment method lifecycle:
 
 | Resource | Scope | Owner | Purpose |
 |---|---|---|---|
-| `PaymentMethodClass` | Cluster | Billing service | Operator-configured provider selector and SDK config |
+| `PaymentMethodClass` | Cluster | Billing service | Operator-configured provider selector; references provider config via `parametersRef` |
 | `PaymentMethod` | Namespace | Billing service | Consumer-facing payment instrument interface |
+| `StripeProviderConfig` | Cluster | stripe-provider | Stripe-specific SDK configuration (publishable key, etc.) |
 | `StripePaymentMethod` | Namespace | stripe-provider | Provider-specific state and setup flow |
 
 `PaymentMethod` is the only resource consumers interact with directly.
 `PaymentMethodClass` is an operator concern. Provider-specific resources are
 internal implementation details not exposed to consumers.
 
-This mirrors the pattern used by the Kubernetes Gateway API, where operators
-configure `GatewayClass` resources and consumers create `Gateway` and
-`HTTPRoute` resources without needing to know which gateway implementation is
-running.
+This follows the same pattern as the Kubernetes Gateway API, where `GatewayClass`
+references provider-specific configuration via `spec.parametersRef` and
+operators configure `GatewayClass` resources while consumers create `Gateway`
+and `HTTPRoute` resources without knowing which implementation is running.
 
 ### PaymentMethodClass Resource
 
 `PaymentMethodClass` is cluster-scoped and created by platform operators. It
-carries two things: the name of the provider controller responsible for
-reconciling payment methods of this class, and the provider-specific
-configuration the portal needs to initialize the collection SDK.
+carries the name of the provider controller responsible for reconciling payment
+methods of this class and a `parametersRef` that points to a provider-owned
+resource carrying any provider-specific configuration. `PaymentMethodClass`
+itself has no provider-specific fields — all provider config lives in the
+referenced resource.
 
 **Spec fields:**
 
 | Field | Type | Description |
 |---|---|---|
 | `provider` | string | Name of the provider controller that reconciles this class (e.g. `stripe`) |
-| `stripe.publishableKey` | string | Stripe publishable API key for portal SDK initialization. Required when `provider` is `stripe` |
+| `parametersRef.group` | string | API group of the provider-specific config resource |
+| `parametersRef.kind` | string | Kind of the provider-specific config resource |
+| `parametersRef.name` | string | Name of the provider-specific config resource |
 
 **Default class selection:**
 
@@ -474,8 +505,10 @@ metadata:
     billing.miloapis.com/is-default-class: "true"
 spec:
   provider: stripe
-  stripe:
-    publishableKey: "pk_live_..."
+  parametersRef:
+    group: stripe.billing.miloapis.com
+    kind: StripeProviderConfig
+    name: default
 ```
 
 ### PaymentMethod Resource
@@ -537,18 +570,27 @@ CRD schemas are defined and evolved independently by each provider service.
 
 Adding a new provider — for example, Braintree — requires:
 
-1. A new `braintree-provider` service with its own `BraintreePaymentMethod` CRD.
-2. A new `PaymentMethodClass` resource configured with `spec.provider: braintree`
-   and any Braintree-specific SDK configuration fields added to
-   `PaymentMethodClassSpec`.
-3. No changes to the billing service controllers, webhooks, or the `PaymentMethod`
+1. A new `braintree-provider` service with its own `BraintreePaymentMethod` and
+   `BraintreeProviderConfig` CRDs.
+2. A `BraintreeProviderConfig` resource carrying Braintree-specific SDK config.
+3. A new `PaymentMethodClass` with `spec.provider: braintree` and a
+   `parametersRef` pointing to the `BraintreeProviderConfig`.
+4. No changes to the billing service controllers, webhooks, or the `PaymentMethod`
    or `PaymentMethodClass` schemas.
 
 ### Stripe Reference Implementation
 
 The `stripe-provider` service is the reference implementation of the provider
-controller pattern. It introduces the `StripePaymentMethod` CRD in the
-`stripe.billing.miloapis.com` API group.
+controller pattern. It introduces two CRDs in the
+`stripe.billing.miloapis.com` API group: `StripeProviderConfig` for
+operator-configured SDK settings, and `StripePaymentMethod` for per-payment
+method state.
+
+**StripeProviderConfig spec fields:**
+
+| Field | Type | Description |
+|---|---|---|
+| `publishableKey` | string | Stripe publishable API key used by the portal to initialize Stripe.js |
 
 **StripePaymentMethod spec fields:**
 
@@ -590,7 +632,8 @@ is in:
 
 | Phase | Resource | Purpose |
 |---|---|---|
-| Initializing SDK | `PaymentMethodClass` | Read `spec.provider` and `spec.stripe.publishableKey` to load the correct SDK |
+| Discovering provider | `PaymentMethodClass` | Read `spec.provider` and `spec.parametersRef` |
+| Initializing SDK | `StripeProviderConfig` (via `parametersRef`) | Read `spec.publishableKey` to initialize Stripe.js |
 | During setup | `StripePaymentMethod` | Read `status.setupIntent.clientSecret` to initialize Stripe Elements |
 | After confirmation | `PaymentMethod` | Read `status.details` to display the confirmed instrument |
 
@@ -600,34 +643,33 @@ render provider-specific collection UI. The abstraction boundary between
 from provider coupling, not the portal.
 
 The portal discovers which SDK to load by reading the `PaymentMethodClass`
-referenced in `PaymentMethod.spec.paymentMethodClassRef`. This is the only
-coordination point between the portal and the class system — all other portal
-interactions are with `PaymentMethod` and the provider-specific CRD directly.
+referenced in `PaymentMethod.spec.paymentMethodClassRef`, then follows
+`spec.parametersRef` to the provider-owned config resource to retrieve SDK
+initialization data. This keeps all provider-specific configuration out of the
+billing service schema entirely.
 
 ```
-Portal                   PaymentMethodClass     PaymentMethod      StripePaymentMethod
-│                             │                      │                    │
-│ read paymentMethodClassRef  │                      │                    │
-│ ────────────────────────────────────────────────▶  │                    │
-│                             │                      │                    │
-│ read class spec             │                      │                    │
-│ ──────────────────────────▶ │                      │                    │
-│ ◀── provider: stripe        │                      │                    │
-│     publishableKey: pk_...  │                      │                    │
-│                             │                      │                    │
-│ [initialize Stripe.js]      │                      │                    │
-│                             │                      │                    │
-│ watch StripePaymentMethod   │                      │                    │
-│ ──────────────────────────────────────────────────────────────────────▶ │
-│ ◀── clientSecret            │                      │                    │
-│                             │                      │                    │
-│ [render Stripe Elements,    │                      │                    │
-│  user enters card details]  │                      │                    │
-│                             │                      │                    │
-│ watch PaymentMethod         │                      │                    │
-│ ────────────────────────────────────────────────▶  │                    │
-│ ◀── phase: Active           │                      │                    │
-│     details.card.*          │                      │                    │
+Portal          PaymentMethodClass  StripeProviderConfig  PaymentMethod  StripePaymentMethod
+│                    │                    │                    │                │
+│ read class         │                    │                    │                │
+│ ──────────────────▶│                    │                    │                │
+│ ◀── parametersRef  │                    │                    │                │
+│                    │                    │                    │                │
+│ read parametersRef │                    │                    │                │
+│ ───────────────────────────────────────▶│                    │                │
+│ ◀── publishableKey │                    │                    │                │
+│                    │                    │                    │                │
+│ [initialize Stripe.js]                  │                    │                │
+│                    │                    │                    │                │
+│ watch StripePaymentMethod               │                    │                │
+│ ──────────────────────────────────────────────────────────────────────────────▶
+│ ◀── clientSecret                        │                    │                │
+│                    │                    │                    │                │
+│ [render Stripe Elements]                │                    │                │
+│                    │                    │                    │                │
+│ watch PaymentMethod                     │                    │                │
+│ ────────────────────────────────────────────────────────────▶│                │
+│ ◀── phase: Active, details.card.*       │                    │                │
 ```
 
 ### Default Payment Method
@@ -751,8 +793,10 @@ another `Active` payment method or clear it before deletion is permitted.
 | stripe-provider | `PaymentMethodClass` | Read |
 | stripe-provider | `PaymentMethod` spec | Read |
 | stripe-provider | `PaymentMethod` status | Patch (status subresource) |
+| stripe-provider | `StripeProviderConfig` | Full (owns the CRD) |
 | stripe-provider | `StripePaymentMethod` | Full (owns the CRD) |
 | Portal | `PaymentMethodClass` | Read |
+| Portal | `StripeProviderConfig` | Read |
 | Portal | `PaymentMethod` | Create, Read, Delete |
 | Portal | `StripePaymentMethod` | Read |
 
@@ -797,6 +841,26 @@ resource throughout. This is an acceptable tradeoff given that the portal must
 engage with the provider SDK regardless.
 
 ## Alternatives
+
+### Provider Config on PaymentMethodClass Spec
+
+An earlier design placed provider-specific configuration directly on
+`PaymentMethodClass` spec using typed sub-objects:
+
+```yaml
+spec:
+  provider: stripe
+  stripe:
+    publishableKey: "pk_live_..."
+```
+
+This was rejected for the same reason as the provider enum on `PaymentMethod`:
+adding a new provider requires a billing service schema change to add a new
+sub-object (`spec.braintree`, `spec.adyen`, etc.). The `PaymentMethodClass`
+schema becomes a registry of every provider ever supported. The `parametersRef`
+pattern, adopted from the Kubernetes Gateway API, avoids this entirely — all
+provider-specific config lives in a provider-owned resource and `PaymentMethodClass`
+never changes shape.
 
 ### Provider Field as Enum on PaymentMethod
 
