@@ -25,6 +25,7 @@ latest-milestone: "v0"
   - [Stripe Reference Implementation](#stripe-reference-implementation)
   - [Portal Integration](#portal-integration)
   - [Default Payment Method](#default-payment-method)
+  - [Billing Account Side Effects](#billing-account-side-effects)
   - [Ownership and Deletion](#ownership-and-deletion)
   - [RBAC Boundaries](#rbac-boundaries)
 - [Implementation History](#implementation-history)
@@ -597,11 +598,83 @@ either controller reconciles.
 admission webhook validates that the referenced payment method exists and is in
 the `Active` phase before accepting the update.
 
-When a `PaymentMethod` that is currently the default transitions out of the
-`Active` phase (e.g. due to a card expiry), the billing service controller sets
-a condition on the `BillingAccount` surfacing the degraded state. The reference
-is not automatically cleared — an operator or the portal must explicitly update
-`defaultPaymentMethodRef` to a healthy payment method.
+### Billing Account Side Effects
+
+Payment methods have direct consequences on the health and capabilities of the
+`BillingAccount` they belong to. The billing service controller watches
+`PaymentMethod` resources and reconciles the owning `BillingAccount` whenever
+relevant state changes.
+
+**`DefaultPaymentMethodReady` condition:**
+
+The billing service maintains a `DefaultPaymentMethodReady` condition on
+`BillingAccount` status that reflects whether the account has a usable default
+payment instrument. This is the primary signal for the portal to surface
+payment method health to the account owner, and for downstream services
+(invoicing, charge processing) to gate operations that require a working payment
+source.
+
+| Reason | Status | Meaning |
+|---|---|---|
+| `NotConfigured` | `False` | No `defaultPaymentMethodRef` is set on the account |
+| `PaymentMethodNotFound` | `False` | The referenced `PaymentMethod` no longer exists |
+| `PaymentMethodDegraded` | `False` | The referenced `PaymentMethod` exists but is not `Active` |
+| `Ready` | `True` | The referenced `PaymentMethod` is `Active` |
+
+**Example — account with no payment method configured:**
+
+```yaml
+status:
+  phase: Ready
+  conditions:
+    - type: DefaultPaymentMethodReady
+      status: "False"
+      reason: NotConfigured
+      message: "No default payment method has been configured for this billing account."
+```
+
+**Example — account with an active default payment method:**
+
+```yaml
+status:
+  phase: Ready
+  conditions:
+    - type: DefaultPaymentMethodReady
+      status: "True"
+      reason: Ready
+      message: "Default payment method is active."
+```
+
+**Example — default payment method has degraded:**
+
+```yaml
+status:
+  phase: Ready
+  conditions:
+    - type: DefaultPaymentMethodReady
+      status: "False"
+      reason: PaymentMethodDegraded
+      message: "Default payment method 'corp-visa' is in Failed phase. Update defaultPaymentMethodRef to an active payment method."
+```
+
+**Phase implications:**
+
+The `DefaultPaymentMethodReady` condition does not directly affect the
+`BillingAccount` phase. An account without a payment method can still be
+`Ready` and accept project bindings — the absence of a payment method is a
+configuration gap, not a lifecycle failure. Downstream services that require a
+payment source (e.g. invoice payment) gate on the condition directly rather
+than on account phase.
+
+**Stale reference handling:**
+
+When a `PaymentMethod` transitions out of `Active` (e.g. card declined or
+expired), the billing service controller detects the change and updates the
+`DefaultPaymentMethodReady` condition to `False` with reason
+`PaymentMethodDegraded`. The `defaultPaymentMethodRef` is not automatically
+cleared — the account owner must explicitly designate a new default payment
+method. This preserves intent: the owner chose that instrument and should
+consciously replace it rather than having it silently removed.
 
 ### Ownership and Deletion
 
