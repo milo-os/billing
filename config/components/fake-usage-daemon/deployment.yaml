@@ -21,6 +21,7 @@ spec:
       labels:
         app.kubernetes.io/name: billing
         app.kubernetes.io/component: fake-usage-daemon
+        billing.miloapis.com/emits-usage: "true"
     spec:
       serviceAccountName: billing-controller-manager
       securityContext:
