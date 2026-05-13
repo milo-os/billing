@@ -1,0 +1,14 @@
+# BillingAccount referenced by the fake-usage binding. Installed before the
+# binding so admission validation can resolve the account on first apply.
+# Non-production environments only.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Component
+
+resources:
+  - billingaccount.yaml
+
+labels:
+  - includeSelectors: true
+    pairs:
+      app.kubernetes.io/component: fake-usage
+      app.kubernetes.io/part-of: datum-cloud
