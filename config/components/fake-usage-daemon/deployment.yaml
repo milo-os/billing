@@ -1,0 +1,107 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+# Deploys the fake-usage-daemon as a standalone pod.
+# Staging only — never apply in production.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: billing-fake-usage-daemon
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: fake-usage-daemon
+    app.kubernetes.io/managed-by: kustomize
+    billing.miloapis.com/emits-usage: "true"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing
+      app.kubernetes.io/component: fake-usage-daemon
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: billing
+        app.kubernetes.io/component: fake-usage-daemon
+    spec:
+      serviceAccountName: billing-controller-manager
+      securityContext:
+        runAsNonRoot: true
+      containers:
+        - name: fake-usage-daemon
+          image: ghcr.io/milo-os/billing:dev
+          command:
+            - /billing
+          args:
+            - fake-usage-daemon
+            - --server-config=/config/config.yaml
+            - --fake-usage-endpoint=$(FAKE_USAGE_ENDPOINT)
+            - --fake-usage-interval=$(FAKE_USAGE_INTERVAL)
+            - --fake-usage-bindings=$(FAKE_USAGE_BINDINGS)
+            - --fake-usage-meters=$(FAKE_USAGE_METERS)
+            - --health-probe-bind-address=:8081
+          env:
+            - name: FAKE_USAGE_ENDPOINT
+              value: ""
+            - name: FAKE_USAGE_INTERVAL
+              value: "30s"
+            - name: FAKE_USAGE_BINDINGS
+              value: ""
+            - name: FAKE_USAGE_METERS
+              value: ""
+          livenessProbe:
+            httpGet:
+              path: /healthz
+              port: 8081
+            initialDelaySeconds: 15
+            periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /readyz
+              port: 8081
+            initialDelaySeconds: 5
+            periodSeconds: 10
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop:
+                - "ALL"
+          resources:
+            limits:
+              cpu: 100m
+              memory: 64Mi
+            requests:
+              cpu: 10m
+              memory: 32Mi
+          volumeMounts:
+            - name: config
+              mountPath: /config
+            - name: trust-bundle
+              mountPath: /etc/kubernetes/pki/trust
+              readOnly: true
+            - name: discovery-kubeconfig
+              mountPath: /etc/kubernetes/project-discovery/auth
+              readOnly: true
+            - name: client-cert
+              mountPath: /etc/kubernetes/projects/pki/client
+              readOnly: true
+      terminationGracePeriodSeconds: 30
+      volumes:
+        - name: config
+          configMap:
+            name: billing-config
+        - name: trust-bundle
+          configMap:
+            name: datum-control-plane-trust-bundle
+        - name: discovery-kubeconfig
+          configMap:
+            name: billing-discovery-kubeconfig
+        - name: client-cert
+          csi:
+            driver: csi.cert-manager.io
+            readOnly: true
+            volumeAttributes:
+              csi.cert-manager.io/common-name: system:control@billing.miloapis.com
+              csi.cert-manager.io/fs-group: "65532"
+              csi.cert-manager.io/issuer-kind: ClusterIssuer
+              csi.cert-manager.io/issuer-name: datum-control-plane
+              csi.cert-manager.io/key-usages: client auth
+              csi.cert-manager.io/organizations: system:masters
