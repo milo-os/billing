@@ -23,6 +23,6 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 	}
 	root.AddCommand(newOperatorCommand(info))
 	root.AddCommand(newGatewayCommand())
-	root.AddCommand(newFakeUsageDaemonCommand())
+	root.AddCommand(newUsageGeneratorCommand())
 	return root
 }

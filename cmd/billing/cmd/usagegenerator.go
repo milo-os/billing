@@ -18,30 +18,30 @@ import (
 
 	"go.miloapis.com/billing/emission"
 	"go.miloapis.com/billing/internal/config"
-	"go.miloapis.com/billing/internal/fakeusage"
+	"go.miloapis.com/billing/internal/usagegenerator"
 )
 
-func newFakeUsageDaemonCommand() *cobra.Command {
+func newUsageGeneratorCommand() *cobra.Command {
 	var (
-		serverConfigFile  string
-		probeAddr         string
-		fakeUsageEndpoint string
-		fakeUsageInterval time.Duration
-		fakeUsageBindings []string
-		fakeUsageMeters   []string
+		serverConfigFile string
+		probeAddr        string
+		endpoint         string
+		interval         time.Duration
+		bindings         []string
+		meters           []string
 	)
 
 	opts := zap.Options{Development: true}
 
 	cmd := &cobra.Command{
-		Use:   "fake-usage-daemon",
-		Short: "Run the fake usage daemon (dev/staging only)",
+		Use:   "usage-generator",
+		Short: "Run the usage generator (dev/staging only)",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 			log := ctrl.Log.WithName("setup")
 
-			if fakeUsageEndpoint == "" {
-				return fmt.Errorf("--fake-usage-endpoint is required")
+			if endpoint == "" {
+				return fmt.Errorf("--endpoint is required")
 			}
 
 			var serverConfig config.BillingOperator
@@ -62,11 +62,11 @@ func newFakeUsageDaemonCommand() *cobra.Command {
 				return fmt.Errorf("loading rest config: %w", err)
 			}
 
-			includedBindings := make([]types.NamespacedName, 0, len(fakeUsageBindings))
-			for _, ref := range fakeUsageBindings {
+			includedBindings := make([]types.NamespacedName, 0, len(bindings))
+			for _, ref := range bindings {
 				ns, name, ok := strings.Cut(ref, "/")
 				if !ok {
-					return fmt.Errorf("invalid --fake-usage-bindings %q: expected namespace/name", ref)
+					return fmt.Errorf("invalid --bindings %q: expected namespace/name", ref)
 				}
 				includedBindings = append(includedBindings, types.NamespacedName{Namespace: ns, Name: name})
 			}
@@ -79,21 +79,21 @@ func newFakeUsageDaemonCommand() *cobra.Command {
 				return fmt.Errorf("creating manager: %w", err)
 			}
 
-			recorder, err := emission.NewUsageRecorder(emission.WithEndpoint(fakeUsageEndpoint))
+			recorder, err := emission.NewUsageRecorder(emission.WithEndpoint(endpoint))
 			if err != nil {
 				return fmt.Errorf("creating usage recorder: %w", err)
 			}
 
-			daemon := &fakeusage.FakeUsageDaemon{
+			generator := &usagegenerator.UsageGenerator{
 				Client:           mgr.GetClient(),
 				Recorder:         recorder,
-				Interval:         fakeUsageInterval,
-				Meters:           fakeUsageMeters,
+				Interval:         interval,
+				Meters:           meters,
 				IncludedBindings: includedBindings,
-				Logger:           ctrl.Log.WithName("fake-usage-daemon"),
+				Logger:           ctrl.Log.WithName("usage-generator"),
 			}
-			if err := mgr.Add(daemon); err != nil {
-				return fmt.Errorf("adding FakeUsageDaemon: %w", err)
+			if err := mgr.Add(generator); err != nil {
+				return fmt.Errorf("adding UsageGenerator: %w", err)
 			}
 
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
@@ -103,11 +103,11 @@ func newFakeUsageDaemonCommand() *cobra.Command {
 				return fmt.Errorf("setting up ready check: %w", err)
 			}
 
-			log.Info("starting fake-usage daemon",
-				"endpoint", fakeUsageEndpoint,
-				"interval", fakeUsageInterval,
-				"bindings", fakeUsageBindings,
-				"meters", fakeUsageMeters,
+			log.Info("starting usage-generator",
+				"endpoint", endpoint,
+				"interval", interval,
+				"bindings", bindings,
+				"meters", meters,
 			)
 
 			ctx := ctrl.SetupSignalHandler()
@@ -120,12 +120,11 @@ func newFakeUsageDaemonCommand() *cobra.Command {
 
 	cmd.Flags().StringVar(&serverConfigFile, "server-config", "", "Path to the BillingOperator config file.")
 	cmd.Flags().StringVar(&probeAddr, "health-probe-bind-address", ":8081", "The address the health probe endpoint binds to.")
-	cmd.Flags().StringVar(&fakeUsageEndpoint, "fake-usage-endpoint", "",
-		"HTTP endpoint to emit fake usage events. Empty disables the daemon.")
-	cmd.Flags().DurationVar(&fakeUsageInterval, "fake-usage-interval", 30*time.Second, "Interval between emission ticks.")
-	cmd.Flags().StringSliceVar(&fakeUsageBindings, "fake-usage-bindings", nil,
+	cmd.Flags().StringVar(&endpoint, "endpoint", "", "HTTP endpoint to emit usage events (required).")
+	cmd.Flags().DurationVar(&interval, "interval", 30*time.Second, "Interval between emission ticks.")
+	cmd.Flags().StringSliceVar(&bindings, "bindings", nil,
 		"BillingAccountBindings to emit usage for, as namespace/name pairs.")
-	cmd.Flags().StringSliceVar(&fakeUsageMeters, "fake-usage-meters", nil,
+	cmd.Flags().StringSliceVar(&meters, "meters", nil,
 		"Meter names to emit. Empty uses built-in defaults.")
 
 	zapFlags := flag.NewFlagSet("zap", flag.ContinueOnError)

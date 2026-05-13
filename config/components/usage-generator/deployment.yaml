@@ -1,52 +1,51 @@
 # SPDX-License-Identifier: AGPL-3.0-only
-# Deploys the fake-usage-daemon as a standalone pod.
+# Deploys the usage-generator as a standalone pod.
 # Staging only — never apply in production.
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: billing-fake-usage-daemon
+  name: billing-usage-generator
   labels:
     app.kubernetes.io/name: billing
-    app.kubernetes.io/component: fake-usage-daemon
+    app.kubernetes.io/component: usage-generator
     app.kubernetes.io/managed-by: kustomize
-    billing.miloapis.com/emits-usage: "true"
 spec:
   replicas: 1
   selector:
     matchLabels:
       app.kubernetes.io/name: billing
-      app.kubernetes.io/component: fake-usage-daemon
+      app.kubernetes.io/component: usage-generator
   template:
     metadata:
       labels:
         app.kubernetes.io/name: billing
-        app.kubernetes.io/component: fake-usage-daemon
+        app.kubernetes.io/component: usage-generator
         billing.miloapis.com/emits-usage: "true"
     spec:
       serviceAccountName: billing-controller-manager
       securityContext:
         runAsNonRoot: true
       containers:
-        - name: fake-usage-daemon
+        - name: usage-generator
           image: ghcr.io/milo-os/billing:dev
           command:
             - /billing
           args:
-            - fake-usage-daemon
+            - usage-generator
             - --server-config=/config/config.yaml
-            - --fake-usage-endpoint=$(FAKE_USAGE_ENDPOINT)
-            - --fake-usage-interval=$(FAKE_USAGE_INTERVAL)
-            - --fake-usage-bindings=$(FAKE_USAGE_BINDINGS)
-            - --fake-usage-meters=$(FAKE_USAGE_METERS)
+            - --endpoint=$(ENDPOINT)
+            - --interval=$(INTERVAL)
+            - --bindings=$(BINDINGS)
+            - --meters=$(METERS)
             - --health-probe-bind-address=:8081
           env:
-            - name: FAKE_USAGE_ENDPOINT
+            - name: ENDPOINT
               value: ""
-            - name: FAKE_USAGE_INTERVAL
+            - name: INTERVAL
               value: "30s"
-            - name: FAKE_USAGE_BINDINGS
+            - name: BINDINGS
               value: ""
-            - name: FAKE_USAGE_METERS
+            - name: METERS
               value: ""
           livenessProbe:
             httpGet:
