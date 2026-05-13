@@ -7,6 +7,8 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"strings"
+	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
@@ -14,6 +16,7 @@ import (
 	"github.com/spf13/cobra"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
+	"k8s.io/apimachinery/pkg/types"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -23,9 +26,11 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/emission"
 	"go.miloapis.com/billing/internal/config"
 	"go.miloapis.com/billing/internal/controller"
 	"go.miloapis.com/billing/internal/controller/consumer"
+	"go.miloapis.com/billing/internal/controller/fakeusage"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
 )
 
@@ -47,6 +52,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 		leaderElectionNamespace string
 		probeAddr               string
 		serverConfigFile        string
+		fakeUsageEndpoint       string
+		fakeUsageInterval       time.Duration
+		fakeUsageBindings       []string
 	)
 
 	opts := zap.Options{
@@ -208,6 +216,39 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				setupLog.Info("natsConfig not set; UsageConsumer disabled")
 			}
 
+			// Register the FakeUsageDaemon if an endpoint is configured (dev/demo only).
+			if fakeUsageEndpoint != "" {
+				includedBindings := make([]types.NamespacedName, 0, len(fakeUsageBindings))
+				for _, ref := range fakeUsageBindings {
+					ns, name, ok := strings.Cut(ref, "/")
+					if !ok {
+						return fmt.Errorf("invalid --fake-usage-binding %q: expected namespace/name", ref)
+					}
+					includedBindings = append(includedBindings, types.NamespacedName{Namespace: ns, Name: name})
+				}
+
+				setupLog.Info("fake usage endpoint configured; registering FakeUsageDaemon",
+					"endpoint", fakeUsageEndpoint,
+					"interval", fakeUsageInterval,
+					"bindings", fakeUsageBindings,
+				)
+				recorder, err := emission.NewUsageRecorder(emission.WithEndpoint(fakeUsageEndpoint))
+				if err != nil {
+					return fmt.Errorf("creating fake usage recorder: %w", err)
+				}
+				daemon := &fakeusage.FakeUsageDaemon{
+					Client:           mgr.GetClient(),
+					Recorder:         recorder,
+					Interval:         fakeUsageInterval,
+					IncludedBindings: includedBindings,
+					Logger:           ctrl.Log.WithName("fake-usage-daemon"),
+				}
+				if err := mgr.Add(daemon); err != nil {
+					return fmt.Errorf("adding FakeUsageDaemon to manager: %w", err)
+				}
+				setupLog.Info("FakeUsageDaemon registered")
+			}
+
 			if serverConfig.WebhookServer != nil {
 				if err = billingwebhooks.SetupBillingAccountWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating BillingAccount webhook: %w", err)
@@ -250,6 +291,12 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			"Enabling this will ensure there is only one active controller manager.")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-elect-namespace", "", "The namespace to use for leader election.")
 	cmd.Flags().StringVar(&serverConfigFile, "server-config", "", "Path to the server config file.")
+	cmd.Flags().StringVar(&fakeUsageEndpoint, "fake-usage-endpoint", "",
+		"HTTP endpoint to emit fake usage events (e.g. http://billing-usage-collector-vector.billing-system.svc.cluster.local:9880/cloudevents). Empty disables the daemon. Dev/demo only.")
+	cmd.Flags().DurationVar(&fakeUsageInterval, "fake-usage-interval", 30*time.Second,
+		"Interval between fake usage emission ticks.")
+	cmd.Flags().StringSliceVar(&fakeUsageBindings, "fake-usage-bindings", nil,
+		"BillingAccountBindings to emit usage for, as namespace/name pairs (e.g. milo-system/fake-usage). Dev/demo only.")
 
 	// zap.Options.BindFlags accepts *flag.FlagSet (stdlib). Bridge via pflag's
 	// AddGoFlagSet so the zap flags are surfaced on the cobra command.

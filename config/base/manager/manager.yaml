@@ -18,6 +18,7 @@ spec:
       labels:
         control-plane: billing
         app.kubernetes.io/name: billing
+        billing.miloapis.com/emits-usage: "true"
     spec:
       securityContext:
         runAsNonRoot: true
@@ -46,6 +47,19 @@ spec:
           - --leader-elect-namespace=kube-system
           - --health-probe-bind-address=:8081
           - --server-config=/config/config.yaml
+          - --fake-usage-endpoint=$(FAKE_USAGE_ENDPOINT)
+          - --fake-usage-interval=$(FAKE_USAGE_INTERVAL)
+          - --fake-usage-bindings=$(FAKE_USAGE_BINDINGS)
+        env:
+          # Defaults keep the FakeUsageDaemon off. Overlays opt in by setting
+          # FAKE_USAGE_ENDPOINT (and typically FAKE_USAGE_BINDINGS). Never set
+          # these in production.
+          - name: FAKE_USAGE_ENDPOINT
+            value: ""
+          - name: FAKE_USAGE_INTERVAL
+            value: "30s"
+          - name: FAKE_USAGE_BINDINGS
+            value: ""
         image: ghcr.io/milo-os/billing:dev
         name: manager
         ports:
