@@ -55,6 +55,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 		fakeUsageEndpoint       string
 		fakeUsageInterval       time.Duration
 		fakeUsageBindings       []string
+		fakeUsageMeters         []string
 	)
 
 	opts := zap.Options{
@@ -231,6 +232,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					"endpoint", fakeUsageEndpoint,
 					"interval", fakeUsageInterval,
 					"bindings", fakeUsageBindings,
+					"meters", fakeUsageMeters,
 				)
 				recorder, err := emission.NewUsageRecorder(emission.WithEndpoint(fakeUsageEndpoint))
 				if err != nil {
@@ -240,6 +242,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					Client:           mgr.GetClient(),
 					Recorder:         recorder,
 					Interval:         fakeUsageInterval,
+					Meters:           fakeUsageMeters,
 					IncludedBindings: includedBindings,
 					Logger:           ctrl.Log.WithName("fake-usage-daemon"),
 				}
@@ -297,6 +300,8 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 		"Interval between fake usage emission ticks.")
 	cmd.Flags().StringSliceVar(&fakeUsageBindings, "fake-usage-bindings", nil,
 		"BillingAccountBindings to emit usage for, as namespace/name pairs (e.g. milo-system/fake-usage). Dev/demo only.")
+	cmd.Flags().StringSliceVar(&fakeUsageMeters, "fake-usage-meters", nil,
+		"Meter names to emit on each tick (e.g. compute.datumapis.com/instance/uptime-seconds). Empty uses the built-in defaults. Dev/demo only.")
 
 	// zap.Options.BindFlags accepts *flag.FlagSet (stdlib). Bridge via pflag's
 	// AddGoFlagSet so the zap flags are surfaced on the cobra command.

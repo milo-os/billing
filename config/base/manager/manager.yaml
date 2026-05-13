@@ -50,6 +50,7 @@ spec:
           - --fake-usage-endpoint=$(FAKE_USAGE_ENDPOINT)
           - --fake-usage-interval=$(FAKE_USAGE_INTERVAL)
           - --fake-usage-bindings=$(FAKE_USAGE_BINDINGS)
+          - --fake-usage-meters=$(FAKE_USAGE_METERS)
         env:
           # Defaults keep the FakeUsageDaemon off. Overlays opt in by setting
           # FAKE_USAGE_ENDPOINT (and typically FAKE_USAGE_BINDINGS). Never set
@@ -59,6 +60,8 @@ spec:
           - name: FAKE_USAGE_INTERVAL
             value: "30s"
           - name: FAKE_USAGE_BINDINGS
+            value: ""
+          - name: FAKE_USAGE_METERS
             value: ""
         image: ghcr.io/milo-os/billing:dev
         name: manager
