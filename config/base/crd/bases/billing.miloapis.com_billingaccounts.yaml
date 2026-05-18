@@ -75,6 +75,19 @@ spec:
                   This field is immutable once the account transitions past Provisioning phase.
                 pattern: ^[A-Z]{3}$
                 type: string
+              paymentProviderRef:
+                description: |-
+                  PaymentProviderRef references the PaymentProvider used to collect
+                  and charge against this account's payment method. When unset, the
+                  account cannot accept a payment method or transition to Ready.
+                properties:
+                  name:
+                    description: Name is the name of the PaymentProvider.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               paymentTerms:
                 description: PaymentTerms defines the invoicing schedule for this
                   billing account.
@@ -183,6 +196,65 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              paymentMethod:
+                description: |-
+                  PaymentMethod is the sanitized metadata for the payment method
+                  currently attached to this account. When unset, the account has no
+                  usable payment method and cannot be charged.
+                properties:
+                  attachedAt:
+                    description: AttachedAt is the time the payment method was attached.
+                    format: date-time
+                    type: string
+                  avsResult:
+                    description: |-
+                      AVSResult is the Address Verification System result code returned
+                      by the issuer (e.g. `Y`, `N`, `unchecked`).
+                    type: string
+                  bin:
+                    description: |-
+                      BIN is the card issuer identification number (first 6-8 digits).
+                      Stored to feed downstream fraud scoring; never the full PAN.
+                    type: string
+                  brand:
+                    description: Brand is the card network (e.g. `visa`, `mastercard`).
+                    type: string
+                  country:
+                    description: Country is the ISO 3166-1 alpha-2 country code of
+                      the issuer.
+                    type: string
+                  cvcResult:
+                    description: |-
+                      CVCResult is the CVC verification result returned by the issuer
+                      (e.g. `pass`, `fail`, `unchecked`).
+                    type: string
+                  expMonth:
+                    description: ExpMonth is the card expiration month (1-12).
+                    format: int32
+                    type: integer
+                  expYear:
+                    description: ExpYear is the card expiration year (four digits).
+                    format: int32
+                    type: integer
+                  last4:
+                    description: Last4 is the last four digits of the card.
+                    type: string
+                  paymentMethodId:
+                    description: |-
+                      PaymentMethodID is the upstream payment-method identifier (e.g.
+                      Stripe `pm_…`).
+                    type: string
+                  providerCustomerId:
+                    description: |-
+                      ProviderCustomerID is the upstream customer identifier (e.g.
+                      Stripe `cus_…`).
+                    type: string
+                  setupIntentId:
+                    description: |-
+                      SetupIntentID is the upstream SetupIntent that produced this
+                      payment method.
+                    type: string
+                type: object
               phase:
                 description: Phase represents the current lifecycle phase of the billing
                   account.

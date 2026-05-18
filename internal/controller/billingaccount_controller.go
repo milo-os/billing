@@ -106,15 +106,38 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 }
 
 // determinePhase computes the target phase based on the account's current
-// state. Suspended and Archived are managed externally (by admin or payment
-// system); all other phases converge to Ready.
+// state.
+//
+//   - Suspended / Archived are externally managed and sticky.
+//   - When a PaymentProviderRef is set, the account stays in Provisioning
+//     until both PaymentMethodAttached and PlatformAccessApproved
+//     conditions are True. PaymentMethodAttached is set by the Stripe
+//     webhook handler; PlatformAccessApproved is set by the fraud
+//     operator after a successful evaluation. Both gates exist because
+//     the platform requires a confirmed card *and* a fraud-clean user
+//     before billing is usable.
+//   - When no PaymentProviderRef is set the account skips the payment gate
+//     and converges to Ready (preserves the today-behavior path for
+//     legacy / test accounts).
 func (r *BillingAccountReconciler) determinePhase(account *billingv1alpha1.BillingAccount) billingv1alpha1.BillingAccountPhase {
 	switch account.Status.Phase {
 	case billingv1alpha1.BillingAccountPhaseSuspended,
 		billingv1alpha1.BillingAccountPhaseArchived:
 		return account.Status.Phase
 	}
-	return billingv1alpha1.BillingAccountPhaseReady
+	if account.Spec.PaymentProviderRef == nil {
+		return billingv1alpha1.BillingAccountPhaseReady
+	}
+	if isConditionTrue(account.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentMethodAttached) &&
+		isConditionTrue(account.Status.Conditions, billingv1alpha1.BillingAccountConditionPlatformAccessApproved) {
+		return billingv1alpha1.BillingAccountPhaseReady
+	}
+	return billingv1alpha1.BillingAccountPhaseProvisioning
+}
+
+func isConditionTrue(conds []metav1.Condition, condType string) bool {
+	c := apimeta.FindStatusCondition(conds, condType)
+	return c != nil && c.Status == metav1.ConditionTrue
 }
 
 // countActiveBindings counts the number of active BillingAccountBindings

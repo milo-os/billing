@@ -26,6 +26,7 @@ import (
 	"go.miloapis.com/billing/internal/config"
 	"go.miloapis.com/billing/internal/controller"
 	"go.miloapis.com/billing/internal/controller/consumer"
+	stripeprovider "go.miloapis.com/billing/internal/payment/stripe"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
 )
 
@@ -47,6 +48,10 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 		leaderElectionNamespace string
 		probeAddr               string
 		serverConfigFile        string
+		stripeWebhookAddr       string
+		stripeProviderName      string
+		stripeWebhookTLSCert    string
+		stripeWebhookTLSKey     string
 	)
 
 	opts := zap.Options{
@@ -130,6 +135,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			}
 			if err = (&controller.MonitoredResourceTypeReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating MonitoredResourceType controller: %w", err)
+			}
+			if err = (&controller.PaymentMethodSetupReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating PaymentMethodSetup controller: %w", err)
 			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
@@ -229,6 +237,25 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				}
 			}
 
+			if stripeProviderName != "" {
+				webhookRunnable, err := stripeprovider.NewRunnable(stripeprovider.ServerOptions{
+					Addr:         stripeWebhookAddr,
+					ProviderName: stripeProviderName,
+					TLSCertFile:  stripeWebhookTLSCert,
+					TLSKeyFile:   stripeWebhookTLSKey,
+				}, mgr)
+				if err != nil {
+					return fmt.Errorf("building Stripe webhook server: %w", err)
+				}
+				if err := mgr.Add(webhookRunnable); err != nil {
+					return fmt.Errorf("adding Stripe webhook server to manager: %w", err)
+				}
+				setupLog.Info("Stripe webhook server registered",
+					"addr", stripeWebhookAddr, "provider", stripeProviderName)
+			} else {
+				setupLog.Info("stripe-provider flag not set; Stripe webhook server disabled")
+			}
+
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 				return fmt.Errorf("setting up health check: %w", err)
 			}
@@ -250,6 +277,10 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			"Enabling this will ensure there is only one active controller manager.")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-elect-namespace", "", "The namespace to use for leader election.")
 	cmd.Flags().StringVar(&serverConfigFile, "server-config", "", "Path to the server config file.")
+	cmd.Flags().StringVar(&stripeWebhookAddr, "stripe-webhook-addr", ":8090", "Listen address for the Stripe webhook server.")
+	cmd.Flags().StringVar(&stripeProviderName, "stripe-provider", "", "Name of the PaymentProvider CR to authenticate Stripe webhooks against. When empty, the webhook server is disabled.")
+	cmd.Flags().StringVar(&stripeWebhookTLSCert, "stripe-webhook-tls-cert", "", "Path to TLS certificate for the Stripe webhook server. When empty, the server listens HTTP and expects TLS to be terminated upstream.")
+	cmd.Flags().StringVar(&stripeWebhookTLSKey, "stripe-webhook-tls-key", "", "Path to TLS private key for the Stripe webhook server.")
 
 	// zap.Options.BindFlags accepts *flag.FlagSet (stdlib). Bridge via pflag's
 	// AddGoFlagSet so the zap flags are surfaced on the cobra command.

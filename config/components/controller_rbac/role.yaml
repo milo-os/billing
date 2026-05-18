@@ -5,6 +5,14 @@ metadata:
   name: billing-controller-manager
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
   - billing.miloapis.com
   resources:
   - billingaccountbindings
@@ -35,44 +43,26 @@ rules:
   - billingaccounts/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
+  - paymentmethodsetups/status
   verbs:
   - get
   - patch
   - update
 - apiGroups:
-  - ""
+  - billing.miloapis.com
   resources:
-  - secrets
+  - paymentmethodsetups
   verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
   - get
   - list
   - patch
   - update
   - watch
 - apiGroups:
-  - coordination.k8s.io
+  - billing.miloapis.com
   resources:
-  - leases
+  - paymentproviders
   verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch

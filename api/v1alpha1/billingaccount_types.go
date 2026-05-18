@@ -42,6 +42,22 @@ type BillingAccountSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	ContactInfo *BillingContactInfo `json:"contactInfo,omitempty"`
+
+	// PaymentProviderRef references the PaymentProvider used to collect
+	// and charge against this account's payment method. When unset, the
+	// account cannot accept a payment method or transition to Ready.
+	//
+	// +kubebuilder:validation:Optional
+	PaymentProviderRef *PaymentProviderRef `json:"paymentProviderRef,omitempty"`
+}
+
+// PaymentProviderRef is a reference to a cluster-scoped PaymentProvider.
+type PaymentProviderRef struct {
+	// Name is the name of the PaymentProvider.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // PaymentTerms defines the payment schedule for a billing account.
@@ -83,6 +99,91 @@ type BillingContactInfo struct {
 	Name string `json:"name,omitempty"`
 }
 
+// BillingAccount condition types.
+const (
+	// BillingAccountConditionPaymentMethodAttached is True when the account
+	// has a confirmed payment method available for charging.
+	BillingAccountConditionPaymentMethodAttached = "PaymentMethodAttached"
+
+	// BillingAccountConditionPlatformAccessApproved is True when the fraud
+	// system has approved the owning user for platform access. This is a
+	// mirror of the upstream PlatformAccessApproval and is one of the gates
+	// for transitioning the account to Ready.
+	BillingAccountConditionPlatformAccessApproved = "PlatformAccessApproved"
+)
+
+// PaymentMethodInfo is the sanitized, public-safe metadata about the
+// payment method currently attached to a BillingAccount. Raw card data is
+// never stored here; everything in this struct is acceptable to expose to
+// the BillingAccount owner.
+type PaymentMethodInfo struct {
+	// ProviderCustomerID is the upstream customer identifier (e.g.
+	// Stripe `cus_…`).
+	//
+	// +kubebuilder:validation:Optional
+	ProviderCustomerID string `json:"providerCustomerId,omitempty"`
+
+	// PaymentMethodID is the upstream payment-method identifier (e.g.
+	// Stripe `pm_…`).
+	//
+	// +kubebuilder:validation:Optional
+	PaymentMethodID string `json:"paymentMethodId,omitempty"`
+
+	// SetupIntentID is the upstream SetupIntent that produced this
+	// payment method.
+	//
+	// +kubebuilder:validation:Optional
+	SetupIntentID string `json:"setupIntentId,omitempty"`
+
+	// Brand is the card network (e.g. `visa`, `mastercard`).
+	//
+	// +kubebuilder:validation:Optional
+	Brand string `json:"brand,omitempty"`
+
+	// Last4 is the last four digits of the card.
+	//
+	// +kubebuilder:validation:Optional
+	Last4 string `json:"last4,omitempty"`
+
+	// BIN is the card issuer identification number (first 6-8 digits).
+	// Stored to feed downstream fraud scoring; never the full PAN.
+	//
+	// +kubebuilder:validation:Optional
+	BIN string `json:"bin,omitempty"`
+
+	// Country is the ISO 3166-1 alpha-2 country code of the issuer.
+	//
+	// +kubebuilder:validation:Optional
+	Country string `json:"country,omitempty"`
+
+	// ExpMonth is the card expiration month (1-12).
+	//
+	// +kubebuilder:validation:Optional
+	ExpMonth int32 `json:"expMonth,omitempty"`
+
+	// ExpYear is the card expiration year (four digits).
+	//
+	// +kubebuilder:validation:Optional
+	ExpYear int32 `json:"expYear,omitempty"`
+
+	// AVSResult is the Address Verification System result code returned
+	// by the issuer (e.g. `Y`, `N`, `unchecked`).
+	//
+	// +kubebuilder:validation:Optional
+	AVSResult string `json:"avsResult,omitempty"`
+
+	// CVCResult is the CVC verification result returned by the issuer
+	// (e.g. `pass`, `fail`, `unchecked`).
+	//
+	// +kubebuilder:validation:Optional
+	CVCResult string `json:"cvcResult,omitempty"`
+
+	// AttachedAt is the time the payment method was attached.
+	//
+	// +kubebuilder:validation:Optional
+	AttachedAt *metav1.Time `json:"attachedAt,omitempty"`
+}
+
 // BillingAccountStatus defines the observed state of a BillingAccount.
 type BillingAccountStatus struct {
 	// Phase represents the current lifecycle phase of the billing account.
@@ -103,6 +204,13 @@ type BillingAccountStatus struct {
 	//
 	// +kubebuilder:validation:Optional
 	LinkedProjectsCount int32 `json:"linkedProjectsCount,omitempty"`
+
+	// PaymentMethod is the sanitized metadata for the payment method
+	// currently attached to this account. When unset, the account has no
+	// usable payment method and cannot be charged.
+	//
+	// +kubebuilder:validation:Optional
+	PaymentMethod *PaymentMethodInfo `json:"paymentMethod,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed by the controller.
 	//
