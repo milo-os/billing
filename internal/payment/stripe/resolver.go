@@ -86,7 +86,7 @@ func readSecretKey(ctx context.Context, c client.Reader, ref corev1.SecretKeySel
 	}
 	v, ok := s.Data[ref.Key]
 	if !ok {
-		return "", fmt.Errorf("Secret %s/%s has no key %q", ProviderSecretsNamespace, ref.Name, ref.Key)
+		return "", fmt.Errorf("secret %s/%s has no key %q", ProviderSecretsNamespace, ref.Name, ref.Key)
 	}
 	return string(v), nil
 }
