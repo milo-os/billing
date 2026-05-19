@@ -27,6 +27,6 @@ jobs:
     with:
       bundle-name: ghcr.io/milo-os/billing-kustomize
       bundle-path: config
-      image-overlays: config/base/manager,config/base/gateway
+      image-overlays: config/base/manager,config/base/gateway,config/components/usage-generator
       image-name: ghcr.io/milo-os/billing
     secrets: inherit

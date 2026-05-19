@@ -18,6 +18,7 @@ RUN go mod download
 COPY cmd/ cmd/
 COPY api/ api/
 COPY internal/ internal/
+COPY emission/ emission/
 
 # Build
 ENV GOCACHE=/root/.cache/go-build
