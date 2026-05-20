@@ -24,10 +24,7 @@ func newMeterDefinition(name, meterName string, dims ...string) *billingv1alpha1
 				Unit:        "s",
 				Dimensions:  dims,
 			},
-			Billing: billingv1alpha1.MeterBilling{
-				ConsumedUnit: "s",
-				PricingUnit:  "h",
-			},
+			Billing: billingv1alpha1.MeterBilling{},
 		},
 	}
 }
@@ -37,6 +34,16 @@ func TestValidateMeterDefinitionCreate(t *testing.T) {
 	errs := ValidateMeterDefinitionCreate(md)
 	if len(errs) != 0 {
 		t.Errorf("expected no errors for valid MeterDefinition, got: %v", errs)
+	}
+}
+
+func TestValidateMeterDefinitionEmptyBilling(t *testing.T) {
+	md := newMeterDefinition("test-meter-empty-billing", "compute.miloapis.com/instance/cpu-seconds")
+	if errs := ValidateMeterDefinitionCreate(md); len(errs) != 0 {
+		t.Errorf("expected no create errors for empty MeterBilling, got: %v", errs)
+	}
+	if errs := ValidateMeterDefinitionUpdate(md, md.DeepCopy()); len(errs) != 0 {
+		t.Errorf("expected no update errors for empty MeterBilling, got: %v", errs)
 	}
 }
 
