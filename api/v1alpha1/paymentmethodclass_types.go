@@ -6,11 +6,16 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
-// IsDefaultPaymentMethodClassAnnotation marks a PaymentMethodClass as the
-// cluster default. Exactly one class may carry this annotation set to
-// "true"; the defaulting webhook for PaymentMethod injects the annotated
-// class into any PaymentMethod that does not specify one.
-const IsDefaultPaymentMethodClassAnnotation = "billing.miloapis.com/is-default-class"
+// IsDefaultPaymentMethodClassLabel marks a PaymentMethodClass as the
+// cluster default. Exactly one class may carry this label set to
+// "true"; the defaulting webhook for PaymentMethod injects the labelled
+// class onto any PaymentMethod that does not specify one.
+//
+// Implemented as a label (rather than an annotation) so consumers can
+// select the default class via a label selector — e.g.
+// client.MatchingLabels{IsDefaultPaymentMethodClassLabel: "true"} —
+// instead of listing every class and filtering in user space.
+const IsDefaultPaymentMethodClassLabel = "billing.miloapis.com/is-default-class"
 
 // PaymentMethodClassSpec defines the desired state of a PaymentMethodClass.
 type PaymentMethodClassSpec struct {
@@ -89,7 +94,7 @@ type PaymentMethodClassStatus struct {
 // +kubebuilder:resource:scope=Cluster
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.provider`
-// +kubebuilder:printcolumn:name="Default",type=string,JSONPath=`.metadata.annotations.billing\.miloapis\.com/is-default-class`
+// +kubebuilder:printcolumn:name="Default",type=string,JSONPath=`.metadata.labels.billing\.miloapis\.com/is-default-class`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 type PaymentMethodClass struct {
 	metav1.TypeMeta   `json:",inline"`

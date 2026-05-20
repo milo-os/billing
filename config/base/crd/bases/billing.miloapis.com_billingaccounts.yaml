@@ -56,20 +56,16 @@ spec:
           spec:
             description: BillingAccountSpec defines the desired state of a BillingAccount.
             properties:
-              billingDetails:
+              contactInfo:
                 description: |-
-                  BillingDetails carries the postal billing address, tax
-                  registrations, and an optional dedicated invoice-recipient email
-                  for this account. All three are surfaced to the configured
-                  payment provider by its provider controller (see
-                  PaymentMethodClass) which is responsible for any
-                  provider-specific translation.
+                  ContactInfo describes the billing contact and the postal
+                  address invoices are issued to.
                 properties:
                   address:
                     description: |-
-                      Address is the postal billing address. Surfaced to the
-                      configured provider controller for invoice rendering and is
-                      available to downstream consumers (e.g. fraud scoring).
+                      Address is the postal billing address. Appears on invoices and
+                      is surfaced to the configured provider controller (e.g. for tax
+                      determination, AVS).
                     properties:
                       city:
                         description: City is the locality.
@@ -113,61 +109,20 @@ spec:
                     required:
                     - country
                     type: object
+                  email:
+                    description: |-
+                      Email is the primary billing contact email. Receives billing
+                      notifications and, when InvoiceEmail is unset, also receives
+                      invoices and receipts.
+                    minLength: 1
+                    type: string
                   invoiceEmail:
                     description: |-
-                      InvoiceEmail overrides spec.contactInfo.email as the destination
-                      for invoices and receipts. When unset, contactInfo.email is used.
+                      InvoiceEmail overrides Email as the destination for invoices and
+                      receipts. When unset, Email is used. Useful when invoices need
+                      to go to an accounts-payable mailbox different from the
+                      account-holder contact.
                     pattern: ^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$
-                    type: string
-                  taxIds:
-                    description: |-
-                      TaxIDs are the tax registrations attached to this account. An
-                      account can carry multiple entries (e.g. an organisation
-                      registered for both GB VAT and EU VAT).
-                    items:
-                      description: |-
-                        TaxID is a single tax registration.
-
-                        Type values follow a vendor-neutral snake-case
-                        `<jurisdiction>_<scheme>` convention — e.g. "gb_vat", "eu_vat",
-                        "us_ein", "au_abn", "ca_gst_hst", "ch_vat", "in_gst", "sg_gst".
-                        The pattern check enforces the shape rather than the exact set of
-                        values, so new schemes can be added without API changes.
-                        Translation to any provider-specific identifier (if needed) is the
-                        responsibility of the provider controller, not this schema.
-                      properties:
-                        type:
-                          description: Type identifies the tax registration scheme
-                            (e.g. "gb_vat").
-                          maxLength: 32
-                          pattern: ^[a-z]{2}_[a-z][a-z_]*$
-                          type: string
-                        value:
-                          description: |-
-                            Value is the registration number / identifier
-                            (e.g. "GB123456789").
-                          maxLength: 64
-                          minLength: 1
-                          type: string
-                      required:
-                      - type
-                      - value
-                      type: object
-                    type: array
-                    x-kubernetes-list-map-keys:
-                    - type
-                    x-kubernetes-list-type: map
-                type: object
-              contactInfo:
-                description: |-
-                  ContactInfo identifies the human responsible for this account.
-                  This contact receives security-relevant notifications (auth
-                  alerts, ownership transfers, etc.). Invoice delivery is governed
-                  separately via BillingDetails.InvoiceEmail.
-                properties:
-                  email:
-                    description: Email is the email address for billing notifications.
-                    minLength: 1
                     type: string
                   name:
                     description: Name is the display name of the billing contact.
@@ -185,12 +140,7 @@ spec:
                 description: |-
                   DefaultPaymentMethodRef references the PaymentMethod to use by
                   default for charge processing. The referenced PaymentMethod must
-                  reside in the same namespace and be in the Active phase. The
-                  admission webhook validates both conditions on writes.
-
-                  Holding default on BillingAccount (rather than a flag on each
-                  PaymentMethod) avoids the race where two payment methods can both
-                  claim the default flag before reconciliation converges.
+                  reside in the same namespace and be in the Active phase.
                 properties:
                   name:
                     description: Name is the name of the PaymentMethod.
@@ -228,6 +178,44 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              taxIds:
+                description: |-
+                  TaxIDs are the tax registrations attached to this account. An
+                  account can carry multiple entries (e.g. an organisation
+                  registered for both GB VAT and EU VAT).
+                items:
+                  description: |-
+                    TaxID is a single tax registration.
+
+                    Type values follow a vendor-neutral snake-case
+                    `<jurisdiction>_<scheme>` convention — e.g. "gb_vat", "eu_vat",
+                    "us_ein", "au_abn", "ca_gst_hst", "ch_vat", "in_gst", "sg_gst".
+                    The pattern check enforces the shape rather than the exact set of
+                    values, so new schemes can be added without API changes.
+                    Translation to any provider-specific identifier (if needed) is the
+                    responsibility of the provider controller, not this schema.
+                  properties:
+                    type:
+                      description: Type identifies the tax registration scheme (e.g.
+                        "gb_vat").
+                      maxLength: 32
+                      pattern: ^[a-z]{2}_[a-z][a-z_]*$
+                      type: string
+                    value:
+                      description: |-
+                        Value is the registration number / identifier
+                        (e.g. "GB123456789").
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - type
+                  - value
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
             required:
             - currencyCode
             type: object

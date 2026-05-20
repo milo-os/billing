@@ -82,11 +82,18 @@ type PaymentMethodClassRef struct {
 	Name string `json:"name"`
 }
 
-// PaymentMethodDetails is the normalized, provider-agnostic description of
-// a confirmed payment instrument. Provider-specific identifiers (Stripe
-// payment method ids, customer ids, etc.) are not exposed here — they
-// live on the provider-owned CRD and are consumed only by the provider
-// controller.
+// PaymentMethodDetails is the normalized, provider-agnostic description
+// of a confirmed payment instrument. Provider-specific identifiers are
+// not exposed here — they live on the provider-owned CRD and are
+// consumed only by the provider controller.
+//
+// All sub-fields below are optional because they are populated by the
+// provider controller on a best-effort basis from whatever the issuer
+// or upstream API returns. A consumer reading these can assume that if
+// PaymentMethod.status.phase is Active, instrument-identifying fields
+// (e.g. card.brand + card.last4) will be present; everything else may
+// or may not be available depending on the provider and the
+// instrument.
 type PaymentMethodDetails struct {
 	// Type identifies the instrument category.
 	//

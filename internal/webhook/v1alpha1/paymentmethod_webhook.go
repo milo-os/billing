@@ -89,7 +89,7 @@ func (r *paymentMethodWebhook) ValidateCreate(ctx context.Context, obj runtime.O
 	if pm.Spec.PaymentMethodClassRef == nil || pm.Spec.PaymentMethodClassRef.Name == "" {
 		errs = append(errs, field.Required(
 			field.NewPath("spec", "paymentMethodClassRef"),
-			"no default PaymentMethodClass exists; ask a platform operator to create one and annotate it with billing.miloapis.com/is-default-class=true, or set spec.paymentMethodClassRef explicitly",
+			"no default PaymentMethodClass exists; ask a platform operator to create one and label it with billing.miloapis.com/is-default-class=true, or set spec.paymentMethodClassRef explicitly",
 		))
 	}
 
@@ -191,14 +191,23 @@ func (r *paymentMethodWebhook) validateBillingAccountRef(ctx context.Context, pm
 
 func (r *paymentMethodWebhook) findDefaultClass(ctx context.Context) (*billingv1alpha1.PaymentMethodClass, error) {
 	var list billingv1alpha1.PaymentMethodClassList
-	if err := r.client.List(ctx, &list); err != nil {
+	if err := r.client.List(ctx, &list, client.MatchingLabels{
+		billingv1alpha1.IsDefaultPaymentMethodClassLabel: "true",
+	}); err != nil {
 		return nil, err
 	}
-	for i := range list.Items {
-		c := &list.Items[i]
-		if c.Annotations[billingv1alpha1.IsDefaultPaymentMethodClassAnnotation] == "true" {
-			return c, nil
+	if len(list.Items) == 0 {
+		return nil, nil
+	}
+	// The validating webhook prevents more than one default class
+	// from being admitted, but a label selector with no uniqueness
+	// guarantee at the API level can still return >1 if two writes
+	// race past the webhook. Pick deterministically by name.
+	winner := &list.Items[0]
+	for i := 1; i < len(list.Items); i++ {
+		if list.Items[i].Name < winner.Name {
+			winner = &list.Items[i]
 		}
 	}
-	return nil, nil
+	return winner, nil
 }

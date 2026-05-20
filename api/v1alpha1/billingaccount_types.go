@@ -44,48 +44,11 @@ type BillingAccountSpec struct {
 	// +kubebuilder:validation:Optional
 	PaymentTerms *PaymentTerms `json:"paymentTerms,omitempty"`
 
-	// ContactInfo identifies the human responsible for this account.
-	// This contact receives security-relevant notifications (auth
-	// alerts, ownership transfers, etc.). Invoice delivery is governed
-	// separately via BillingDetails.InvoiceEmail.
+	// ContactInfo describes the billing contact and the postal
+	// address invoices are issued to.
 	//
 	// +kubebuilder:validation:Optional
 	ContactInfo *BillingContactInfo `json:"contactInfo,omitempty"`
-
-	// BillingDetails carries the postal billing address, tax
-	// registrations, and an optional dedicated invoice-recipient email
-	// for this account. All three are surfaced to the configured
-	// payment provider by its provider controller (see
-	// PaymentMethodClass) which is responsible for any
-	// provider-specific translation.
-	//
-	// +kubebuilder:validation:Optional
-	BillingDetails *BillingDetails `json:"billingDetails,omitempty"`
-
-	// DefaultPaymentMethodRef references the PaymentMethod to use by
-	// default for charge processing. The referenced PaymentMethod must
-	// reside in the same namespace and be in the Active phase. The
-	// admission webhook validates both conditions on writes.
-	//
-	// Holding default on BillingAccount (rather than a flag on each
-	// PaymentMethod) avoids the race where two payment methods can both
-	// claim the default flag before reconciliation converges.
-	//
-	// +kubebuilder:validation:Optional
-	DefaultPaymentMethodRef *DefaultPaymentMethodRef `json:"defaultPaymentMethodRef,omitempty"`
-}
-
-// BillingDetails describes where invoices go, what address appears on
-// them, and which tax registrations apply. These are account-level
-// facts — changes affect upcoming invoices but do not retroactively
-// modify already-issued invoices.
-type BillingDetails struct {
-	// Address is the postal billing address. Surfaced to the
-	// configured provider controller for invoice rendering and is
-	// available to downstream consumers (e.g. fraud scoring).
-	//
-	// +kubebuilder:validation:Optional
-	Address *BillingAddress `json:"address,omitempty"`
 
 	// TaxIDs are the tax registrations attached to this account. An
 	// account can carry multiple entries (e.g. an organisation
@@ -96,12 +59,12 @@ type BillingDetails struct {
 	// +listMapKey=type
 	TaxIDs []TaxID `json:"taxIds,omitempty"`
 
-	// InvoiceEmail overrides spec.contactInfo.email as the destination
-	// for invoices and receipts. When unset, contactInfo.email is used.
+	// DefaultPaymentMethodRef references the PaymentMethod to use by
+	// default for charge processing. The referenced PaymentMethod must
+	// reside in the same namespace and be in the Active phase.
 	//
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
-	InvoiceEmail string `json:"invoiceEmail,omitempty"`
+	DefaultPaymentMethodRef *DefaultPaymentMethodRef `json:"defaultPaymentMethodRef,omitempty"`
 }
 
 // BillingAddress is a postal billing address. Country is required;
@@ -222,9 +185,13 @@ type PaymentTerms struct {
 	InvoiceDayOfMonth int32 `json:"invoiceDayOfMonth,omitempty"`
 }
 
-// BillingContactInfo defines contact details for billing notifications.
+// BillingContactInfo defines contact details for billing notifications,
+// the postal address invoices are issued to, and an optional dedicated
+// invoice-recipient email.
 type BillingContactInfo struct {
-	// Email is the email address for billing notifications.
+	// Email is the primary billing contact email. Receives billing
+	// notifications and, when InvoiceEmail is unset, also receives
+	// invoices and receipts.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MinLength=1
@@ -234,6 +201,22 @@ type BillingContactInfo struct {
 	//
 	// +kubebuilder:validation:Optional
 	Name string `json:"name,omitempty"`
+
+	// InvoiceEmail overrides Email as the destination for invoices and
+	// receipts. When unset, Email is used. Useful when invoices need
+	// to go to an accounts-payable mailbox different from the
+	// account-holder contact.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	InvoiceEmail string `json:"invoiceEmail,omitempty"`
+
+	// Address is the postal billing address. Appears on invoices and
+	// is surfaced to the configured provider controller (e.g. for tax
+	// determination, AVS).
+	//
+	// +kubebuilder:validation:Optional
+	Address *BillingAddress `json:"address,omitempty"`
 }
 
 // BillingAccountStatus defines the observed state of a BillingAccount.

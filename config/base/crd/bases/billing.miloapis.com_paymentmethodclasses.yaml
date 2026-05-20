@@ -18,7 +18,7 @@ spec:
     - jsonPath: .spec.provider
       name: Provider
       type: string
-    - jsonPath: .metadata.annotations.billing\.miloapis\.com/is-default-class
+    - jsonPath: .metadata.labels.billing\.miloapis\.com/is-default-class
       name: Default
       type: string
     - jsonPath: .metadata.creationTimestamp

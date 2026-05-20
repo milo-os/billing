@@ -23,7 +23,7 @@ var paymentMethodClassLog = logf.Log.WithName("paymentmethodclass-webhook")
 // PaymentMethodClass validating webhook with the manager. The webhook's
 // sole responsibility is to keep the cluster-default-class invariant:
 // exactly one PaymentMethodClass may carry the
-// `billing.miloapis.com/is-default-class=true` annotation at any time.
+// `billing.miloapis.com/is-default-class=true` label at any time.
 func SetupPaymentMethodClassWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &paymentMethodClassWebhook{client: mgr.GetClient()}
 
@@ -64,16 +64,18 @@ func (r *paymentMethodClassWebhook) ValidateDelete(_ context.Context, _ runtime.
 }
 
 // validateDefaultUniqueness rejects the operation if the candidate class
-// is marked default AND a different class already holds the same
-// annotation. `selfName` allows the on-update path to skip the candidate
-// itself (so re-applying the same resource is idempotent).
+// is marked default AND a different class already holds the same label.
+// `selfName` allows the on-update path to skip the candidate itself
+// (so re-applying the same resource is idempotent).
 func (r *paymentMethodClassWebhook) validateDefaultUniqueness(ctx context.Context, candidate *billingv1alpha1.PaymentMethodClass, selfName string) error {
-	if candidate.Annotations[billingv1alpha1.IsDefaultPaymentMethodClassAnnotation] != "true" {
+	if candidate.Labels[billingv1alpha1.IsDefaultPaymentMethodClassLabel] != "true" {
 		return nil
 	}
 
 	var classList billingv1alpha1.PaymentMethodClassList
-	if err := r.client.List(ctx, &classList); err != nil {
+	if err := r.client.List(ctx, &classList, client.MatchingLabels{
+		billingv1alpha1.IsDefaultPaymentMethodClassLabel: "true",
+	}); err != nil {
 		// Fail-closed on a list error — we cannot safely admit a
 		// potentially duplicate default class.
 		return errors.NewInternalError(fmt.Errorf("listing PaymentMethodClasses: %w", err))
@@ -83,16 +85,14 @@ func (r *paymentMethodClassWebhook) validateDefaultUniqueness(ctx context.Contex
 		if existing.Name == selfName {
 			continue
 		}
-		if existing.Annotations[billingv1alpha1.IsDefaultPaymentMethodClassAnnotation] == "true" {
-			return errors.NewInvalid(
-				candidate.GroupVersionKind().GroupKind(),
-				candidate.Name,
-				field.ErrorList{field.Forbidden(
-					field.NewPath("metadata", "annotations").Key(billingv1alpha1.IsDefaultPaymentMethodClassAnnotation),
-					fmt.Sprintf("PaymentMethodClass %q is already the default; only one default class is permitted", existing.Name),
-				)},
-			)
-		}
+		return errors.NewInvalid(
+			candidate.GroupVersionKind().GroupKind(),
+			candidate.Name,
+			field.ErrorList{field.Forbidden(
+				field.NewPath("metadata", "labels").Key(billingv1alpha1.IsDefaultPaymentMethodClassLabel),
+				fmt.Sprintf("PaymentMethodClass %q is already the default; only one default class is permitted", existing.Name),
+			)},
+		)
 	}
 	return nil
 }

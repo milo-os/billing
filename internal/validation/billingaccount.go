@@ -23,7 +23,7 @@ func ValidateBillingAccountCreate(account *billingv1alpha1.BillingAccount) field
 	var allErrs field.ErrorList
 
 	allErrs = append(allErrs, validateContactInfo(account.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
-	allErrs = append(allErrs, validateBillingDetails(account.Spec.BillingDetails, field.NewPath("spec", "billingDetails"))...)
+	allErrs = append(allErrs, validateTaxIDs(account.Spec.TaxIDs, field.NewPath("spec", "taxIds"))...)
 
 	return allErrs
 }
@@ -43,7 +43,7 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 	}
 
 	allErrs = append(allErrs, validateContactInfo(newAccount.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
-	allErrs = append(allErrs, validateBillingDetails(newAccount.Spec.BillingDetails, field.NewPath("spec", "billingDetails"))...)
+	allErrs = append(allErrs, validateTaxIDs(newAccount.Spec.TaxIDs, field.NewPath("spec", "taxIds"))...)
 
 	return allErrs
 }
@@ -94,44 +94,39 @@ func validateContactInfo(contact *billingv1alpha1.BillingContactInfo, fldPath *f
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("email"), contact.Email, "must be a valid email address"))
 	}
 
+	if contact.InvoiceEmail != "" && !emailRegex.MatchString(contact.InvoiceEmail) {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("invoiceEmail"), contact.InvoiceEmail, "must be a valid email address"))
+	}
+
+	if contact.Address != nil {
+		addrPath := fldPath.Child("address")
+		if contact.Address.Country == "" {
+			allErrs = append(allErrs, field.Required(addrPath.Child("country"), "country is required when address is set"))
+		} else if !iso3166Alpha2Pattern.MatchString(contact.Address.Country) {
+			allErrs = append(allErrs, field.Invalid(addrPath.Child("country"), contact.Address.Country, "must be an ISO 3166-1 alpha-2 country code"))
+		}
+	}
+
 	return allErrs
 }
 
-// taxIDTypePattern enforces the shape of Stripe's tax_id_data.type
-// vocabulary (e.g. "gb_vat", "eu_vat", "us_ein") without locking the
-// API into the exact set of types upstream supports today.
+// taxIDTypePattern enforces the shape of the vendor-neutral snake-case
+// <jurisdiction>_<scheme> convention (e.g. "gb_vat", "eu_vat",
+// "us_ein") without locking the API into a fixed enum.
 var taxIDTypePattern = regexp.MustCompile(`^[a-z]{2}_[a-z][a-z_]*$`)
 
 // iso3166Alpha2Pattern enforces a two-letter uppercase country code.
 var iso3166Alpha2Pattern = regexp.MustCompile(`^[A-Z]{2}$`)
 
-func validateBillingDetails(details *billingv1alpha1.BillingDetails, fldPath *field.Path) field.ErrorList {
+func validateTaxIDs(taxIDs []billingv1alpha1.TaxID, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
-	if details == nil {
-		return allErrs
-	}
-
-	if details.InvoiceEmail != "" && !emailRegex.MatchString(details.InvoiceEmail) {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("invoiceEmail"), details.InvoiceEmail, "must be a valid email address"))
-	}
-
-	if details.Address != nil {
-		addrPath := fldPath.Child("address")
-		if details.Address.Country == "" {
-			allErrs = append(allErrs, field.Required(addrPath.Child("country"), "country is required when address is set"))
-		} else if !iso3166Alpha2Pattern.MatchString(details.Address.Country) {
-			allErrs = append(allErrs, field.Invalid(addrPath.Child("country"), details.Address.Country, "must be an ISO 3166-1 alpha-2 country code"))
-		}
-	}
-
-	taxPath := fldPath.Child("taxIds")
-	seenTypes := make(map[string]struct{}, len(details.TaxIDs))
-	for i, tid := range details.TaxIDs {
-		idxPath := taxPath.Index(i)
+	seenTypes := make(map[string]struct{}, len(taxIDs))
+	for i, tid := range taxIDs {
+		idxPath := fldPath.Index(i)
 		if tid.Type == "" {
 			allErrs = append(allErrs, field.Required(idxPath.Child("type"), "tax ID type is required"))
 		} else if !taxIDTypePattern.MatchString(tid.Type) {
-			allErrs = append(allErrs, field.Invalid(idxPath.Child("type"), tid.Type, `must match Stripe tax_id_data.type vocabulary (e.g. "gb_vat", "eu_vat", "us_ein")`))
+			allErrs = append(allErrs, field.Invalid(idxPath.Child("type"), tid.Type, `must match the <jurisdiction>_<scheme> convention (e.g. "gb_vat", "eu_vat", "us_ein")`))
 		}
 		if tid.Value == "" {
 			allErrs = append(allErrs, field.Required(idxPath.Child("value"), "tax ID value is required"))
@@ -141,6 +136,5 @@ func validateBillingDetails(details *billingv1alpha1.BillingDetails, fldPath *fi
 		}
 		seenTypes[tid.Type] = struct{}{}
 	}
-
 	return allErrs
 }
