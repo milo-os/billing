@@ -44,10 +44,22 @@ type BillingAccountSpec struct {
 	// +kubebuilder:validation:Optional
 	PaymentTerms *PaymentTerms `json:"paymentTerms,omitempty"`
 
-	// ContactInfo defines the billing contact for notifications.
+	// ContactInfo identifies the human responsible for this account.
+	// This contact receives security-relevant notifications (auth
+	// alerts, ownership transfers, etc.). Invoice delivery is governed
+	// separately via BillingDetails.InvoiceEmail.
 	//
 	// +kubebuilder:validation:Optional
 	ContactInfo *BillingContactInfo `json:"contactInfo,omitempty"`
+
+	// BillingDetails carries the postal billing address, tax
+	// registrations, and an optional dedicated invoice-recipient email
+	// for this account. All three propagate to the payment provider
+	// (e.g. Stripe Customer.address / .tax_ids / .email) on every
+	// reconcile.
+	//
+	// +kubebuilder:validation:Optional
+	BillingDetails *BillingDetails `json:"billingDetails,omitempty"`
 
 	// DefaultPaymentMethodRef references the PaymentMethod to use by
 	// default for charge processing. The referenced PaymentMethod must
@@ -60,6 +72,116 @@ type BillingAccountSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	DefaultPaymentMethodRef *DefaultPaymentMethodRef `json:"defaultPaymentMethodRef,omitempty"`
+}
+
+// BillingDetails describes where invoices go, what address appears on
+// them, and which tax registrations apply. These are account-level
+// facts — changes affect upcoming invoices but do not retroactively
+// modify already-issued invoices (provider behaviour mirrors this).
+type BillingDetails struct {
+	// Address is the postal billing address. Stamped onto the payment
+	// provider's Customer record (e.g. Stripe Customer.address) and
+	// printed on invoices. Also forwarded to downstream fraud scoring.
+	//
+	// +kubebuilder:validation:Optional
+	Address *BillingAddress `json:"address,omitempty"`
+
+	// TaxIDs are the tax registrations attached to this account. An
+	// account can carry multiple entries (e.g. an organisation
+	// registered for both GB VAT and EU VAT). Synced to the provider
+	// (e.g. Stripe Customer.tax_ids) and rendered on invoices.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=type
+	TaxIDs []TaxID `json:"taxIds,omitempty"`
+
+	// InvoiceEmail overrides spec.contactInfo.email as the destination
+	// for invoices and receipts. When unset, contactInfo.email is used.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
+	InvoiceEmail string `json:"invoiceEmail,omitempty"`
+}
+
+// BillingAddress is a postal billing address. Country is required;
+// other fields are recommended but optional because postal-address
+// conventions differ widely by region.
+type BillingAddress struct {
+	// FirstName is the given name of the bill recipient.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	FirstName string `json:"firstName,omitempty"`
+
+	// LastName is the family name of the bill recipient.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	LastName string `json:"lastName,omitempty"`
+
+	// Country is the ISO 3166-1 alpha-2 country code (e.g. "GB",
+	// "US"). Required because providers need it to determine tax
+	// treatment and currency restrictions.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[A-Z]{2}$`
+	Country string `json:"country"`
+
+	// Line1 is the first line of the street address (typically
+	// "number + street").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=256
+	Line1 string `json:"line1,omitempty"`
+
+	// Line2 is the second line of the street address (typically
+	// apartment / suite / building).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=256
+	Line2 string `json:"line2,omitempty"`
+
+	// City is the locality.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	City string `json:"city,omitempty"`
+
+	// Region is the state, province, or county (free-form).
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	Region string `json:"region,omitempty"`
+
+	// PostalCode is the post / zip code.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=32
+	PostalCode string `json:"postalCode,omitempty"`
+}
+
+// TaxID is a single tax registration. Type values follow the upstream
+// payment-provider vocabulary (Stripe's `tax_id_data.type`) — for
+// example "gb_vat", "eu_vat", "us_ein", "au_abn", "ca_gst_hst",
+// "ch_vat", "in_gst", "sg_gst". The pattern check enforces the shape
+// without locking us out of new types Stripe (and other providers) add
+// over time.
+type TaxID struct {
+	// Type identifies the tax registration scheme (e.g. "gb_vat").
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[a-z]{2}_[a-z][a-z_]*$`
+	// +kubebuilder:validation:MaxLength=32
+	Type string `json:"type"`
+
+	// Value is the registration number / identifier
+	// (e.g. "GB123456789").
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=64
+	Value string `json:"value"`
 }
 
 // DefaultPaymentMethodRef references a PaymentMethod in the same namespace

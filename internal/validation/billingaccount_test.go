@@ -219,3 +219,86 @@ func TestValidateBillingAccountDefaultPaymentMethodRef(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBillingDetails(t *testing.T) {
+	tests := []struct {
+		name    string
+		details *billingv1alpha1.BillingDetails
+		wantErr bool
+	}{
+		{name: "nil details valid", details: nil, wantErr: false},
+		{
+			name: "valid full details",
+			details: &billingv1alpha1.BillingDetails{
+				Address: &billingv1alpha1.BillingAddress{
+					FirstName: "Matt", LastName: "Jenkinson",
+					Country: "GB", Line1: "1 King St", City: "London", PostalCode: "W1 1AA",
+				},
+				TaxIDs: []billingv1alpha1.TaxID{
+					{Type: "gb_vat", Value: "GB123456789"},
+					{Type: "eu_vat", Value: "DE987654321"},
+				},
+				InvoiceEmail: "ar@example.com",
+			},
+		},
+		{
+			name: "invalid invoice email",
+			details: &billingv1alpha1.BillingDetails{
+				InvoiceEmail: "not-an-email",
+			},
+			wantErr: true,
+		},
+		{
+			name: "address missing country",
+			details: &billingv1alpha1.BillingDetails{
+				Address: &billingv1alpha1.BillingAddress{Line1: "1 King St"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "address invalid country code",
+			details: &billingv1alpha1.BillingDetails{
+				Address: &billingv1alpha1.BillingAddress{Country: "GBR"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "tax id with bad type",
+			details: &billingv1alpha1.BillingDetails{
+				TaxIDs: []billingv1alpha1.TaxID{{Type: "GB_VAT", Value: "GB123"}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "tax id missing value",
+			details: &billingv1alpha1.BillingDetails{
+				TaxIDs: []billingv1alpha1.TaxID{{Type: "gb_vat", Value: ""}},
+			},
+			wantErr: true,
+		},
+		{
+			name: "duplicate tax id type",
+			details: &billingv1alpha1.BillingDetails{
+				TaxIDs: []billingv1alpha1.TaxID{
+					{Type: "gb_vat", Value: "GB123"},
+					{Type: "gb_vat", Value: "GB456"},
+				},
+			},
+			wantErr: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			account := &billingv1alpha1.BillingAccount{
+				Spec: billingv1alpha1.BillingAccountSpec{
+					CurrencyCode:   "GBP",
+					BillingDetails: tt.details,
+				},
+			}
+			errs := ValidateBillingAccountCreate(account)
+			if (len(errs) > 0) != tt.wantErr {
+				t.Errorf("got errs=%v, wantErr=%v", errs, tt.wantErr)
+			}
+		})
+	}
+}

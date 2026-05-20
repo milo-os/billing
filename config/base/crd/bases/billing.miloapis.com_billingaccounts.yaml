@@ -56,8 +56,111 @@ spec:
           spec:
             description: BillingAccountSpec defines the desired state of a BillingAccount.
             properties:
+              billingDetails:
+                description: |-
+                  BillingDetails carries the postal billing address, tax
+                  registrations, and an optional dedicated invoice-recipient email
+                  for this account. All three propagate to the payment provider
+                  (e.g. Stripe Customer.address / .tax_ids / .email) on every
+                  reconcile.
+                properties:
+                  address:
+                    description: |-
+                      Address is the postal billing address. Stamped onto the payment
+                      provider's Customer record (e.g. Stripe Customer.address) and
+                      printed on invoices. Also forwarded to downstream fraud scoring.
+                    properties:
+                      city:
+                        description: City is the locality.
+                        maxLength: 128
+                        type: string
+                      country:
+                        description: |-
+                          Country is the ISO 3166-1 alpha-2 country code (e.g. "GB",
+                          "US"). Required because providers need it to determine tax
+                          treatment and currency restrictions.
+                        pattern: ^[A-Z]{2}$
+                        type: string
+                      firstName:
+                        description: FirstName is the given name of the bill recipient.
+                        maxLength: 128
+                        type: string
+                      lastName:
+                        description: LastName is the family name of the bill recipient.
+                        maxLength: 128
+                        type: string
+                      line1:
+                        description: |-
+                          Line1 is the first line of the street address (typically
+                          "number + street").
+                        maxLength: 256
+                        type: string
+                      line2:
+                        description: |-
+                          Line2 is the second line of the street address (typically
+                          apartment / suite / building).
+                        maxLength: 256
+                        type: string
+                      postalCode:
+                        description: PostalCode is the post / zip code.
+                        maxLength: 32
+                        type: string
+                      region:
+                        description: Region is the state, province, or county (free-form).
+                        maxLength: 128
+                        type: string
+                    required:
+                    - country
+                    type: object
+                  invoiceEmail:
+                    description: |-
+                      InvoiceEmail overrides spec.contactInfo.email as the destination
+                      for invoices and receipts. When unset, contactInfo.email is used.
+                    pattern: ^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$
+                    type: string
+                  taxIds:
+                    description: |-
+                      TaxIDs are the tax registrations attached to this account. An
+                      account can carry multiple entries (e.g. an organisation
+                      registered for both GB VAT and EU VAT). Synced to the provider
+                      (e.g. Stripe Customer.tax_ids) and rendered on invoices.
+                    items:
+                      description: |-
+                        TaxID is a single tax registration. Type values follow the upstream
+                        payment-provider vocabulary (Stripe's `tax_id_data.type`) — for
+                        example "gb_vat", "eu_vat", "us_ein", "au_abn", "ca_gst_hst",
+                        "ch_vat", "in_gst", "sg_gst". The pattern check enforces the shape
+                        without locking us out of new types Stripe (and other providers) add
+                        over time.
+                      properties:
+                        type:
+                          description: Type identifies the tax registration scheme
+                            (e.g. "gb_vat").
+                          maxLength: 32
+                          pattern: ^[a-z]{2}_[a-z][a-z_]*$
+                          type: string
+                        value:
+                          description: |-
+                            Value is the registration number / identifier
+                            (e.g. "GB123456789").
+                          maxLength: 64
+                          minLength: 1
+                          type: string
+                      required:
+                      - type
+                      - value
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - type
+                    x-kubernetes-list-type: map
+                type: object
               contactInfo:
-                description: ContactInfo defines the billing contact for notifications.
+                description: |-
+                  ContactInfo identifies the human responsible for this account.
+                  This contact receives security-relevant notifications (auth
+                  alerts, ownership transfers, etc.). Invoice delivery is governed
+                  separately via BillingDetails.InvoiceEmail.
                 properties:
                   email:
                     description: Email is the email address for billing notifications.

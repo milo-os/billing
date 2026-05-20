@@ -152,6 +152,52 @@ type PaymentMethodCardDetails struct {
 	//
 	// +kubebuilder:validation:Optional
 	CVCResult string `json:"cvcResult,omitempty"`
+
+	// BillingAddress is the cardholder address captured by the
+	// provider's collection UI (Stripe's `billing_details.address` on
+	// the confirmed PaymentMethod). May differ from the
+	// BillingAccount's address — both signals are useful to downstream
+	// consumers (the portal for display, fraud for mismatch detection).
+	//
+	// +kubebuilder:validation:Optional
+	BillingAddress *CardBillingAddress `json:"billingAddress,omitempty"`
+}
+
+// CardBillingAddress is the cardholder address attached to a confirmed
+// payment instrument. Subset of BillingAddress — no name fields because
+// the provider returns those separately under billing_details.name.
+type CardBillingAddress struct {
+	// Country is the ISO 3166-1 alpha-2 country code of the
+	// cardholder address.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[A-Z]{2}$`
+	Country string `json:"country,omitempty"`
+
+	// Line1 is the first line of the street address.
+	//
+	// +kubebuilder:validation:Optional
+	Line1 string `json:"line1,omitempty"`
+
+	// Line2 is the second line of the street address.
+	//
+	// +kubebuilder:validation:Optional
+	Line2 string `json:"line2,omitempty"`
+
+	// City is the locality.
+	//
+	// +kubebuilder:validation:Optional
+	City string `json:"city,omitempty"`
+
+	// Region is the state, province, or county.
+	//
+	// +kubebuilder:validation:Optional
+	Region string `json:"region,omitempty"`
+
+	// PostalCode is the post / zip code.
+	//
+	// +kubebuilder:validation:Optional
+	PostalCode string `json:"postalCode,omitempty"`
 }
 
 // PaymentMethodUSBankAccountDetails carries the public-safe metadata of a

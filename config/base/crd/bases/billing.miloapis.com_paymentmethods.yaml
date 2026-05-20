@@ -188,6 +188,36 @@ spec:
                           AVSResult is the Address Verification System result code returned
                           by the issuer (e.g. "pass", "fail", "unchecked").
                         type: string
+                      billingAddress:
+                        description: |-
+                          BillingAddress is the cardholder address captured by the
+                          provider's collection UI (Stripe's `billing_details.address` on
+                          the confirmed PaymentMethod). May differ from the
+                          BillingAccount's address — both signals are useful to downstream
+                          consumers (the portal for display, fraud for mismatch detection).
+                        properties:
+                          city:
+                            description: City is the locality.
+                            type: string
+                          country:
+                            description: |-
+                              Country is the ISO 3166-1 alpha-2 country code of the
+                              cardholder address.
+                            pattern: ^[A-Z]{2}$
+                            type: string
+                          line1:
+                            description: Line1 is the first line of the street address.
+                            type: string
+                          line2:
+                            description: Line2 is the second line of the street address.
+                            type: string
+                          postalCode:
+                            description: PostalCode is the post / zip code.
+                            type: string
+                          region:
+                            description: Region is the state, province, or county.
+                            type: string
+                        type: object
                       brand:
                         description: Brand is the card network (e.g. "visa", "mastercard",
                           "amex").
