@@ -3,7 +3,13 @@
 package validation
 
 import (
+	"context"
 	"testing"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -137,6 +143,78 @@ func TestValidateBillingAccountUpdate_CurrencyImmutability(t *testing.T) {
 			errs := ValidateBillingAccountUpdate(oldAccount, newAccount)
 			if (len(errs) > 0) != tt.wantErr {
 				t.Errorf("ValidateBillingAccountUpdate() errors = %v, wantErr %v", errs, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestValidateBillingAccountDefaultPaymentMethodRef(t *testing.T) {
+	scheme := runtime.NewScheme()
+	if err := billingv1alpha1.AddToScheme(scheme); err != nil {
+		t.Fatalf("failed to register scheme: %v", err)
+	}
+
+	const ns = "acme-corp"
+	activePM := &billingv1alpha1.PaymentMethod{
+		ObjectMeta: metav1.ObjectMeta{Name: "corp-visa", Namespace: ns},
+		Status:     billingv1alpha1.PaymentMethodStatus{Phase: billingv1alpha1.PaymentMethodPhaseActive},
+	}
+	pendingPM := &billingv1alpha1.PaymentMethod{
+		ObjectMeta: metav1.ObjectMeta{Name: "corp-mastercard", Namespace: ns},
+		Status:     billingv1alpha1.PaymentMethodStatus{Phase: billingv1alpha1.PaymentMethodPhasePending},
+	}
+
+	tests := []struct {
+		name    string
+		ref     *billingv1alpha1.DefaultPaymentMethodRef
+		objects []client.Object
+		wantErr bool
+	}{
+		{
+			name:    "no ref set is valid",
+			ref:     nil,
+			objects: []client.Object{activePM},
+			wantErr: false,
+		},
+		{
+			name:    "empty name is treated as unset",
+			ref:     &billingv1alpha1.DefaultPaymentMethodRef{Name: ""},
+			objects: []client.Object{activePM},
+			wantErr: false,
+		},
+		{
+			name:    "ref to missing payment method fails",
+			ref:     &billingv1alpha1.DefaultPaymentMethodRef{Name: "does-not-exist"},
+			objects: []client.Object{activePM},
+			wantErr: true,
+		},
+		{
+			name:    "ref to non-active payment method fails",
+			ref:     &billingv1alpha1.DefaultPaymentMethodRef{Name: "corp-mastercard"},
+			objects: []client.Object{activePM, pendingPM},
+			wantErr: true,
+		},
+		{
+			name:    "ref to active payment method passes",
+			ref:     &billingv1alpha1.DefaultPaymentMethodRef{Name: "corp-visa"},
+			objects: []client.Object{activePM},
+			wantErr: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			account := &billingv1alpha1.BillingAccount{
+				ObjectMeta: metav1.ObjectMeta{Name: "acme-billing", Namespace: ns},
+				Spec: billingv1alpha1.BillingAccountSpec{
+					CurrencyCode:            "USD",
+					DefaultPaymentMethodRef: tt.ref,
+				},
+			}
+			c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(tt.objects...).Build()
+			errs := ValidateBillingAccountDefaultPaymentMethodRef(context.Background(), c, account)
+			if (len(errs) > 0) != tt.wantErr {
+				t.Errorf("ValidateBillingAccountDefaultPaymentMethodRef() errors = %v, wantErr %v", errs, tt.wantErr)
 			}
 		})
 	}
