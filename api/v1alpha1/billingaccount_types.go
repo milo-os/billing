@@ -54,9 +54,10 @@ type BillingAccountSpec struct {
 
 	// BillingDetails carries the postal billing address, tax
 	// registrations, and an optional dedicated invoice-recipient email
-	// for this account. All three propagate to the payment provider
-	// (e.g. Stripe Customer.address / .tax_ids / .email) on every
-	// reconcile.
+	// for this account. All three are surfaced to the configured
+	// payment provider by its provider controller (see
+	// PaymentMethodClass) which is responsible for any
+	// provider-specific translation.
 	//
 	// +kubebuilder:validation:Optional
 	BillingDetails *BillingDetails `json:"billingDetails,omitempty"`
@@ -77,19 +78,18 @@ type BillingAccountSpec struct {
 // BillingDetails describes where invoices go, what address appears on
 // them, and which tax registrations apply. These are account-level
 // facts — changes affect upcoming invoices but do not retroactively
-// modify already-issued invoices (provider behaviour mirrors this).
+// modify already-issued invoices.
 type BillingDetails struct {
-	// Address is the postal billing address. Stamped onto the payment
-	// provider's Customer record (e.g. Stripe Customer.address) and
-	// printed on invoices. Also forwarded to downstream fraud scoring.
+	// Address is the postal billing address. Surfaced to the
+	// configured provider controller for invoice rendering and is
+	// available to downstream consumers (e.g. fraud scoring).
 	//
 	// +kubebuilder:validation:Optional
 	Address *BillingAddress `json:"address,omitempty"`
 
 	// TaxIDs are the tax registrations attached to this account. An
 	// account can carry multiple entries (e.g. an organisation
-	// registered for both GB VAT and EU VAT). Synced to the provider
-	// (e.g. Stripe Customer.tax_ids) and rendered on invoices.
+	// registered for both GB VAT and EU VAT).
 	//
 	// +kubebuilder:validation:Optional
 	// +listType=map
@@ -121,8 +121,8 @@ type BillingAddress struct {
 	LastName string `json:"lastName,omitempty"`
 
 	// Country is the ISO 3166-1 alpha-2 country code (e.g. "GB",
-	// "US"). Required because providers need it to determine tax
-	// treatment and currency restrictions.
+	// "US"). Required because tax determination and currency
+	// restrictions depend on it.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^[A-Z]{2}$`
@@ -161,12 +161,15 @@ type BillingAddress struct {
 	PostalCode string `json:"postalCode,omitempty"`
 }
 
-// TaxID is a single tax registration. Type values follow the upstream
-// payment-provider vocabulary (Stripe's `tax_id_data.type`) — for
-// example "gb_vat", "eu_vat", "us_ein", "au_abn", "ca_gst_hst",
-// "ch_vat", "in_gst", "sg_gst". The pattern check enforces the shape
-// without locking us out of new types Stripe (and other providers) add
-// over time.
+// TaxID is a single tax registration.
+//
+// Type values follow a vendor-neutral snake-case
+// `<jurisdiction>_<scheme>` convention — e.g. "gb_vat", "eu_vat",
+// "us_ein", "au_abn", "ca_gst_hst", "ch_vat", "in_gst", "sg_gst".
+// The pattern check enforces the shape rather than the exact set of
+// values, so new schemes can be added without API changes.
+// Translation to any provider-specific identifier (if needed) is the
+// responsibility of the provider controller, not this schema.
 type TaxID struct {
 	// Type identifies the tax registration scheme (e.g. "gb_vat").
 	//

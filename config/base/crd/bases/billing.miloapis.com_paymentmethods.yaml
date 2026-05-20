@@ -191,10 +191,10 @@ spec:
                       billingAddress:
                         description: |-
                           BillingAddress is the cardholder address captured by the
-                          provider's collection UI (Stripe's `billing_details.address` on
-                          the confirmed PaymentMethod). May differ from the
+                          provider's collection UI at confirmation. May differ from the
                           BillingAccount's address — both signals are useful to downstream
-                          consumers (the portal for display, fraud for mismatch detection).
+                          consumers (the portal for display, fraud for mismatch
+                          detection).
                         properties:
                           city:
                             description: City is the locality.

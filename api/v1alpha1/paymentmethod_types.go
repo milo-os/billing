@@ -154,18 +154,19 @@ type PaymentMethodCardDetails struct {
 	CVCResult string `json:"cvcResult,omitempty"`
 
 	// BillingAddress is the cardholder address captured by the
-	// provider's collection UI (Stripe's `billing_details.address` on
-	// the confirmed PaymentMethod). May differ from the
+	// provider's collection UI at confirmation. May differ from the
 	// BillingAccount's address — both signals are useful to downstream
-	// consumers (the portal for display, fraud for mismatch detection).
+	// consumers (the portal for display, fraud for mismatch
+	// detection).
 	//
 	// +kubebuilder:validation:Optional
 	BillingAddress *CardBillingAddress `json:"billingAddress,omitempty"`
 }
 
 // CardBillingAddress is the cardholder address attached to a confirmed
-// payment instrument. Subset of BillingAddress — no name fields because
-// the provider returns those separately under billing_details.name.
+// payment instrument. Subset of BillingAddress — no name fields
+// because cardholder name is recorded separately by the provider
+// alongside the rest of the billing_details / equivalent payload.
 type CardBillingAddress struct {
 	// Country is the ISO 3166-1 alpha-2 country code of the
 	// cardholder address.
