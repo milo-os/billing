@@ -24,6 +24,12 @@ const (
 	BillingAccountPhaseArchived BillingAccountPhase = "Archived"
 )
 
+// BillingAccountConditionDefaultPaymentMethodReady is set by the billing
+// service controller and reflects whether the account has a usable default
+// payment instrument. Downstream services (invoicing, charge processing)
+// gate on this condition rather than on account phase.
+const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodReady"
+
 // BillingAccountSpec defines the desired state of a BillingAccount.
 type BillingAccountSpec struct {
 	// CurrencyCode is the ISO 4217 currency code for this billing account.
@@ -42,6 +48,28 @@ type BillingAccountSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	ContactInfo *BillingContactInfo `json:"contactInfo,omitempty"`
+
+	// DefaultPaymentMethodRef references the PaymentMethod to use by
+	// default for charge processing. The referenced PaymentMethod must
+	// reside in the same namespace and be in the Active phase. The
+	// admission webhook validates both conditions on writes.
+	//
+	// Holding default on BillingAccount (rather than a flag on each
+	// PaymentMethod) avoids the race where two payment methods can both
+	// claim the default flag before reconciliation converges.
+	//
+	// +kubebuilder:validation:Optional
+	DefaultPaymentMethodRef *DefaultPaymentMethodRef `json:"defaultPaymentMethodRef,omitempty"`
+}
+
+// DefaultPaymentMethodRef references a PaymentMethod in the same namespace
+// as the BillingAccount.
+type DefaultPaymentMethodRef struct {
+	// Name is the name of the PaymentMethod.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
 }
 
 // PaymentTerms defines the payment schedule for a billing account.

@@ -4,27 +4,23 @@ kind: CustomResourceDefinition
 metadata:
   annotations:
     controller-gen.kubebuilder.io/version: v0.16.4
-    discovery.miloapis.com/parent-contexts: Organization
-  name: billingaccounts.billing.miloapis.com
+  name: paymentmethodclasses.billing.miloapis.com
 spec:
   group: billing.miloapis.com
   names:
-    kind: BillingAccount
-    listKind: BillingAccountList
-    plural: billingaccounts
-    singular: billingaccount
-  scope: Namespaced
+    kind: PaymentMethodClass
+    listKind: PaymentMethodClassList
+    plural: paymentmethodclasses
+    singular: paymentmethodclass
+  scope: Cluster
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .status.phase
-      name: Phase
+    - jsonPath: .spec.provider
+      name: Provider
       type: string
-    - jsonPath: .spec.currencyCode
-      name: Currency
+    - jsonPath: .metadata.annotations.billing\.miloapis\.com/is-default-class
+      name: Default
       type: string
-    - jsonPath: .status.linkedProjectsCount
-      name: Projects
-      type: integer
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -32,9 +28,14 @@ spec:
     schema:
       openAPIV3Schema:
         description: |-
-          BillingAccount is the Schema for the billingaccounts API. It represents a
-          billing entity within an organization that is responsible for paying for
-          service consumption.
+          PaymentMethodClass is the Schema for the paymentmethodclasses API.
+
+          PaymentMethodClass is a cluster-scoped resource configured by platform
+          operators. It names the payment provider controller responsible for
+          reconciling PaymentMethods of this class, and references provider-owned
+          configuration via spec.parametersRef. Consumers do not interact with
+          PaymentMethodClass directly — the billing service defaulting webhook
+          injects the cluster default class onto PaymentMethods at creation time.
         properties:
           apiVersion:
             description: |-
@@ -54,84 +55,60 @@ spec:
           metadata:
             type: object
           spec:
-            description: BillingAccountSpec defines the desired state of a BillingAccount.
+            description: PaymentMethodClassSpec defines the desired state of a PaymentMethodClass.
             properties:
-              contactInfo:
-                description: ContactInfo defines the billing contact for notifications.
+              parametersRef:
+                description: |-
+                  ParametersRef points at a provider-owned resource carrying any
+                  provider-specific SDK configuration (e.g. a Stripe publishable
+                  key). PaymentMethodClass intentionally carries no provider-specific
+                  fields — adding a new provider must not require a billing-service
+                  schema change. This mirrors the Kubernetes Gateway API
+                  `parametersRef` pattern.
                 properties:
-                  email:
-                    description: Email is the email address for billing notifications.
+                  group:
+                    description: |-
+                      Group is the API group of the provider-specific configuration
+                      resource (e.g. "stripe.billing.miloapis.com").
+                    minLength: 1
+                    type: string
+                  kind:
+                    description: |-
+                      Kind is the Kind of the provider-specific configuration resource
+                      (e.g. "StripeProviderConfig").
                     minLength: 1
                     type: string
                   name:
-                    description: Name is the display name of the billing contact.
-                    type: string
-                required:
-                - email
-                type: object
-              currencyCode:
-                description: |-
-                  CurrencyCode is the ISO 4217 currency code for this billing account.
-                  This field is immutable once the account transitions past Provisioning phase.
-                pattern: ^[A-Z]{3}$
-                type: string
-              defaultPaymentMethodRef:
-                description: |-
-                  DefaultPaymentMethodRef references the PaymentMethod to use by
-                  default for charge processing. The referenced PaymentMethod must
-                  reside in the same namespace and be in the Active phase. The
-                  admission webhook validates both conditions on writes.
-
-                  Holding default on BillingAccount (rather than a flag on each
-                  PaymentMethod) avoids the race where two payment methods can both
-                  claim the default flag before reconciliation converges.
-                properties:
-                  name:
-                    description: Name is the name of the PaymentMethod.
+                    description: Name is the name of the provider-specific configuration
+                      resource.
                     minLength: 1
                     type: string
                 required:
+                - group
+                - kind
                 - name
                 type: object
-              paymentTerms:
-                description: PaymentTerms defines the invoicing schedule for this
-                  billing account.
-                properties:
-                  invoiceDayOfMonth:
-                    default: 1
-                    description: InvoiceDayOfMonth is the day of the month invoices
-                      are generated.
-                    format: int32
-                    maximum: 28
-                    minimum: 1
-                    type: integer
-                  invoiceFrequency:
-                    default: Monthly
-                    description: InvoiceFrequency determines how often invoices are
-                      generated.
-                    enum:
-                    - Monthly
-                    - Quarterly
-                    - Annual
-                    type: string
-                  netDays:
-                    default: 30
-                    description: NetDays is the number of days after invoice date
-                      that payment is due.
-                    format: int32
-                    minimum: 1
-                    type: integer
-                type: object
+              provider:
+                description: |-
+                  Provider is the name of the provider controller responsible for
+                  reconciling PaymentMethods of this class. The controller watches
+                  PaymentMethods whose spec.paymentMethodClassRef points at a class
+                  whose spec.provider matches its own identity. Examples: "stripe",
+                  "braintree".
+                minLength: 1
+                type: string
             required:
-            - currencyCode
+            - parametersRef
+            - provider
             type: object
           status:
-            description: BillingAccountStatus defines the observed state of a BillingAccount.
+            description: PaymentMethodClassStatus defines the observed state of a
+              PaymentMethodClass.
             properties:
               conditions:
                 description: |-
-                  Conditions represent the latest available observations of the billing
-                  account's state.
+                  Conditions represent the latest available observations of the
+                  class's state.
                 items:
                   description: Condition contains details for one aspect of the current
                     state of this API Resource.
@@ -190,26 +167,12 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
-              linkedProjectsCount:
-                description: |-
-                  LinkedProjectsCount is the number of projects currently bound to this
-                  billing account.
-                format: int32
-                type: integer
               observedGeneration:
-                description: ObservedGeneration is the most recent generation observed
-                  by the controller.
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  controller.
                 format: int64
                 type: integer
-              phase:
-                description: Phase represents the current lifecycle phase of the billing
-                  account.
-                enum:
-                - Provisioning
-                - Ready
-                - Suspended
-                - Archived
-                type: string
             type: object
         type: object
     served: true

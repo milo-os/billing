@@ -3,9 +3,14 @@
 package validation
 
 import (
+	"context"
+	"fmt"
 	"regexp"
 
+	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -38,6 +43,40 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 
 	allErrs = append(allErrs, validateContactInfo(newAccount.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
 
+	return allErrs
+}
+
+// ValidateBillingAccountDefaultPaymentMethodRef checks that the
+// defaultPaymentMethodRef (when set) points at a PaymentMethod that
+// exists in the same namespace and is in the Active phase. Callers pass
+// a Reader so this can be invoked from the admission webhook against the
+// live API server.
+func ValidateBillingAccountDefaultPaymentMethodRef(ctx context.Context, c client.Reader, account *billingv1alpha1.BillingAccount) field.ErrorList {
+	var allErrs field.ErrorList
+	fldPath := field.NewPath("spec", "defaultPaymentMethodRef", "name")
+
+	if account.Spec.DefaultPaymentMethodRef == nil || account.Spec.DefaultPaymentMethodRef.Name == "" {
+		return allErrs
+	}
+
+	var pm billingv1alpha1.PaymentMethod
+	key := types.NamespacedName{Namespace: account.Namespace, Name: account.Spec.DefaultPaymentMethodRef.Name}
+	if err := c.Get(ctx, key, &pm); err != nil {
+		if errors.IsNotFound(err) {
+			allErrs = append(allErrs, field.NotFound(fldPath, account.Spec.DefaultPaymentMethodRef.Name))
+		} else {
+			allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("reading payment method: %w", err)))
+		}
+		return allErrs
+	}
+
+	if pm.Status.Phase != billingv1alpha1.PaymentMethodPhaseActive {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath,
+			account.Spec.DefaultPaymentMethodRef.Name,
+			fmt.Sprintf("payment method is in %s phase; only Active payment methods may be designated as default", pm.Status.Phase),
+		))
+	}
 	return allErrs
 }
 

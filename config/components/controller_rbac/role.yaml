@@ -35,44 +35,17 @@ rules:
   - billingaccounts/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
+  - paymentmethods/status
   verbs:
   - get
   - patch
   - update
 - apiGroups:
-  - ""
+  - billing.miloapis.com
   resources:
-  - secrets
+  - paymentmethodclasses
+  - paymentmethods
   verbs:
-  - get
-- apiGroups:
-  - ""
-  resources:
-  - configmaps
-  verbs:
-  - create
-  - delete
   - get
   - list
-  - patch
-  - update
   - watch
-- apiGroups:
-  - coordination.k8s.io
-  resources:
-  - leases
-  verbs:
-  - create
-  - delete
-  - get
-  - list
-  - patch
-  - update
-  - watch
-- apiGroups:
-  - ""
-  resources:
-  - events
-  verbs:
-  - create
-  - patch

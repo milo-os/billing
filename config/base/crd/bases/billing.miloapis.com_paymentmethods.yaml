@@ -1,0 +1,277 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: paymentmethods.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: PaymentMethod
+    listKind: PaymentMethodList
+    plural: paymentmethods
+    singular: paymentmethod
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.paymentMethodClassRef.name
+      name: Class
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.details.card.brand
+      name: Brand
+      type: string
+    - jsonPath: .status.details.card.last4
+      name: Last4
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          PaymentMethod is the Schema for the paymentmethods API.
+
+          PaymentMethod associates a payment instrument with a BillingAccount.
+          Consumers create it carrying only a BillingAccount reference and a
+          display name; the billing service defaulting webhook injects the
+          PaymentMethodClass that selects the provider. The provider controller
+          (e.g. stripe-provider) drives the setup flow via a provider-owned CRD
+          and projects normalized outcome data onto status once the instrument is
+          confirmed.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: PaymentMethodSpec defines the desired state of a PaymentMethod.
+            properties:
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef references the BillingAccount this payment method
+                  belongs to. The BillingAccount must reside in the same namespace.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              displayName:
+                description: |-
+                  DisplayName is a human-readable label shown in the portal and on
+                  invoices (e.g. "Corporate Visa").
+                maxLength: 128
+                minLength: 1
+                type: string
+              paymentMethodClassRef:
+                description: |-
+                  PaymentMethodClassRef selects the PaymentMethodClass — and through
+                  it the provider controller — that owns the setup flow for this
+                  payment method. Left unset by consumers and injected by the
+                  defaulting webhook from the cluster default class. Immutable once
+                  set; changing it would orphan provider-side state.
+                properties:
+                  name:
+                    description: Name is the name of the PaymentMethodClass.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: paymentMethodClassRef is immutable once set
+                  rule: self == oldSelf
+            required:
+            - billingAccountRef
+            - displayName
+            type: object
+          status:
+            description: PaymentMethodStatus defines the observed state of a PaymentMethod.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  payment method's state. See PaymentMethodConditionInstrumentReady.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              details:
+                description: |-
+                  Details is the normalized, provider-agnostic description of the
+                  confirmed instrument. Populated by the owning provider controller
+                  once the phase reaches Active.
+                properties:
+                  card:
+                    description: Card is populated when Type is `card`.
+                    properties:
+                      avsResult:
+                        description: |-
+                          AVSResult is the Address Verification System result code returned
+                          by the issuer (e.g. "pass", "fail", "unchecked").
+                        type: string
+                      brand:
+                        description: Brand is the card network (e.g. "visa", "mastercard",
+                          "amex").
+                        type: string
+                      country:
+                        description: Country is the ISO 3166-1 alpha-2 country code
+                          of the issuer.
+                        type: string
+                      cvcResult:
+                        description: |-
+                          CVCResult is the card verification value check result returned by
+                          the issuer (e.g. "pass", "fail", "unchecked").
+                        type: string
+                      expiryMonth:
+                        description: ExpiryMonth is the card expiration month (1-12).
+                        format: int32
+                        type: integer
+                      expiryYear:
+                        description: ExpiryYear is the card expiration year (four
+                          digits).
+                        format: int32
+                        type: integer
+                      issuerIdentificationNumber:
+                        description: |-
+                          IssuerIdentificationNumber is the BIN (first 6-8 digits) of the
+                          card. Issuer-returned, not provider-specific; useful for downstream
+                          fraud scoring.
+                        type: string
+                      last4:
+                        description: Last4 is the last four digits of the card number.
+                        type: string
+                    type: object
+                  type:
+                    description: Type identifies the instrument category.
+                    enum:
+                    - card
+                    - usBankAccount
+                    type: string
+                  usBankAccount:
+                    description: USBankAccount is populated when Type is `usBankAccount`.
+                    properties:
+                      accountType:
+                        description: AccountType is the type of account (e.g. "checking",
+                          "savings").
+                        type: string
+                      bankName:
+                        description: BankName is the name of the bank holding the
+                          account.
+                        type: string
+                      last4:
+                        description: Last4 is the last four digits of the account
+                          number.
+                        type: string
+                    type: object
+                required:
+                - type
+                type: object
+              failureMessage:
+                description: FailureMessage is a human-readable description of the
+                  failure.
+                type: string
+              failureReason:
+                description: |-
+                  FailureReason is a short, machine-parseable code for the failure
+                  (e.g. "card_declined", "setup_intent_expired"). Set when phase is
+                  Failed.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  reconciling controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current lifecycle phase.
+                enum:
+                - Pending
+                - AwaitingConfirmation
+                - Active
+                - Failed
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
