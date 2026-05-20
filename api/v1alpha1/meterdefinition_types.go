@@ -131,19 +131,19 @@ type MeterBilling struct {
 	// emitted telemetry is pre-converted. Equality with measurement.unit is
 	// not enforced.
 	//
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	ConsumedUnit string `json:"consumedUnit"`
+	ConsumedUnit string `json:"consumedUnit,omitempty"`
 
 	// PricingUnit is the UCUM unit pricing quotes against (e.g. "h").
 	// May differ from ConsumedUnit; the pricing engine handles the
 	// conversion.
 	//
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=64
-	PricingUnit string `json:"pricingUnit"`
+	PricingUnit string `json:"pricingUnit,omitempty"`
 }
 
 // MeterDefinitionStatus defines the observed state of a MeterDefinition.

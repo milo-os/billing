@@ -90,9 +90,6 @@ spec:
                     maxLength: 64
                     minLength: 1
                     type: string
-                required:
-                - consumedUnit
-                - pricingUnit
                 type: object
               description:
                 description: |-
