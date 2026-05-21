@@ -15,8 +15,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/featureflag"
 	"go.miloapis.com/billing/internal/validation"
 )
+
+// FeatureMultipleBillingAccounts is the quota Feature resourceType
+// gating whether an organization may hold more than one BillingAccount.
+// Without a positive grant, the BillingAccount admission webhook
+// rejects the second-and-beyond creation attempt for the org.
+const FeatureMultipleBillingAccounts = "billing.miloapis.com/multiple-billing-accounts"
 
 var billingAccountLog = logf.Log.WithName("billingaccount-webhook")
 
@@ -79,7 +86,53 @@ func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj runtime.
 		)
 	}
 
+	if err := r.validateMultipleBillingAccountsFeature(ctx, account); err != nil {
+		return nil, err
+	}
+
 	return nil, nil
+}
+
+// validateMultipleBillingAccountsFeature enforces the feature flag that
+// gates whether an org may hold more than one BillingAccount.
+//
+//   - First BillingAccount in a namespace: always permitted.
+//   - Second-and-beyond: requires the org to have a positive grant for
+//     the FeatureMultipleBillingAccounts quota resourceType.
+//
+// The org name is derived from the BillingAccount's namespace, which
+// per the multi-tenancy convention corresponds 1:1 with the
+// Organization resource name. If we cannot read the existing
+// BillingAccount list we fail closed; if we cannot read ResourceGrants
+// we fail open with a warning (a quota-API outage should not block
+// every BillingAccount create).
+func (r *billingAccountWebhook) validateMultipleBillingAccountsFeature(ctx context.Context, account *billingv1alpha1.BillingAccount) error {
+	var existing billingv1alpha1.BillingAccountList
+	if err := r.client.List(ctx, &existing, client.InNamespace(account.Namespace)); err != nil {
+		return errors.NewInternalError(fmt.Errorf("listing BillingAccounts: %w", err))
+	}
+	if len(existing.Items) == 0 {
+		return nil
+	}
+
+	granted, err := featureflag.OrgHasFeature(ctx, r.client, account.Namespace, FeatureMultipleBillingAccounts)
+	if err != nil {
+		billingAccountLog.Error(err, "failed to check multiple-billing-accounts feature; permitting create (fail-open)",
+			"organization", account.Namespace)
+		return nil
+	}
+	if granted {
+		return nil
+	}
+
+	return errors.NewInvalid(
+		account.GroupVersionKind().GroupKind(),
+		account.Name,
+		field.ErrorList{field.Forbidden(
+			field.NewPath("metadata", "namespace"),
+			fmt.Sprintf("organization %q already has a BillingAccount; creating additional accounts requires the %q feature to be granted", account.Namespace, FeatureMultipleBillingAccounts),
+		)},
+	)
 }
 
 // ValidateUpdate implements webhook.CustomValidator.
