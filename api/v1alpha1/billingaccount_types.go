@@ -212,14 +212,23 @@ type BillingContactInfo struct {
 	// +kubebuilder:validation:MaxLength=256
 	BusinessName string `json:"businessName,omitempty"`
 
-	// InvoiceEmail overrides Email as the destination for invoices
-	// and receipts. When unset, Email is used. Useful when invoices
-	// need to go to an accounts-payable mailbox different from the
-	// account-holder contact.
+	// InvoiceEmails is the list of recipients that invoices and
+	// receipts are sent to. The first entry is the primary recipient;
+	// subsequent entries are CC'd. When the list is empty, Email is
+	// used as a single primary recipient.
+	//
+	// Provider support for multiple recipients varies: Stripe
+	// Customer.email is single-valued, so the stripe-provider maps
+	// the first entry onto it and CC's the rest via its own
+	// invoice-sent webhook (when configured). Consumers should treat
+	// the entire list as authoritative; the provider handles fan-out.
+	//
+	// Duplicate entries are rejected. Maximum 10 entries.
 	//
 	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:Pattern=`^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$`
-	InvoiceEmail string `json:"invoiceEmail,omitempty"`
+	// +kubebuilder:validation:MaxItems=10
+	// +listType=set
+	InvoiceEmails []string `json:"invoiceEmails,omitempty"`
 
 	// Address is the postal billing address. Appears on invoices and
 	// is surfaced to the configured provider controller (e.g. for

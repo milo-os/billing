@@ -229,20 +229,28 @@ func TestValidateContactInfo_AddressAndInvoiceEmail(t *testing.T) {
 		{
 			name: "valid full contact",
 			contact: &billingv1alpha1.BillingContactInfo{
-				Name:         "Matt Jenkinson",
-				BusinessName: "Acme Corp Ltd",
-				Email:        "billing@example.com",
-				InvoiceEmail: "ar@example.com",
+				Name:          "Matt Jenkinson",
+				BusinessName:  "Acme Corp Ltd",
+				Email:         "billing@example.com",
+				InvoiceEmails: []string{"ar@example.com", "finance@example.com"},
 				Address: &billingv1alpha1.BillingAddress{
 					Country: "GB", Line1: "1 King St", City: "London", PostalCode: "W1 1AA",
 				},
 			},
 		},
 		{
-			name: "invalid invoice email",
+			name: "invalid invoice email entry",
 			contact: &billingv1alpha1.BillingContactInfo{
-				Email:        "billing@example.com",
-				InvoiceEmail: "not-an-email",
+				Email:         "billing@example.com",
+				InvoiceEmails: []string{"not-an-email"},
+			},
+			wantErr: true,
+		},
+		{
+			name: "duplicate invoice emails",
+			contact: &billingv1alpha1.BillingContactInfo{
+				Email:         "billing@example.com",
+				InvoiceEmails: []string{"a@b.com", "a@b.com"},
 			},
 			wantErr: true,
 		},

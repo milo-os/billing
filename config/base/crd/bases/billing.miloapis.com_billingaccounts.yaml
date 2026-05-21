@@ -120,14 +120,25 @@ spec:
                       invoices and receipts.
                     minLength: 1
                     type: string
-                  invoiceEmail:
+                  invoiceEmails:
                     description: |-
-                      InvoiceEmail overrides Email as the destination for invoices
-                      and receipts. When unset, Email is used. Useful when invoices
-                      need to go to an accounts-payable mailbox different from the
-                      account-holder contact.
-                    pattern: ^[a-zA-Z0-9._%+\-]+@[a-zA-Z0-9.\-]+\.[a-zA-Z]{2,}$
-                    type: string
+                      InvoiceEmails is the list of recipients that invoices and
+                      receipts are sent to. The first entry is the primary recipient;
+                      subsequent entries are CC'd. When the list is empty, Email is
+                      used as a single primary recipient.
+
+                      Provider support for multiple recipients varies: Stripe
+                      Customer.email is single-valued, so the stripe-provider maps
+                      the first entry onto it and CC's the rest via its own
+                      invoice-sent webhook (when configured). Consumers should treat
+                      the entire list as authoritative; the provider handles fan-out.
+
+                      Duplicate entries are rejected. Maximum 10 entries.
+                    items:
+                      type: string
+                    maxItems: 10
+                    type: array
+                    x-kubernetes-list-type: set
                   name:
                     description: |-
                       Name is the display name of the individual billing contact —
