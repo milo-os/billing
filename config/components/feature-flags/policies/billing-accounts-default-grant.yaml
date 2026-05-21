@@ -1,0 +1,34 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: GrantCreationPolicy
+metadata:
+  name: billing-accounts-default-grant
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: billing-accounts
+spec:
+  # When a new Organization reaches Active phase, grant it a baseline
+  # capacity of 1 BillingAccount. This preserves the day-one design
+  # promise that every org can have a BillingAccount; orgs that need
+  # multiple BillingAccounts get an additional ResourceGrant issued by
+  # an operator (or a higher-tier policy) bumping the capacity.
+  trigger:
+    resource:
+      apiVersion: resourcemanager.miloapis.com/v1alpha1
+      kind: Organization
+    constraints:
+      - expression: 'trigger.status.phase == "Active"'
+        message: "Wait until the Organization has reached the Active phase before granting billing-account capacity."
+  target:
+    resourceGrantTemplate:
+      metadata:
+        name: 'billing-accounts-default-{{ trigger.metadata.name }}'
+      spec:
+        consumerRef:
+          apiGroup: resourcemanager.miloapis.com
+          kind: Organization
+          name: '{{ trigger.metadata.name }}'
+        allowances:
+          - resourceType: billing.miloapis.com/billingaccounts
+            buckets:
+              - amount: 1

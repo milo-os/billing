@@ -1,0 +1,23 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: ResourceRegistration
+metadata:
+  name: billing-accounts-per-organization
+  annotations:
+    kubernetes.io/display-name: Billing Accounts per Organization
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: billing-accounts
+spec:
+  consumerType:
+    apiGroup: resourcemanager.miloapis.com
+    kind: Organization
+  type: Entity
+  resourceType: billing.miloapis.com/billingaccounts
+  description: "Capacity for BillingAccount resources held by an Organization. A baseline grant of 1 is auto-created for every new Organization via the billing-accounts-default-grant GrantCreationPolicy; raising the cap (multi-billing-account orgs) is done by issuing an additional ResourceGrant on the target org."
+  baseUnit: account
+  displayUnit: accounts
+  unitConversionFactor: 1
+  claimingResources:
+    - apiGroup: billing.miloapis.com
+      kind: BillingAccount

@@ -1,0 +1,3 @@
+resources:
+  - billing-accounts-claim.yaml
+  - billing-accounts-default-grant.yaml
