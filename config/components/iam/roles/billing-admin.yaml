@@ -18,3 +18,7 @@ spec:
     - billing.miloapis.com/billingaccountbindings.update
     - billing.miloapis.com/billingaccountbindings.patch
     - billing.miloapis.com/billingaccountbindings.delete
+    - billing.miloapis.com/paymentmethods.create
+    - billing.miloapis.com/paymentmethods.update
+    - billing.miloapis.com/paymentmethods.patch
+    - billing.miloapis.com/paymentmethods.delete

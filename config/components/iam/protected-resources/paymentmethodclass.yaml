@@ -1,0 +1,24 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: billing.miloapis.com-paymentmethodclass
+spec:
+  serviceRef:
+    name: "billing.miloapis.com"
+  kind: PaymentMethodClass
+  plural: paymentmethodclasses
+  singular: paymentmethodclass
+  # PaymentMethodClass is cluster-scoped and operator-managed (deployed
+  # via FluxCD alongside a provider controller); no parent Organization.
+  # Read access for end users is granted via the
+  # authenticated-user-payment-method-class-read PolicyBinding so the
+  # portal can discover the cluster-default class without per-user
+  # bindings; create / update / delete are restricted to cluster-admins.
+  permissions:
+    - list
+    - get
+    - create
+    - update
+    - patch
+    - delete
+    - watch

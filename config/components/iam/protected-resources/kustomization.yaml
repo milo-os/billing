@@ -10,3 +10,5 @@ resources:
   - billingaccountbinding.yaml
   - meterdefinition.yaml
   - monitoredresourcetype.yaml
+  - paymentmethod.yaml
+  - paymentmethodclass.yaml

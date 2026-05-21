@@ -1,0 +1,21 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: PolicyBinding
+metadata:
+  name: authenticated-user-payment-method-class-read
+spec:
+  # PaymentMethodClass is cluster-scoped and operator-managed. The
+  # cloud portal needs to read it (and follow parametersRef to a
+  # provider-specific config) to discover which provider SDK to load
+  # when collecting a payment method, so we grant a global read to all
+  # authenticated users rather than requiring per-org PolicyBindings.
+  # Create / update / delete remain restricted to cluster
+  # administrators.
+  roleRef:
+    name: billing.miloapis.com-payment-method-class-viewer
+  subjects:
+    - kind: Group
+      name: "system:authenticated"
+  resourceSelector:
+    resourceKind:
+      apiGroup: "billing.miloapis.com"
+      kind: PaymentMethodClass
