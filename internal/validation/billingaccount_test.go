@@ -229,10 +229,11 @@ func TestValidateContactInfo_AddressAndInvoiceEmail(t *testing.T) {
 		{
 			name: "valid full contact",
 			contact: &billingv1alpha1.BillingContactInfo{
+				Name:         "Matt Jenkinson",
+				BusinessName: "Acme Corp Ltd",
 				Email:        "billing@example.com",
 				InvoiceEmail: "ar@example.com",
 				Address: &billingv1alpha1.BillingAddress{
-					FirstName: "Matt", LastName: "Jenkinson",
 					Country: "GB", Line1: "1 King St", City: "London", PostalCode: "W1 1AA",
 				},
 			},

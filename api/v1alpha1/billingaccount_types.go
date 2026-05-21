@@ -70,19 +70,13 @@ type BillingAccountSpec struct {
 // BillingAddress is a postal billing address. Country is required;
 // other fields are recommended but optional because postal-address
 // conventions differ widely by region.
+//
+// Name fields are intentionally absent: the recipient name (and
+// optional business name) live on BillingContactInfo so we have a
+// single source of truth for "who is being billed" and a clean 1:1
+// mapping onto provider Customer records (Stripe, Adyen, etc. all
+// use a single name field on the customer, not on the address).
 type BillingAddress struct {
-	// FirstName is the given name of the bill recipient.
-	//
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxLength=128
-	FirstName string `json:"firstName,omitempty"`
-
-	// LastName is the family name of the bill recipient.
-	//
-	// +kubebuilder:validation:Optional
-	// +kubebuilder:validation:MaxLength=128
-	LastName string `json:"lastName,omitempty"`
-
 	// Country is the ISO 3166-1 alpha-2 country code (e.g. "GB",
 	// "US"). Required because tax determination and currency
 	// restrictions depend on it.
@@ -197,14 +191,30 @@ type BillingContactInfo struct {
 	// +kubebuilder:validation:MinLength=1
 	Email string `json:"email"`
 
-	// Name is the display name of the billing contact.
+	// Name is the display name of the individual billing contact —
+	// the human the platform talks to. Surfaces as the "ATTN:" line
+	// on invoices when BusinessName is also set.
 	//
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=256
 	Name string `json:"name,omitempty"`
 
-	// InvoiceEmail overrides Email as the destination for invoices and
-	// receipts. When unset, Email is used. Useful when invoices need
-	// to go to an accounts-payable mailbox different from the
+	// BusinessName is the legal entity that pays. Optional; populate
+	// it for B2B accounts so invoices print the company name as the
+	// top header line and the provider Customer record carries the
+	// company name rather than the individual contact.
+	//
+	// When set, the provider controller maps this onto its
+	// Customer.name field (e.g. Stripe Customer.name). When unset,
+	// Name is used instead.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=256
+	BusinessName string `json:"businessName,omitempty"`
+
+	// InvoiceEmail overrides Email as the destination for invoices
+	// and receipts. When unset, Email is used. Useful when invoices
+	// need to go to an accounts-payable mailbox different from the
 	// account-holder contact.
 	//
 	// +kubebuilder:validation:Optional
@@ -212,8 +222,8 @@ type BillingContactInfo struct {
 	InvoiceEmail string `json:"invoiceEmail,omitempty"`
 
 	// Address is the postal billing address. Appears on invoices and
-	// is surfaced to the configured provider controller (e.g. for tax
-	// determination, AVS).
+	// is surfaced to the configured provider controller (e.g. for
+	// tax determination, AVS).
 	//
 	// +kubebuilder:validation:Optional
 	Address *BillingAddress `json:"address,omitempty"`
