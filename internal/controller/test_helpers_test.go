@@ -90,7 +90,77 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 		})
 	}
 
+	// Mirror the production controller's default-payment-method
+	// projection so envtests exercise the same code path.
+	(&BillingAccountReconciler{client: r.client}).reconcileDefaultPaymentMethodCondition(ctx, &account)
+
 	return ctrl.Result{}, r.client.Status().Update(ctx, &account)
+}
+
+// testPaymentMethodReconciler is a test adapter that mirrors the
+// production PaymentMethodReconciler: it sets Pending phase on newly
+// admitted resources and projects the InstrumentReady condition from
+// status.phase. It is wired in suite_test.go so envtests that mutate
+// PaymentMethod status see the same condition lifecycle as production.
+type testPaymentMethodReconciler struct {
+	client client.Client
+}
+
+func (r *testPaymentMethodReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
+	var pm billingv1alpha1.PaymentMethod
+	if err := r.client.Get(ctx, req.NamespacedName, &pm); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	if !pm.DeletionTimestamp.IsZero() {
+		return ctrl.Result{}, nil
+	}
+	base := pm.DeepCopy()
+	if pm.Status.Phase == "" {
+		pm.Status.Phase = billingv1alpha1.PaymentMethodPhasePending
+	}
+	cond := metav1.Condition{
+		Type:               billingv1alpha1.PaymentMethodConditionInstrumentReady,
+		ObservedGeneration: pm.Generation,
+	}
+	switch pm.Status.Phase {
+	case billingv1alpha1.PaymentMethodPhaseActive:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = "Active"
+		cond.Message = "Payment method has been confirmed by the provider."
+	case billingv1alpha1.PaymentMethodPhaseFailed:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "Failed"
+		cond.Message = "Provider reported a setup failure."
+	default:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = string(pm.Status.Phase)
+		cond.Message = "Provider has not yet confirmed the payment method."
+	}
+	apimeta.SetStatusCondition(&pm.Status.Conditions, cond)
+	pm.Status.ObservedGeneration = pm.Generation
+	return ctrl.Result{}, r.client.Status().Patch(ctx, &pm, client.MergeFrom(base))
+}
+
+// reconcileAccountFromPaymentMethod enqueues the referenced
+// BillingAccount when a PaymentMethod changes.
+func reconcileAccountFromPaymentMethod(cl client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(
+		func(ctx context.Context, obj client.Object) []reconcile.Request {
+			pm, ok := obj.(*billingv1alpha1.PaymentMethod)
+			if !ok {
+				return nil
+			}
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      pm.Spec.BillingAccountRef.Name,
+					Namespace: pm.Namespace,
+				},
+			}}
+		},
+	)
 }
 
 func (r *testBillingAccountReconciler) countActiveBindings(ctx context.Context, account *billingv1alpha1.BillingAccount) (int32, error) {

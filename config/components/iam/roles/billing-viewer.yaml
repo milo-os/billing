@@ -14,3 +14,6 @@ spec:
     - billing.miloapis.com/billingaccountbindings.list
     - billing.miloapis.com/billingaccountbindings.get
     - billing.miloapis.com/billingaccountbindings.watch
+    - billing.miloapis.com/paymentmethods.list
+    - billing.miloapis.com/paymentmethods.get
+    - billing.miloapis.com/paymentmethods.watch

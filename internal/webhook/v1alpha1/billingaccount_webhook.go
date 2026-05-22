@@ -71,7 +71,9 @@ func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj runtime.
 
 	billingAccountLog.Info("validating create", "name", account.GetName())
 
-	if errs := validation.ValidateBillingAccountCreate(account); len(errs) > 0 {
+	errs := validation.ValidateBillingAccountCreate(account)
+	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, account)...)
+	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
 			account.Name,
@@ -96,7 +98,11 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 
 	billingAccountLog.Info("validating update", "name", newAccount.GetName())
 
-	if errs := validation.ValidateBillingAccountUpdate(oldAccount, newAccount); len(errs) > 0 {
+	errs := validation.ValidateBillingAccountUpdate(oldAccount, newAccount)
+	if !defaultPaymentMethodRefUnchanged(oldAccount, newAccount) {
+		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, newAccount)...)
+	}
+	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
 			newAccount.Name,
@@ -105,6 +111,18 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 	}
 
 	return nil, nil
+}
+
+func defaultPaymentMethodRefUnchanged(oldAccount, newAccount *billingv1alpha1.BillingAccount) bool {
+	oldName := ""
+	if oldAccount.Spec.DefaultPaymentMethodRef != nil {
+		oldName = oldAccount.Spec.DefaultPaymentMethodRef.Name
+	}
+	newName := ""
+	if newAccount.Spec.DefaultPaymentMethodRef != nil {
+		newName = newAccount.Spec.DefaultPaymentMethodRef.Name
+	}
+	return oldName == newName
 }
 
 // ValidateDelete implements webhook.CustomValidator.

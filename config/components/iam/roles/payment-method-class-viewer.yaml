@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-payment-method-class-viewer
+  annotations:
+    kubernetes.io/display-name: Payment Method Class Viewer
+    kubernetes.io/description: "View access to all payment method class resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/paymentmethodclasses.list
+    - billing.miloapis.com/paymentmethodclasses.get
+    - billing.miloapis.com/paymentmethodclasses.watch

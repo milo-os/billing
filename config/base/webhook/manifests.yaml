@@ -8,7 +8,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: billing-webhook
+      name: webhook-service
       namespace: system
       path: /mutate-billing-miloapis-com-v1alpha1-billingaccount
   failurePolicy: Fail
@@ -24,6 +24,26 @@ webhooks:
     resources:
     - billingaccounts
   sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /mutate-billing-miloapis-com-v1alpha1-paymentmethod
+  failurePolicy: Fail
+  name: mpaymentmethod.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - paymentmethods
+  sideEffects: None
 ---
 apiVersion: admissionregistration.k8s.io/v1
 kind: ValidatingWebhookConfiguration
@@ -34,7 +54,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: billing-webhook
+      name: webhook-service
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-billingaccount
   failurePolicy: Fail
@@ -55,7 +75,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: billing-webhook
+      name: webhook-service
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-billingaccountbinding
   failurePolicy: Fail
@@ -76,7 +96,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: billing-webhook
+      name: webhook-service
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-meterdefinition
   failurePolicy: Fail
@@ -97,7 +117,7 @@ webhooks:
   - v1
   clientConfig:
     service:
-      name: billing-webhook
+      name: webhook-service
       namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-monitoredresourcetype
   failurePolicy: Fail
@@ -113,4 +133,44 @@ webhooks:
     - DELETE
     resources:
     - monitoredresourcetypes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-paymentmethod
+  failurePolicy: Fail
+  name: vpaymentmethod.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - paymentmethods
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: webhook-service
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-paymentmethodclass
+  failurePolicy: Fail
+  name: vpaymentmethodclass.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - paymentmethodclasses
   sideEffects: None

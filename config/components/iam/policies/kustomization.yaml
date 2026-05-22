@@ -6,3 +6,4 @@ configurations:
 
 resources:
   - authenticated-user-meter-definition-read.yaml
+  - authenticated-user-payment-method-class-read.yaml

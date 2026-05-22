@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-payment-method-class-admin
+  annotations:
+    kubernetes.io/display-name: Payment Method Class Admin
+    kubernetes.io/description: "Full access to all payment method class resources. PaymentMethodClass is cluster-scoped and operator-managed; this role is intended for cluster administrators, not end users."
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-payment-method-class-viewer
+  includedPermissions:
+    - billing.miloapis.com/paymentmethodclasses.create
+    - billing.miloapis.com/paymentmethodclasses.update
+    - billing.miloapis.com/paymentmethodclasses.patch
+    - billing.miloapis.com/paymentmethodclasses.delete
