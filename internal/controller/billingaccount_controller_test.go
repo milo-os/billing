@@ -5,6 +5,7 @@ package controller
 import (
 	"time"
 
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
@@ -151,6 +152,115 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		Expect(fetched.Spec.CurrencyCode).To(Equal("USD"))
 
 		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("DefaultPaymentMethodReady=False NotConfigured when no ref is set", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-notconfigured", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(c.Reason).To(Equal("NotConfigured"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("DefaultPaymentMethodReady=False PaymentMethodNotFound when ref points at a missing PM", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-notfound", Namespace: "default"},
+			Spec: billingv1alpha1.BillingAccountSpec{
+				CurrencyCode:            "USD",
+				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "missing-pm"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(c.Reason).To(Equal("PaymentMethodNotFound"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("DefaultPaymentMethodReady=False PaymentMethodDegraded when ref points at a non-Active PM", func() {
+		// PM left in Pending — the test adapter's defaulting will set
+		// it but never advance to Active without a provider.
+		pm := &billingv1alpha1.PaymentMethod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pm-degraded", Namespace: "default"},
+			Spec: billingv1alpha1.PaymentMethodSpec{
+				BillingAccountRef:     billingv1alpha1.BillingAccountRef{Name: "dpmr-degraded"},
+				DisplayName:           "Pending Card",
+				PaymentMethodClassRef: &billingv1alpha1.PaymentMethodClassRef{Name: "test-class"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-degraded", Namespace: "default"},
+			Spec: billingv1alpha1.BillingAccountSpec{
+				CurrencyCode:            "USD",
+				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "pm-degraded"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(c.Reason).To(Equal("PaymentMethodDegraded"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, pm)).To(Succeed())
+	})
+
+	It("DefaultPaymentMethodReady=True Ready when ref points at an Active PM", func() {
+		pm := &billingv1alpha1.PaymentMethod{
+			ObjectMeta: metav1.ObjectMeta{Name: "pm-active", Namespace: "default"},
+			Spec: billingv1alpha1.PaymentMethodSpec{
+				BillingAccountRef:     billingv1alpha1.BillingAccountRef{Name: "dpmr-ready"},
+				DisplayName:           "Active Card",
+				PaymentMethodClassRef: &billingv1alpha1.PaymentMethodClassRef{Name: "test-class"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
+		// Force the PM to Active. The test adapter mirrors that into the
+		// InstrumentReady condition and the BillingAccount controller
+		// re-reads it via the PaymentMethod watch.
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.PaymentMethod
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.PaymentMethodPhaseActive
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-ready", Namespace: "default"},
+			Spec: billingv1alpha1.BillingAccountSpec{
+				CurrencyCode:            "USD",
+				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "pm-active"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("Ready"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, pm)).To(Succeed())
 	})
 
 	It("should reject invalid currency code", func() {

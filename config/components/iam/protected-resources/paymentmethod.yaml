@@ -1,0 +1,21 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: billing.miloapis.com-paymentmethod
+spec:
+  serviceRef:
+    name: "billing.miloapis.com"
+  kind: PaymentMethod
+  plural: paymentmethods
+  singular: paymentmethod
+  permissions:
+    - list
+    - get
+    - create
+    - update
+    - patch
+    - delete
+    - watch
+  parentResources:
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Organization

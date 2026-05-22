@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -34,6 +35,7 @@ type BillingAccountReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts/finalizers,verbs=update
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=paymentmethods,verbs=get;list;watch
 
 func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -92,6 +94,9 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 			Message:            fmt.Sprintf("Billing account is in %s phase.", targetPhase),
 		})
 	}
+
+	// Resolve and project the default-payment-method health onto status.
+	r.reconcileDefaultPaymentMethodCondition(ctx, &account)
 
 	if err := r.client.Status().Update(ctx, &account); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
@@ -174,6 +179,54 @@ func (r *BillingAccountReconciler) reconcileDelete(
 	return ctrl.Result{}, nil
 }
 
+// reconcileDefaultPaymentMethodCondition keeps the
+// DefaultPaymentMethodReady condition in lock-step with the configured
+// defaultPaymentMethodRef and the phase of the referenced PaymentMethod.
+// Failures to resolve the referenced resource are surfaced as a False
+// condition; they never bubble up as errors because they're a
+// configuration concern, not a reconcile failure.
+func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+) {
+	cond := metav1.Condition{
+		Type:               billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady,
+		ObservedGeneration: account.Generation,
+	}
+
+	switch {
+	case account.Spec.DefaultPaymentMethodRef == nil || account.Spec.DefaultPaymentMethodRef.Name == "":
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "NotConfigured"
+		cond.Message = "No default payment method has been configured for this billing account."
+
+	default:
+		var pm billingv1alpha1.PaymentMethod
+		key := types.NamespacedName{Namespace: account.Namespace, Name: account.Spec.DefaultPaymentMethodRef.Name}
+		err := r.client.Get(ctx, key, &pm)
+		switch {
+		case apierrors.IsNotFound(err):
+			cond.Status = metav1.ConditionFalse
+			cond.Reason = "PaymentMethodNotFound"
+			cond.Message = fmt.Sprintf("Default payment method %q does not exist in namespace %q.", key.Name, key.Namespace)
+		case err != nil:
+			cond.Status = metav1.ConditionUnknown
+			cond.Reason = "Unknown"
+			cond.Message = fmt.Sprintf("Failed to read default payment method %q: %v.", key.Name, err)
+		case pm.Status.Phase != billingv1alpha1.PaymentMethodPhaseActive:
+			cond.Status = metav1.ConditionFalse
+			cond.Reason = "PaymentMethodDegraded"
+			cond.Message = fmt.Sprintf("Default payment method %q is in %s phase. Update defaultPaymentMethodRef to an active payment method.", pm.Name, pm.Status.Phase)
+		default:
+			cond.Status = metav1.ConditionTrue
+			cond.Reason = "Ready"
+			cond.Message = "Default payment method is active."
+		}
+	}
+
+	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
@@ -196,6 +249,22 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 							},
 						},
 					}
+				},
+			),
+		).
+		Watches(&billingv1alpha1.PaymentMethod{},
+			handler.EnqueueRequestsFromMapFunc(
+				func(ctx context.Context, obj client.Object) []reconcile.Request {
+					pm, ok := obj.(*billingv1alpha1.PaymentMethod)
+					if !ok {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: client.ObjectKey{
+							Name:      pm.Spec.BillingAccountRef.Name,
+							Namespace: pm.Namespace,
+						},
+					}}
 				},
 			),
 		).

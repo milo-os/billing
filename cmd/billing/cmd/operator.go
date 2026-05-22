@@ -131,6 +131,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.MonitoredResourceTypeReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating MonitoredResourceType controller: %w", err)
 			}
+			if err = (&controller.PaymentMethodReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating PaymentMethod controller: %w", err)
+			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)
@@ -220,6 +223,12 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				}
 				if err = billingwebhooks.SetupMonitoredResourceTypeWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating MonitoredResourceType webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupPaymentMethodClassWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating PaymentMethodClass webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupPaymentMethodWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating PaymentMethod webhook: %w", err)
 				}
 				if err = billingwebhooks.SetupMeterDefinitionOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
 					return fmt.Errorf("creating MeterDefinitionOwnership webhook: %w", err)

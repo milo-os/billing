@@ -57,14 +57,94 @@ spec:
             description: BillingAccountSpec defines the desired state of a BillingAccount.
             properties:
               contactInfo:
-                description: ContactInfo defines the billing contact for notifications.
+                description: |-
+                  ContactInfo describes the billing contact and the postal
+                  address invoices are issued to.
                 properties:
+                  address:
+                    description: |-
+                      Address is the postal billing address. Appears on invoices and
+                      is surfaced to the configured provider controller (e.g. for
+                      tax determination, AVS).
+                    properties:
+                      city:
+                        description: City is the locality.
+                        maxLength: 128
+                        type: string
+                      country:
+                        description: |-
+                          Country is the ISO 3166-1 alpha-2 country code (e.g. "GB",
+                          "US"). Required because tax determination and currency
+                          restrictions depend on it.
+                        pattern: ^[A-Z]{2}$
+                        type: string
+                      line1:
+                        description: |-
+                          Line1 is the first line of the street address (typically
+                          "number + street").
+                        maxLength: 256
+                        type: string
+                      line2:
+                        description: |-
+                          Line2 is the second line of the street address (typically
+                          apartment / suite / building).
+                        maxLength: 256
+                        type: string
+                      postalCode:
+                        description: PostalCode is the post / zip code.
+                        maxLength: 32
+                        type: string
+                      region:
+                        description: Region is the state, province, or county (free-form).
+                        maxLength: 128
+                        type: string
+                    required:
+                    - country
+                    type: object
+                  businessName:
+                    description: |-
+                      BusinessName is the legal entity that pays. Optional; populate
+                      it for B2B accounts so invoices print the company name as the
+                      top header line and the provider Customer record carries the
+                      company name rather than the individual contact.
+
+                      When set, the provider controller maps this onto its
+                      Customer.name field (e.g. Stripe Customer.name). When unset,
+                      Name is used instead.
+                    maxLength: 256
+                    type: string
                   email:
-                    description: Email is the email address for billing notifications.
+                    description: |-
+                      Email is the primary billing contact email. Receives billing
+                      notifications and, when InvoiceEmail is unset, also receives
+                      invoices and receipts.
                     minLength: 1
                     type: string
+                  invoiceEmails:
+                    description: |-
+                      InvoiceEmails is the list of recipients that invoices and
+                      receipts are sent to. The first entry is the primary recipient;
+                      subsequent entries are CC'd. When the list is empty, Email is
+                      used as a single primary recipient.
+
+                      Provider support for multiple recipients varies: Stripe
+                      Customer.email is single-valued, so the stripe-provider maps
+                      the first entry onto it and CC's the rest via its own
+                      invoice-sent webhook (when configured). Consumers should treat
+                      the entire list as authoritative; the provider handles fan-out.
+
+                      Duplicate entries are rejected. Maximum 10 entries.
+                    items:
+                      type: string
+                    maxItems: 10
+                    type: array
+                    x-kubernetes-list-type: set
                   name:
-                    description: Name is the display name of the billing contact.
+                    description: |-
+                      Name is the display name of the individual billing contact —
+                      the human the platform talks to. Surfaces as the "ATTN:" line
+                      on invoices when BusinessName is also set.
+                    maxLength: 256
                     type: string
                 required:
                 - email
@@ -75,6 +155,19 @@ spec:
                   This field is immutable once the account transitions past Provisioning phase.
                 pattern: ^[A-Z]{3}$
                 type: string
+              defaultPaymentMethodRef:
+                description: |-
+                  DefaultPaymentMethodRef references the PaymentMethod to use by
+                  default for charge processing. The referenced PaymentMethod must
+                  reside in the same namespace and be in the Active phase.
+                properties:
+                  name:
+                    description: Name is the name of the PaymentMethod.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               paymentTerms:
                 description: PaymentTerms defines the invoicing schedule for this
                   billing account.
@@ -104,6 +197,44 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+              taxIds:
+                description: |-
+                  TaxIDs are the tax registrations attached to this account. An
+                  account can carry multiple entries (e.g. an organisation
+                  registered for both GB VAT and EU VAT).
+                items:
+                  description: |-
+                    TaxID is a single tax registration.
+
+                    Type values follow a vendor-neutral snake-case
+                    `<jurisdiction>_<scheme>` convention — e.g. "gb_vat", "eu_vat",
+                    "us_ein", "au_abn", "ca_gst_hst", "ch_vat", "in_gst", "sg_gst".
+                    The pattern check enforces the shape rather than the exact set of
+                    values, so new schemes can be added without API changes.
+                    Translation to any provider-specific identifier (if needed) is the
+                    responsibility of the provider controller, not this schema.
+                  properties:
+                    type:
+                      description: Type identifies the tax registration scheme (e.g.
+                        "gb_vat").
+                      maxLength: 32
+                      pattern: ^[a-z]{2}_[a-z][a-z_]*$
+                      type: string
+                    value:
+                      description: |-
+                        Value is the registration number / identifier
+                        (e.g. "GB123456789").
+                      maxLength: 64
+                      minLength: 1
+                      type: string
+                  required:
+                  - type
+                  - value
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
             required:
             - currencyCode
             type: object

@@ -98,6 +98,9 @@ var _ = BeforeSuite(func() {
 		Watches(&billingv1alpha1.BillingAccountBinding{},
 			reconcileAccountFromBinding(mgr.GetClient()),
 		).
+		Watches(&billingv1alpha1.PaymentMethod{},
+			reconcileAccountFromPaymentMethod(mgr.GetClient()),
+		).
 		Complete(&testBillingAccountReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
 
@@ -106,6 +109,13 @@ var _ = BeforeSuite(func() {
 		Named("billingaccountbinding-test").
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		Complete(&testBillingAccountBindingReconciler{client: mgr.GetClient()})
+	Expect(err).NotTo(HaveOccurred())
+
+	// Register PaymentMethod controller (test adapter)
+	err = ctrl.NewControllerManagedBy(mgr).
+		Named("paymentmethod-test").
+		For(&billingv1alpha1.PaymentMethod{}).
+		Complete(&testPaymentMethodReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
 
 	// Get the cached client from the manager (supports field indexers)
