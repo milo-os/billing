@@ -6,6 +6,8 @@ resources:
 - bases/billing.miloapis.com_billingaccountbindings.yaml
 - bases/billing.miloapis.com_meterdefinitions.yaml
 - bases/billing.miloapis.com_monitoredresourcetypes.yaml
+- bases/billing.miloapis.com_paymentmethods.yaml
+- bases/billing.miloapis.com_paymentmethodclasses.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:
