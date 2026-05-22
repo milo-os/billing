@@ -94,8 +94,22 @@ func validateContactInfo(contact *billingv1alpha1.BillingContactInfo, fldPath *f
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("email"), contact.Email, "must be a valid email address"))
 	}
 
-	if contact.InvoiceEmail != "" && !emailRegex.MatchString(contact.InvoiceEmail) {
-		allErrs = append(allErrs, field.Invalid(fldPath.Child("invoiceEmail"), contact.InvoiceEmail, "must be a valid email address"))
+	emailsPath := fldPath.Child("invoiceEmails")
+	seenEmails := make(map[string]struct{}, len(contact.InvoiceEmails))
+	for i, e := range contact.InvoiceEmails {
+		idxPath := emailsPath.Index(i)
+		if e == "" {
+			allErrs = append(allErrs, field.Required(idxPath, "invoice email must not be empty"))
+			continue
+		}
+		if !emailRegex.MatchString(e) {
+			allErrs = append(allErrs, field.Invalid(idxPath, e, "must be a valid email address"))
+			continue
+		}
+		if _, dup := seenEmails[e]; dup {
+			allErrs = append(allErrs, field.Duplicate(idxPath, e))
+		}
+		seenEmails[e] = struct{}{}
 	}
 
 	if contact.Address != nil {

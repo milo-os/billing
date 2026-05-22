@@ -219,12 +219,20 @@ spec:
                             type: string
                         type: object
                       brand:
-                        description: Brand is the card network (e.g. "visa", "mastercard",
-                          "amex").
+                        description: |-
+                          Brand is the card network (e.g. "visa", "mastercard", "amex").
+                          Universally returned by every major card processor and load-
+                          bearing for display + routing logic.
+                        minLength: 1
                         type: string
                       country:
-                        description: Country is the ISO 3166-1 alpha-2 country code
-                          of the issuer.
+                        description: |-
+                          Country is the ISO 3166-1 alpha-2 country code of the issuer.
+                          Load-bearing for tax determination and one of the strongest
+                          fraud signals. Returned by every major card processor we expect
+                          to integrate with; a provider that cannot supply it must
+                          synthesize "XX" (ISO unassigned).
+                        pattern: ^[A-Z]{2}$
                         type: string
                       cvcResult:
                         description: |-
@@ -232,23 +240,41 @@ spec:
                           the issuer (e.g. "pass", "fail", "unchecked").
                         type: string
                       expiryMonth:
-                        description: ExpiryMonth is the card expiration month (1-12).
+                        description: |-
+                          ExpiryMonth is the card expiration month (1-12). Cards have
+                          expiry by definition; required so we can drive "your card
+                          expires soon" notifications.
                         format: int32
+                        maximum: 12
+                        minimum: 1
                         type: integer
                       expiryYear:
                         description: ExpiryYear is the card expiration year (four
                           digits).
                         format: int32
+                        maximum: 2100
+                        minimum: 2000
                         type: integer
                       issuerIdentificationNumber:
                         description: |-
                           IssuerIdentificationNumber is the BIN (first 6-8 digits) of the
-                          card. Issuer-returned, not provider-specific; useful for downstream
-                          fraud scoring.
+                          card. Issuer-returned, not provider-specific; useful for
+                          downstream fraud scoring. Optional because some providers gate
+                          BIN data behind enterprise tiers.
                         type: string
                       last4:
-                        description: Last4 is the last four digits of the card number.
+                        description: |-
+                          Last4 is the last four digits of the card number. Universally
+                          returned and load-bearing for display, deduplication, and
+                          customer support.
+                        pattern: ^[0-9]{4}$
                         type: string
+                    required:
+                    - brand
+                    - country
+                    - expiryMonth
+                    - expiryYear
+                    - last4
                     type: object
                   type:
                     description: Type identifies the instrument category.

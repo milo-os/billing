@@ -87,13 +87,13 @@ type PaymentMethodClassRef struct {
 // not exposed here — they live on the provider-owned CRD and are
 // consumed only by the provider controller.
 //
-// All sub-fields below are optional because they are populated by the
-// provider controller on a best-effort basis from whatever the issuer
-// or upstream API returns. A consumer reading these can assume that if
-// PaymentMethod.status.phase is Active, instrument-identifying fields
-// (e.g. card.brand + card.last4) will be present; everything else may
-// or may not be available depending on the provider and the
-// instrument.
+// PaymentMethodDetails itself is only populated once
+// PaymentMethod.status.phase is Active. Within it, instrument-
+// identifying fields (`card.brand`, `card.last4`, `card.expiryMonth`,
+// `card.expiryYear`, `card.country`) are required because every major
+// processor returns them and the portal + fraud scoring depend on
+// them. Best-effort fields (BIN, AVS, CVC, billing address) remain
+// optional.
 type PaymentMethodDetails struct {
 	// Type identifies the instrument category.
 	//
@@ -117,36 +117,54 @@ type PaymentMethodDetails struct {
 // data (PAN, CVC) is never persisted.
 type PaymentMethodCardDetails struct {
 	// Brand is the card network (e.g. "visa", "mastercard", "amex").
+	// Universally returned by every major card processor and load-
+	// bearing for display + routing logic.
 	//
-	// +kubebuilder:validation:Optional
-	Brand string `json:"brand,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Brand string `json:"brand"`
 
-	// Last4 is the last four digits of the card number.
+	// Last4 is the last four digits of the card number. Universally
+	// returned and load-bearing for display, deduplication, and
+	// customer support.
 	//
-	// +kubebuilder:validation:Optional
-	Last4 string `json:"last4,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[0-9]{4}$`
+	Last4 string `json:"last4"`
 
 	// IssuerIdentificationNumber is the BIN (first 6-8 digits) of the
-	// card. Issuer-returned, not provider-specific; useful for downstream
-	// fraud scoring.
+	// card. Issuer-returned, not provider-specific; useful for
+	// downstream fraud scoring. Optional because some providers gate
+	// BIN data behind enterprise tiers.
 	//
 	// +kubebuilder:validation:Optional
 	IssuerIdentificationNumber string `json:"issuerIdentificationNumber,omitempty"`
 
 	// Country is the ISO 3166-1 alpha-2 country code of the issuer.
+	// Load-bearing for tax determination and one of the strongest
+	// fraud signals. Returned by every major card processor we expect
+	// to integrate with; a provider that cannot supply it must
+	// synthesize "XX" (ISO unassigned).
 	//
-	// +kubebuilder:validation:Optional
-	Country string `json:"country,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^[A-Z]{2}$`
+	Country string `json:"country"`
 
-	// ExpiryMonth is the card expiration month (1-12).
+	// ExpiryMonth is the card expiration month (1-12). Cards have
+	// expiry by definition; required so we can drive "your card
+	// expires soon" notifications.
 	//
-	// +kubebuilder:validation:Optional
-	ExpiryMonth int32 `json:"expiryMonth,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=12
+	ExpiryMonth int32 `json:"expiryMonth"`
 
 	// ExpiryYear is the card expiration year (four digits).
 	//
-	// +kubebuilder:validation:Optional
-	ExpiryYear int32 `json:"expiryYear,omitempty"`
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=2000
+	// +kubebuilder:validation:Maximum=2100
+	ExpiryYear int32 `json:"expiryYear"`
 
 	// AVSResult is the Address Verification System result code returned
 	// by the issuer (e.g. "pass", "fail", "unchecked").
