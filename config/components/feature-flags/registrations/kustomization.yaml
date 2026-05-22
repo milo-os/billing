@@ -1,3 +1,2 @@
 resources:
-  - billing-accounts.yaml
   - cloud-portal-usage-metering-dashboard.yaml

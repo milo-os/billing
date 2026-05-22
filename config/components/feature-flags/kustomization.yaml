@@ -8,4 +8,3 @@ kind: Component
 
 resources:
   - registrations/
-  - policies/

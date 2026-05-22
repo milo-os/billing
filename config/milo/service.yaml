@@ -1,0 +1,13 @@
+apiVersion: services.miloapis.com/v1alpha1
+kind: Service
+metadata:
+  name: billing-miloapis-com
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  serviceName: billing.miloapis.com
+  displayName: Billing
+  description: >-
+    Billing accounts, payment methods, project bindings, and usage
+    metering for the Datum Cloud platform.

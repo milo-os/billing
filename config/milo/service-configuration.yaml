@@ -1,0 +1,51 @@
+apiVersion: services.miloapis.com/v1alpha1
+kind: ServiceConfiguration
+metadata:
+  name: billing-miloapis-com
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  serviceRef:
+    name: billing-miloapis-com
+  phase: Draft
+  # Quota-only metric used by the BillingAccount-per-Organization
+  # ceiling below. No billing.consumerDestinations entry: we are not
+  # charging customers for the count of their BillingAccounts; the
+  # metric exists purely to drive the quota fan-out into
+  # ResourceRegistration + ClaimCreationPolicy via the service-catalog
+  # controller.
+  metrics:
+    - name: billing.miloapis.com/billingaccount/count
+      displayName: Billing Accounts
+      description: >-
+        Count of BillingAccount instances held by an Organization. Used
+        to enforce a per-organization ceiling so the default is one
+        BillingAccount per org; multi-account orgs raise the cap via an
+        operator-issued ResourceGrant.
+      kind: Delta
+      unit: "1"
+  quota:
+    # Day-one design promise: every Organization gets one BillingAccount
+    # by default. Higher tiers (or specific opt-ins) raise the cap by
+    # issuing an additional ResourceGrant on the target org.
+    limits:
+      - name: billing-accounts-per-organization
+        metric: billing.miloapis.com/billingaccount/count
+        consumerType:
+          apiGroup: resourcemanager.miloapis.com
+          kind: Organization
+        unit: "1/{organization}"
+        defaultLimit: 1
+    # Every BillingAccount creation costs 1 unit of the
+    # billing.miloapis.com/billingaccount/count metric against the
+    # owning Organization. The service-catalog controller fans this out
+    # to a ClaimCreationPolicy whose admission plugin derives the
+    # consumer Organization from the request's parent context — billing
+    # never has to interpret namespaces as org identifiers.
+    metricRules:
+      - selector:
+          apiGroup: billing.miloapis.com
+          kind: BillingAccount
+        metricCosts:
+          billing.miloapis.com/billingaccount/count: 1
