@@ -10,3 +10,5 @@ resources:
   - meter-definition-viewer.yaml
   - monitored-resource-type-admin.yaml
   - monitored-resource-type-viewer.yaml
+  - payment-method-class-admin.yaml
+  - payment-method-class-viewer.yaml
