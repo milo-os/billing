@@ -16,7 +16,7 @@ spec:
       apiVersion: quota.miloapis.com/v1alpha1
       kind: ResourceGrant
     constraints:
-      - expression: 'trigger.spec.allowances.exists(a, a.resourceType == "billing.miloapis.com/feature/multi-billing-accounts")'
+      - expression: 'trigger.spec.allowances.exists(a, a.resourceType == "billing.miloapis.com/multi-billing-accounts")'
         message: "Only fire on grants of the multi-billing-accounts Feature."
   target:
     # Raise the org's billingaccount/count ceiling so additional
