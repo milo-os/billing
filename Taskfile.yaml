@@ -52,6 +52,14 @@ tasks:
           output:crd:artifacts:config=config/base/crd/bases \
           output:rbac:artifacts:config=config/components/controller_rbac \
           output:webhook:artifacts:config=config/base/webhook
+        # controller-gen always emits the kubebuilder placeholder
+        # service name (`webhook-service`) on every regeneration,
+        # which does not match the Service this repo actually
+        # declares (`billing-webhook`). Restore it in-place so the
+        # generated manifest matches the declared Service without
+        # requiring an out-of-band manual fix-up.
+        perl -pi -e 's/^(      name: )webhook-service$/${1}billing-webhook/' \
+          config/base/webhook/manifests.yaml
         echo "Manifests generated!"
     deps:
       - install-tools
