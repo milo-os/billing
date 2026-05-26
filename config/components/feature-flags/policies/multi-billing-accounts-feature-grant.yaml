@@ -28,6 +28,12 @@ spec:
         # idempotent — re-issuing the Feature grant does not pile up
         # duplicate overrides.
         name: 'multi-billing-accounts-count-override-{{ trigger.spec.consumerRef.name }}'
+        # ResourceGrant is namespaced; without an explicit namespace
+        # here the controller has nothing to apply against and the
+        # GrantCreationPolicy stays in InProgress forever. milo-system
+        # matches the convention used by milo's own quota test
+        # fixtures (test/quota/grant-creation-policy/*.yaml).
+        namespace: milo-system
       spec:
         consumerRef:
           apiGroup: resourcemanager.miloapis.com
