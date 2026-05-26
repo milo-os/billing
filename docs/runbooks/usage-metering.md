@@ -13,17 +13,19 @@ controller → Amberflo. Four scenarios:
 All `datumctl` queries target the **milo control plane**. Org-scoped
 resources (`BillingAccount`, `BillingAccountBinding`) live in
 `organization-<orgname>`. Cluster-scoped resources (`MeterDefinition`,
-`MonitoredResourceType`) have no namespace. The gateway, consumer, and
-provider components live in the `billing-system` namespace.
+`MonitoredResourceType`) have no namespace. The gateway and consumer
+live in `billing-system`; the Amberflo provider lives in
+`amberflo-provider-system`.
 
 Component map:
 
-| Stage | Deployment (in `billing-system`) | Key metric |
+| Stage | Deployment / namespace | Key metric |
 |---|---|---|
-| Ingest validation | `billing-gateway` | `billing_ingestion_rejections_total{reason}` |
-| Central validation + attribution | `billing-controller-manager` | `billing_validation_rejections_total{project,reason}` |
-| Malformed event drop | `billing-controller-manager` | `billing_consumer_malformed_total{reason}` |
-| Provider submission | `billing-amberflo-provider` | provider-side counters |
+| Ingest validation | `billing-gateway` (`billing-system`) | `billing_ingestion_rejections_total{reason}` |
+| Central validation + attribution | `billing-controller-manager` (`billing-system`) | `billing_validation_rejections_total{project,reason}` |
+| Malformed event drop | `billing-controller-manager` (`billing-system`) | `billing_consumer_malformed_total{reason}` |
+| Customer/meter sync to Amberflo | `amberflo-provider` (`amberflo-provider-system`) | `amberflo_provider_amberflo_request_total{operation,status_class}` |
+| Usage submission to Amberflo | `submission-consumer` (`amberflo-provider-system`) | `billing_submission_requests_total{status}`, `billing_pipeline_oldest_unsubmitted_seconds` |
 
 Quarantine reasons emitted by the consumer:
 
@@ -270,12 +272,21 @@ not land in Amberflo until the provider has synced the meter as a
 safety.
 
 ```sh
-datumctl -n billing-system logs deploy/billing-amberflo-provider --tail=200 \
+datumctl -n amberflo-provider-system logs deploy/amberflo-provider --tail=200 \
   | grep -i '<meter-name>\|<meter-uid>'
 ```
 
-Look for "meter created" / "meter updated" log lines for the relevant
-UID. If absent, the provider hasn't synced this meter — usually a
+Look for `EnsureMeter` log lines for the relevant UID. The provider also
+exposes per-operation metrics — a sustained 4xx/5xx rate on `EnsureMeter`
+indicates the underlying sync is failing:
+
+```sh
+datumctl -n amberflo-provider-system exec -it deploy/amberflo-provider -- \
+  curl -s localhost:8080/metrics \
+  | grep 'amberflo_provider_amberflo_request_total{operation="EnsureMeter"'
+```
+
+If the counter is dominated by `status_class="4xx"` or `"5xx"`, that's a
 provider credentials or Amberflo API issue. Escalate with the meter
 name, UID, and the provider's recent logs.
 
@@ -293,43 +304,56 @@ Multi-hour lag is not.
 
 ### 4.1 Is it the pipeline or the provider?
 
+The single most useful number is
+`billing_pipeline_oldest_unsubmitted_seconds` — a gauge tracking the age
+of the oldest fetched-but-unacked event in the current submission batch.
+A sustained non-zero value means the submission consumer is stalled.
+
 ```sh
-# Pipeline-side: events leaving the consumer's "valid" stream
+# Submission consumer: oldest in-flight event age + outcome counter
+datumctl -n amberflo-provider-system exec -it deploy/submission-consumer -- \
+  curl -s localhost:8080/metrics \
+  | grep -E 'billing_pipeline_oldest_unsubmitted_seconds|billing_submission_requests_total'
+
+# NATS-side: depth of the valid stream feeding the submission consumer
 datumctl -n nats exec -it sts/nats -- nats stream info BILLING_USAGE \
   --filter-subject='billing.usage.*.valid'
-
-# Provider-side: queue depth and submission errors
-datumctl -n billing-system exec -it deploy/billing-amberflo-provider -- \
-  curl -s localhost:8080/metrics \
-  | grep -E 'amberflo_(submission_lag_seconds|submission_errors_total|queue_depth)'
 ```
 
-- High pipeline queue depth, low provider queue depth → upstream
-  (consumer or NATS) is the bottleneck. Inspect consumer logs.
-- Low pipeline queue depth, high provider queue depth → provider
-  controller is the bottleneck. Inspect provider logs.
-- Both low, but Amberflo console still behind → Amberflo-side
-  processing lag. Confirm in the Amberflo console; if multi-hour,
-  open a vendor ticket.
+`billing_submission_requests_total` carries a `status` label with three
+values: `success`, `transient` (5xx/429/network, will retry), and
+`permanent` (4xx non-429, dropped). Read it like:
 
-### 4.2 Provider submission errors
+- `success` dominant, gauge near 0 → healthy, just provider/console lag.
+- `transient` climbing, gauge climbing → Amberflo is throttling or
+  returning 5xx; submission consumer is correctly backing off and
+  retrying. Wait or coordinate with Amberflo.
+- `permanent` climbing → events are being acked-and-dropped (4xx
+  classified non-retryable). Inspect logs to learn which payloads. This
+  is usually a schema or unknown-customer issue (§4.2).
+- Valid-stream depth high, gauge near 0 → submission consumer isn't
+  pulling. Check the deployment is running and connected to NATS.
+
+### 4.2 Submission errors
 
 ```sh
-datumctl -n billing-system logs deploy/billing-amberflo-provider --tail=200 \
-  | grep -i 'error\|429\|5[0-9][0-9]'
+datumctl -n amberflo-provider-system logs deploy/submission-consumer --tail=200 \
+  | grep -i 'error\|429\|permanent\|transient'
 ```
 
 Common patterns:
 
-- **`429`** — Amberflo rate-limiting. The provider retries with backoff;
-  if persistent, reduce batch frequency or coordinate with Amberflo on
-  rate limits.
-- **`401`/`403`** — provider credentials issue. The Amberflo API key
-  lives in a Kubernetes Secret in `billing-system`; check it hasn't
-  rotated or been wiped.
-- **`unknown customerId`** — `BillingAccount` reached the consumer but
-  its provider-side sync hasn't created the Amberflo customer yet.
-  Check `BillingAccount.status.phase` (§ operator guide).
+- **`429` (classified `transient`)** — Amberflo rate-limiting. The
+  submission consumer retries with backoff; if persistent, coordinate
+  with Amberflo on rate limits.
+- **`401`/`403` (classified `permanent`)** — provider credentials issue.
+  The Amberflo API key lives in a Kubernetes Secret in
+  `amberflo-provider-system`; check it hasn't rotated or been wiped.
+- **`ErrCustomerNotFound` from `SubmitUsage`** — the event's
+  `customerId` doesn't exist in Amberflo. Either `BillingAccount` is not
+  yet `Ready` (its provider sync hasn't run) or its UID was rotated.
+  Confirm `BillingAccount.status.phase` and look for `EnsureCustomer`
+  log lines in the `amberflo-provider` deployment.
 
 ### 4.3 Confirm in the Amberflo console
 
@@ -362,7 +386,9 @@ caching/query bug, hit the Amberflo console directly:
 | `attribution_failure` quarantine | `BillingAccountBinding` `Active` for the project (§2.3) |
 | Wrong `BillingAccount` showing usage | `Active` binding currently points to the wrong account (§2.1) |
 | Amberflo lag > a few minutes | Pipeline vs. provider queue depth (§4.1) |
-| Provider logs show 401/403 | Amberflo API key Secret in `billing-system` (§4.2) |
+| Provider logs show 401/403 | Amberflo API key Secret in `amberflo-provider-system` (§4.2) |
+| `billing_submission_requests_total{status="permanent"}` climbing | Submission consumer dropping events after 4xx (§4.1) |
+| `billing_pipeline_oldest_unsubmitted_seconds` sustained non-zero | Submission consumer stalled (§4.1) |
 | Staff portal and Amberflo console disagree | Confirm against Amberflo directly with raw `customerId`/`meterApiName` (§4.3) |
 
 ## Cross-references
