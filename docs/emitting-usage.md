@@ -13,91 +13,102 @@ For the pipeline design itself, see
 
 ## Declaring what you measure
 
-Two cluster-scoped resources, both in API group `billing.miloapis.com/v1alpha1`:
+Service teams author a **single** cluster-scoped `ServiceConfiguration`
+in `services.miloapis.com/v1alpha1`. It is the only document you author;
+the services-operator fans it out into the downstream billing CRDs
+(`billing.miloapis.com/MeterDefinition` and `MonitoredResourceType`).
+You should not author those directly — they're operator-visible
+artifacts for runbook and inspection use.
 
-- `MonitoredResourceType` — names a Kubernetes Kind whose lifecycle
-  produces billable signal (e.g. `compute.miloapis.com/Instance`), and the
-  closed set of dimension labels events for that Kind may carry.
-- `MeterDefinition` — names a specific signal aggregated over a billing
-  period (e.g. `compute.miloapis.com/instance/cpu-seconds`), references one
-  or more `MonitoredResourceType`s, and declares its aggregation, unit, and
-  FOCUS billing terms.
+A `ServiceConfiguration` declares three things:
 
-Both follow a `Draft → Published → Deprecated → Retired` lifecycle. Only
-`Published` meters are accepted by the ingestion gateway.
+- **`spec.monitoredResourceTypes[]`** — the Kubernetes Kinds your
+  service emits usage against, plus the closed set of labels each
+  Kind's events may carry. Keyed by `.type`.
+- **`spec.metrics[]`** — metric descriptors with a UCUM `unit` and a
+  `kind` (e.g. `Delta`). Keyed by `.name`.
+- **`spec.billing.consumerDestinations[]`** — routes metrics to
+  monitored resource types. A metric only becomes a `MeterDefinition`
+  if it appears here; metrics without a billing destination are
+  quota-only.
 
-### Example: `MonitoredResourceType`
+Optionally also `spec.quota.{limits,metricRules}` for quota
+enforcement (out of scope for this guide).
+
+### Example
 
 ```yaml
-apiVersion: billing.miloapis.com/v1alpha1
-kind: MonitoredResourceType
+apiVersion: services.miloapis.com/v1alpha1
+kind: ServiceConfiguration
 metadata:
-  name: compute-instance
+  name: compute-miloapis-com
   labels:
     app.kubernetes.io/managed-by: compute-team
 spec:
-  resourceTypeName: compute.miloapis.com/Instance
-  displayName: Compute Instance
-  description: A running compute workload instance.
-  phase: Published
-  gvk:
-    group: compute.miloapis.com
-    kind: Instance
-  labels:
-    - name: region
-      required: true
-    - name: instance.type
-      required: true
-    - name: resource.tier
-      required: false
-```
-
-### Example: `MeterDefinition`
-
-```yaml
-apiVersion: billing.miloapis.com/v1alpha1
-kind: MeterDefinition
-metadata:
-  name: compute-instance-cpu-seconds
-  labels:
-    app.kubernetes.io/managed-by: compute-team
-spec:
-  meterName: compute.miloapis.com/instance/cpu-seconds
-  displayName: Compute Instance CPU Time
-  description: |
-    CPU time consumed by running compute instances, measured at 1-minute
-    resolution.
-  phase: Published
+  serviceRef:
+    name: compute-miloapis-com   # name of the cluster-scoped Service resource
+  phase: Published                # Draft → Published → Deprecated → Retired
   monitoredResourceTypes:
-    - compute.miloapis.com/Instance
-  measurement:
-    aggregation: Sum
-    unit: s            # UCUM
-    dimensions:
-      - region
-      - instance.type
-      - resource.tier
+    - type: compute.miloapis.com/Instance
+      displayName: Compute Instance
+      description: A running compute workload instance.
+      gvk:
+        group: compute.miloapis.com
+        kind: Instance
+      labels:
+        - name: region
+          description: Geographic region the instance runs in.
+        - name: instance.type
+          description: Instance machine type.
+  metrics:
+    - name: compute.miloapis.com/instance/cpu-seconds
+      displayName: CPU Seconds
+      description: Total vCPU-seconds consumed by an instance.
+      kind: Delta
+      unit: s   # UCUM
   billing:
-    consumedUnit: s    # FOCUS terminology
-    pricingUnit: h
+    consumerDestinations:
+      - monitoredResourceType: compute.miloapis.com/Instance
+        metrics:
+          - compute.miloapis.com/instance/cpu-seconds
 ```
 
-Ship both manifests as part of your service's Milo control-plane
-kustomization. Once reconciled, your meter is visible to the staff portal
-and the provider sync controller will register it with the external
-billing provider.
+Ship the manifest as part of your service's Milo control-plane
+kustomization. The webhook resolves `spec.serviceRef` to the
+`Service.spec.serviceName` and enforces that every `metrics[].name` and
+`monitoredResourceTypes[].type` is prefixed with it.
+
+### Lifecycle
+
+`spec.phase` follows `Draft → Published → Deprecated → Retired`
+forward-only. **`Draft` documents are not fanned out**, so emitting
+against a meter whose `ServiceConfiguration` is still `Draft` will
+quarantine with `unknown_meter` (see the runbook). Bump to `Published`
+once your meters are ready.
 
 ### Immutability you should know about
 
-- `MeterDefinition.spec.meterName`,
-  `spec.measurement.aggregation`, and `spec.measurement.unit` are
-  immutable after creation. A breaking change ships as a **new**
-  `MeterDefinition` with a versioned `meterName` (e.g.
-  `…/cpu-seconds/v2`).
-- `MonitoredResourceType.spec.resourceTypeName` and `spec.gvk` are
-  immutable.
-- Adding an optional dimension/label is additive. Adding a required one,
-  or removing any declared one, is breaking — ship as a new resource.
+- `spec.metrics[].name`, `kind`, and `unit` are immutable once the
+  `ServiceConfiguration` is `Published`. A breaking change ships as a
+  new metric name (e.g. `…/cpu-seconds/v2`).
+- `spec.monitoredResourceTypes[].type` and `gvk` are immutable once
+  `Published`.
+- Adding an optional label or a new metric is additive and safe.
+  Removing or renaming either is breaking — version the name.
+
+### What the fan-out produces (operator-visible)
+
+After the services-operator reconciles a `Published`
+`ServiceConfiguration`, you will see corresponding
+`billing.miloapis.com/MeterDefinition` and `MonitoredResourceType`
+objects with `app.kubernetes.io/managed-by=services-operator`. These
+are read-only as far as your service is concerned — do not patch them
+directly. Edit the `ServiceConfiguration` and let the fan-out catch up.
+
+`MeterDefinition.spec.meterName` is set to
+`ServiceConfiguration.spec.metrics[].name` 1:1, so the canonical name
+you emit against in code (next section) matches what you declared
+here.
 
 ## Emitting events
 
