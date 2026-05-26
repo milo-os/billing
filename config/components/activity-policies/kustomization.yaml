@@ -1,0 +1,16 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# Activity policies for billing's user-facing API resources. These get
+# applied into the milo-system namespace of the milo control plane by a
+# dedicated FluxCD Kustomization on the deploy side so they reconcile
+# only after activity-system is up (the activity.miloapis.com CRDs are
+# served by the activity-system aggregated apiserver). Modelled after
+# milo/services/activity/policies/<service>/ but co-located with the
+# service that owns the underlying resources.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - billingaccount-policy.yaml
+  - billingaccountbinding-policy.yaml
+  - paymentmethod-policy.yaml
