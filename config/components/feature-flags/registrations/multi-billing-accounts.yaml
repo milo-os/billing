@@ -1,0 +1,34 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: ResourceRegistration
+metadata:
+  name: feature-multi-billing-accounts
+  annotations:
+    kubernetes.io/display-name: Multi Billing Accounts
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: multi-billing-accounts
+spec:
+  consumerType:
+    apiGroup: resourcemanager.miloapis.com
+    kind: Organization
+  type: Feature
+  resourceType: billing.miloapis.com/multi-billing-accounts
+  description: >-
+    Allows an Organization to hold more than one BillingAccount. The
+    default ceiling of 1 BA per org is enforced through the
+    billing-accounts-per-organization quota limit declared on the
+    billing ServiceConfiguration. Granting this Feature triggers the
+    multi-billing-accounts-feature-grant GrantCreationPolicy, which
+    issues an additional capacity grant raising the org's
+    billingaccount/count ceiling so subsequent creates succeed.
+  baseUnit: feature
+  displayUnit: features
+  unitConversionFactor: 1
+  # BillingAccount is the resource whose creation is gated by this
+  # feature; declaring it as a claimer ensures an AllowanceBucket is
+  # materialised for the org so the cloud-portal MiloFeatureFlagProvider
+  # can read status.available > 0 to decide whether the flag is on.
+  claimingResources:
+    - apiGroup: billing.miloapis.com
+      kind: BillingAccount

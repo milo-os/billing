@@ -1,0 +1,43 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: GrantCreationPolicy
+metadata:
+  name: multi-billing-accounts-feature-grant
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: multi-billing-accounts
+spec:
+  # Fires when a ResourceGrant for the multi-billing-accounts Feature
+  # is created against an Organization. The constraint filters out our
+  # own output (the count-override grant below) so we don't recurse
+  # on grants this policy itself produces.
+  trigger:
+    resource:
+      apiVersion: quota.miloapis.com/v1alpha1
+      kind: ResourceGrant
+    constraints:
+      - expression: 'trigger.spec.allowances.exists(a, a.resourceType == "billing.miloapis.com/multi-billing-accounts")'
+        message: "Only fire on grants of the multi-billing-accounts Feature."
+  target:
+    # Raise the org's billingaccount/count ceiling so additional
+    # BillingAccounts can be created. The default cap declared in the
+    # ServiceConfiguration is 1; this override layers on top.
+    resourceGrantTemplate:
+      metadata:
+        # Deterministic name keyed on the org so the override is
+        # idempotent — re-issuing the Feature grant does not pile up
+        # duplicate overrides.
+        name: 'multi-billing-accounts-count-override-{{ trigger.spec.consumerRef.name }}'
+      spec:
+        consumerRef:
+          apiGroup: resourcemanager.miloapis.com
+          kind: Organization
+          name: '{{ trigger.spec.consumerRef.name }}'
+        allowances:
+          - resourceType: billing.miloapis.com/billingaccount/count
+            buckets:
+              # Effective ceiling = defaultLimit (1) + this override
+              # (99) = 100. Sized to be effectively unlimited for any
+              # realistic org; bump or supply additional grants if a
+              # tenant genuinely needs more than 100 BAs.
+              - amount: 99
