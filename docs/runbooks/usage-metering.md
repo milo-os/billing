@@ -78,21 +78,34 @@ the Agent is down, `Record()` returns an error to the caller — usually
 surfaced in service logs.
 
 ```sh
-# Caller-side: is the service actually calling Record()? Check service logs
-# for "recording usage" errors or look at the SDK's own dead-letter counter:
+# Caller-side: look at the SDK's two error counters. Both should be near zero
+# in a healthy service; sustained increments mean events are not making it to
+# Vector.
 datumctl -n <service-ns> exec -it deploy/<service> -- \
   curl -s localhost:8080/metrics \
-  | grep 'billing_sdk_dead_letter_total\|billing_sdk_record_total'
+  | grep -E 'billing_sdk_record_errors_total|billing_sdk_rejected_total'
 
 # Vector DaemonSet status (per-node):
 datumctl -n logging get ds vector -o wide
 datumctl -n logging logs ds/vector --tail=200 | grep -i billing
 ```
 
-If the SDK shows zero `Record` calls, the service isn't emitting. Check
-the service's deployment for the Recorder construction and the call
-sites — common causes are a misconfigured endpoint or a feature gate
-that hasn't been enabled in this environment.
+What the two counters mean:
+
+- `billing_sdk_record_errors_total` — `Record()` returned an error
+  *after* exhausting its retry budget. Almost always means the local
+  Vector Agent is unreachable. Confirm with `datumctl logs ds/vector`
+  on the affected node.
+- `billing_sdk_rejected_total` — events permanently dropped by the
+  endpoint (HTTP 4xx, not 429). The CloudEvent envelope was malformed
+  in a way structural validation missed — a producer bug. Check
+  service logs for the rejection detail and fix the call site.
+
+If both counters are zero but no events are arriving, the service
+isn't calling `Record()` at all. The SDK doesn't expose a success
+counter, so confirm from service logs or by exercising the path
+manually — common causes are a misconfigured endpoint or a feature
+gate that hasn't been enabled in this environment.
 
 ### 1.3 Consumer quarantined the events
 
