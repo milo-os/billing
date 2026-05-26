@@ -138,24 +138,39 @@ Route by reason:
 
 ### 1.4 Replay quarantined events
 
-Once the root cause is fixed (meter published, binding created, dimension
-declared), replay the affected quarantine subject:
+> **Heads up:** an operator-triggered replay tool is described in the
+> pipeline design but **not yet implemented** — there is no `billing
+> replay` subcommand today. See the open risk in
+> [usage-pipeline.md](../enhancements/usage-pipeline.md#risks-and-mitigations)
+> ("Quarantine with no replay trigger"). Until that ships, replay is a
+> manual operation against NATS JetStream.
+
+Once the root cause is fixed (`ServiceConfiguration` published, binding
+created, dimension declared), an operator with NATS access can
+re-publish quarantined events onto the ingest subject. Sketch of the
+manual flow:
 
 ```sh
-datumctl -n billing-system exec -it deploy/billing-controller-manager -- \
-  billing replay \
-    --project=<project> \
-    --reason=<reason> \
-    --since=<rfc3339-time>
+# Subscribe to the quarantine subject for the affected project + reason,
+# re-publish each message body to billing.usage.<project>.ingest.
+datumctl -n nats exec -it sts/nats -- \
+  nats stream view BILLING_USAGE \
+  --subject='billing.usage.<project>.quarantine.<reason>' \
+  --start-time=<rfc3339-time>
+# …then re-publish the payloads to billing.usage.<project>.ingest, e.g.
+# via `nats pub` or a one-off script. ULID-based dedup prevents double
+# counting.
 ```
 
-The pipeline re-reads the quarantined events from the durable log and
-re-publishes them onto `billing.usage.<project>.ingest`. ULID-based dedup
-prevents double counting if the events made it through partially the
-first time.
+End-to-end idempotency means a replay can't double-bill: every event
+carries the same ULID it was assigned at emission, and that ULID is the
+dedup anchor at every downstream stage.
 
 > Replay window is **30 days**. Events older than that are quarantined
 > permanently — see [usage-pipeline.md](../enhancements/usage-pipeline.md#30-day-late-event-window).
+
+Until the replay tool ships, treat any large-scale replay as an
+engineering-assisted operation rather than a routine support task.
 
 ---
 
