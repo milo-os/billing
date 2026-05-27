@@ -14,4 +14,3 @@ spec:
   owner:
     producerProjectRef:
       name: datum-cloud
-
