@@ -11,3 +11,9 @@ spec:
   description: >-
     Billing accounts, payment methods, project bindings, and usage
     metering for the Datum Cloud platform.
+  owner:
+    # Required by milo-os/service-catalog v0.x — the Service webhook
+    # validates that a producer-project with this name exists. Matches
+    # the convention used by datum-cloud/compute's Service registration.
+    producerProjectRef:
+      name: datum-cloud
