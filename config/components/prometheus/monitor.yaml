@@ -1,0 +1,38 @@
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    control-plane: billing
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billing-controller-manager-metrics
+spec:
+  endpoints:
+    - path: /metrics
+      port: https
+      scheme: https
+      bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+      tlsConfig:
+        insecureSkipVerify: true
+  selector:
+    matchLabels:
+      control-plane: billing
+      app.kubernetes.io/name: billing
+---
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+  name: billing-gateway-metrics
+spec:
+  endpoints:
+    - path: /metrics
+      port: http-metrics
+      scheme: http
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: billing
+      app.kubernetes.io/component: gateway

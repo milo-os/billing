@@ -36,6 +36,7 @@ spec:
             - --tls-cert-file=$(TLS_CERT_FILE)
             - --tls-key-file=$(TLS_KEY_FILE)
             - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
+            - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
           env:
             - name: ADDR
               value: ":8080"
@@ -53,12 +54,17 @@ spec:
               value: "/etc/gateway-certs/tls.key"
             - name: HEALTH_PROBE_BIND_ADDRESS
               value: ":8081"
+            - name: METRICS_BIND_ADDRESS
+              value: ":8082"
           ports:
             - name: ingest
               containerPort: 8080
               protocol: TCP
             - name: health
               containerPort: 8081
+              protocol: TCP
+            - name: metrics
+              containerPort: 8082
               protocol: TCP
           livenessProbe:
             httpGet:
