@@ -13,5 +13,5 @@ spec:
     metering for the Datum Cloud platform.
   owner:
     producerProjectRef:
-      name: platform-producer-project
+      name: billing-system
 
