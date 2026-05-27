@@ -11,3 +11,7 @@ spec:
   description: >-
     Billing accounts, payment methods, project bindings, and usage
     metering for the Datum Cloud platform.
+  owner:
+    producerProjectRef:
+      name: platform-producer-project
+
