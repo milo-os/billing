@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"go.miloapis.com/billing/internal/gateway/handler"
@@ -41,10 +42,14 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 
 	// 2. Build OTel metrics with Prometheus exporter.
-	// prometheusexporter.New() registers with prometheus.DefaultRegisterer, which
-	// controller-runtime's metrics server exposes via promhttp.Handler().
+	// WithRegisterer targets controller-runtime's own registry (metrics.Registry),
+	// which is what the metrics server serves at /metrics. The global
+	// prometheus.DefaultRegisterer is a separate registry and would be silently
+	// dropped.
 	serverLog.Info("initializing metrics")
-	promExporter, err := prometheusexporter.New()
+	promExporter, err := prometheusexporter.New(
+		prometheusexporter.WithRegisterer(ctrlmetrics.Registry),
+	)
 	if err != nil {
 		serverLog.Error(err, "failed to create Prometheus exporter")
 		return fmt.Errorf("creating Prometheus exporter: %w", err)
