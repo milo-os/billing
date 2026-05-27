@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"time"
 
 	prometheusexporter "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -55,7 +56,11 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("creating Prometheus exporter: %w", err)
 	}
 	mp := metric.NewMeterProvider(metric.WithReader(promExporter))
-	defer func() { _ = mp.Shutdown(context.Background()) }()
+	defer func() {
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		_ = mp.Shutdown(shutdownCtx)
+	}()
 
 	metrics, err := newGatewayMetrics(mp)
 	if err != nil {
