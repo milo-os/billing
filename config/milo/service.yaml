@@ -7,6 +7,7 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
 spec:
   serviceName: billing.miloapis.com
+  phase: Published
   displayName: Billing
   description: >-
     Billing accounts, payment methods, project bindings, and usage
