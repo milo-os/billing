@@ -8,7 +8,13 @@ metadata:
 spec:
   serviceRef:
     name: billing-miloapis-com
-  phase: Draft
+  # Must be Published — service-catalog's ServiceConfiguration
+  # controller (internal/controller/serviceconfiguration_controller.go)
+  # short-circuits the BillingFanOut and QuotaFanOut reconcilers while
+  # phase == Draft, so the billingaccount/count ResourceRegistration is
+  # never created and any downstream GrantCreationPolicy that targets
+  # that resourceType stays stuck InProgress.
+  phase: Published
   # Quota-only metric used by the BillingAccount-per-Organization
   # ceiling below. No billing.consumerDestinations entry: we are not
   # charging customers for the count of their BillingAccounts; the
