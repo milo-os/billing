@@ -35,6 +35,7 @@ rules:
   - billingaccounts/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
+  - paymentmethodclasses/status
   - paymentmethods/status
   verbs:
   - get
@@ -45,6 +46,14 @@ rules:
   resources:
   - paymentmethodclasses
   - paymentmethods
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - stripe.billing.miloapis.com
+  resources:
+  - stripeproviderconfigs
   verbs:
   - get
   - list

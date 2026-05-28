@@ -150,9 +150,7 @@ sequenceDiagram
     StripeProv->>BillingSvc: Patch PaymentMethod (phase: AwaitingConfirmation)
 
     Portal->>BillingSvc: Read PaymentMethodClass
-    BillingSvc-->>Portal: parametersRef → StripeProviderConfig
-    Portal->>StripeProv: Read StripeProviderConfig
-    StripeProv-->>Portal: publishableKey
+    BillingSvc-->>Portal: status.publishableKey
     Portal->>BillingSvc: Read StripePaymentMethod
     BillingSvc-->>Portal: clientSecret
     Portal->>Owner: Render card collection UI (Stripe Elements)
@@ -288,11 +286,11 @@ status:
 The stripe-provider also advances `PaymentMethod` phase to `AwaitingConfirmation`
 to signal to other observers that a setup is in progress.
 
-**6. Portal reads PaymentMethodClass, follows parametersRef, then reads StripePaymentMethod.**
+**6. Portal reads PaymentMethodClass and StripePaymentMethod.**
 
 The portal reads `spec.paymentMethodClassRef` from the `PaymentMethod` to
 discover which class is in use, then reads that `PaymentMethodClass` to get the
-provider name and `parametersRef`:
+provider name and the non-sensitive client material the SDK needs:
 
 ```json
 {
@@ -303,16 +301,25 @@ provider name and `parametersRef`:
       "kind": "StripeProviderConfig",
       "name": "default"
     }
+  },
+  "status": {
+    "publishableKey": "pk_live_..."
   }
 }
 ```
 
-The portal follows `parametersRef` to read `StripeProviderConfig` and retrieve
-the publishable key, then initializes Stripe.js. It then watches
-`StripePaymentMethod` for `corp-visa` until `status.phase == AwaitingConfirmation`
-and reads `status.setupIntent.clientSecret` to render the card collection UI.
-Card data flows directly from the user's browser to Stripe — it never passes
-through the billing service or stripe-provider.
+`spec.parametersRef` points the billing service controller at the provider
+configuration; the controller resolves it and projects
+`spec.publishableKey` from the referenced resource onto
+`PaymentMethodClass.status.publishableKey`. Consumers never read the
+provider-specific config CRD (e.g. `StripeProviderConfig`) directly —
+those CRDs are internal to the billing service trust boundary and have
+no consumer-facing IAM coverage. The portal initialises Stripe.js with
+`status.publishableKey`, watches `StripePaymentMethod` for `corp-visa`
+until `status.phase == AwaitingConfirmation`, and reads
+`status.setupIntent.clientSecret` to render the card collection UI.
+Card data flows directly from the user's browser to Stripe — it never
+passes through the billing service or stripe-provider.
 
 **7. Stripe confirms the setup via webhook.**
 

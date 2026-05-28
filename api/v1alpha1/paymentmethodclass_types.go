@@ -74,12 +74,31 @@ type PaymentMethodClassStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
+	// PublishableKey is the non-sensitive client-side identifier resolved
+	// from spec.parametersRef. The PaymentMethodClass reconciler reads
+	// .spec.publishableKey from the referenced provider configuration
+	// resource (e.g. StripeProviderConfig.spec.publishableKey) and
+	// projects it onto status so consumers can read it without needing
+	// IAM access to the provider's own API group. Empty until the
+	// reconciler has successfully resolved the reference.
+	//
+	// +kubebuilder:validation:Optional
+	PublishableKey string `json:"publishableKey,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed by the
 	// controller.
 	//
 	// +kubebuilder:validation:Optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
 }
+
+// Condition types surfaced on PaymentMethodClass.status.conditions.
+const (
+	// PaymentMethodClassParametersResolved indicates whether the
+	// reconciler has successfully fetched spec.parametersRef and
+	// projected its non-sensitive fields (publishableKey) onto status.
+	PaymentMethodClassParametersResolved = "ParametersResolved"
+)
 
 // PaymentMethodClass is the Schema for the paymentmethodclasses API.
 //

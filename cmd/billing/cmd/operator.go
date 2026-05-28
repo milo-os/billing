@@ -134,6 +134,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.PaymentMethodReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating PaymentMethod controller: %w", err)
 			}
+			if err = (&controller.PaymentMethodClassReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating PaymentMethodClass controller: %w", err)
+			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)
