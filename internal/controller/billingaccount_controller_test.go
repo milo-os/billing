@@ -29,6 +29,7 @@ var _ = Describe("BillingAccount Controller", func() {
 					Namespace: "default",
 				},
 				Spec: billingv1alpha1.BillingAccountSpec{
+					DisplayName:  "Test Account",
 					CurrencyCode: "USD",
 				},
 			}
@@ -46,6 +47,7 @@ var _ = Describe("BillingAccount Controller", func() {
 		It("should preserve Suspended phase", func() {
 			account := &billingv1alpha1.BillingAccount{
 				Spec: billingv1alpha1.BillingAccountSpec{
+					DisplayName:  "Test Account",
 					CurrencyCode: "USD",
 				},
 				Status: billingv1alpha1.BillingAccountStatus{
@@ -61,6 +63,7 @@ var _ = Describe("BillingAccount Controller", func() {
 		It("should preserve Archived phase", func() {
 			account := &billingv1alpha1.BillingAccount{
 				Spec: billingv1alpha1.BillingAccountSpec{
+					DisplayName:  "Test Account",
 					CurrencyCode: "USD",
 				},
 				Status: billingv1alpha1.BillingAccountStatus{
@@ -82,6 +85,7 @@ var _ = Describe("BillingAccount Controller", func() {
 					Namespace: "default",
 				},
 				Spec: billingv1alpha1.BillingAccountSpec{
+					DisplayName:  "Test Account",
 					CurrencyCode: "USD",
 				},
 			}
@@ -136,6 +140,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 				Namespace: "default",
 			},
 			Spec: billingv1alpha1.BillingAccountSpec{
+				DisplayName:  "Test Account",
 				CurrencyCode: "USD",
 				PaymentTerms: &billingv1alpha1.PaymentTerms{
 					NetDays:           30,
@@ -157,7 +162,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 	It("DefaultPaymentMethodReady=False NotConfigured when no ref is set", func() {
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-notconfigured", Namespace: "default"},
-			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+			Spec:       billingv1alpha1.BillingAccountSpec{DisplayName: "Test Account", CurrencyCode: "USD"},
 		}
 		Expect(k8sClient.Create(ctx, account)).To(Succeed())
 		Eventually(func(g Gomega) {
@@ -175,6 +180,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-notfound", Namespace: "default"},
 			Spec: billingv1alpha1.BillingAccountSpec{
+				DisplayName:             "Test Account",
 				CurrencyCode:            "USD",
 				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "missing-pm"},
 			},
@@ -206,6 +212,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-degraded", Namespace: "default"},
 			Spec: billingv1alpha1.BillingAccountSpec{
+				DisplayName:             "Test Account",
 				CurrencyCode:            "USD",
 				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "pm-degraded"},
 			},
@@ -246,6 +253,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-ready", Namespace: "default"},
 			Spec: billingv1alpha1.BillingAccountSpec{
+				DisplayName:             "Test Account",
 				CurrencyCode:            "USD",
 				DefaultPaymentMethodRef: &billingv1alpha1.DefaultPaymentMethodRef{Name: "pm-active"},
 			},
@@ -270,6 +278,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 				Namespace: "default",
 			},
 			Spec: billingv1alpha1.BillingAccountSpec{
+				DisplayName:  "Test Account",
 				CurrencyCode: "invalid",
 			},
 		}
