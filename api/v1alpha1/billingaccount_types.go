@@ -271,6 +271,7 @@ type BillingAccountStatus struct {
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
+// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.metadata.annotations.kubernetes\.io/display-name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Currency",type=string,JSONPath=`.spec.currencyCode`
 // +kubebuilder:printcolumn:name="Projects",type=integer,JSONPath=`.status.linkedProjectsCount`

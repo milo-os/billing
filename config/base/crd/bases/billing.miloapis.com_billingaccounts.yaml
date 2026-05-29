@@ -16,6 +16,9 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
+    - jsonPath: .metadata.annotations.kubernetes\.io/display-name
+      name: Display Name
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
