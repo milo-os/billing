@@ -53,10 +53,16 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return r.reconcileDelete(ctx, r.client, &account)
 	}
 
-	// Ensure finalizer is present
+	// Ensure finalizer is present. Patch (not Update) so we don't
+	// race with consumers that have just written spec fields the
+	// controller's local copy hasn't observed yet — a full Update
+	// would echo our stale view back to the apiserver and strip
+	// fresh writes (e.g. contactInfo.invoiceEmails set by the portal
+	// at create time).
 	if !controllerutil.ContainsFinalizer(&account, billingAccountFinalizer) {
+		patch := client.MergeFrom(account.DeepCopy())
 		controllerutil.AddFinalizer(&account, billingAccountFinalizer)
-		if err := r.client.Update(ctx, &account); err != nil {
+		if err := r.client.Patch(ctx, &account, patch); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
@@ -169,9 +175,11 @@ func (r *BillingAccountReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Remove finalizer
+	// Remove finalizer via Patch so we don't echo a stale spec back
+	// to the apiserver. See the comment on the Add path above.
+	patch := client.MergeFrom(account.DeepCopy())
 	controllerutil.RemoveFinalizer(account, billingAccountFinalizer)
-	if err := cl.Update(ctx, account); err != nil {
+	if err := cl.Patch(ctx, account, patch); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
