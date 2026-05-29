@@ -24,6 +24,13 @@ import (
 
 const (
 	billingAccountFinalizer = "billing.miloapis.com/billing-account"
+
+	// billingAccountFieldOwner is the field manager name used by this
+	// reconciler when it server-side-applies finalizer changes. SSA
+	// scopes our writes to the fields we declare in the apply payload,
+	// so other managers' writes to spec / status / other finalizers
+	// stay intact even when we apply a stale copy.
+	billingAccountFieldOwner = "billing-controller"
 )
 
 // BillingAccountReconciler reconciles a BillingAccount object.
@@ -53,10 +60,29 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return r.reconcileDelete(ctx, r.client, &account)
 	}
 
-	// Ensure finalizer is present
+	// Ensure finalizer is present via Server-Side Apply. SSA declares
+	// ownership of only the fields in the apply payload (here just
+	// metadata.finalizers), so other managers' writes to spec — e.g.
+	// contactInfo.invoiceEmails set by the portal at create time —
+	// stay intact even when our local copy hasn't observed them yet.
+	// A full Update would PUT our stale spec back and strip such
+	// fields.
 	if !controllerutil.ContainsFinalizer(&account, billingAccountFinalizer) {
-		controllerutil.AddFinalizer(&account, billingAccountFinalizer)
-		if err := r.client.Update(ctx, &account); err != nil {
+		apply := &billingv1alpha1.BillingAccount{
+			TypeMeta: metav1.TypeMeta{
+				APIVersion: billingv1alpha1.GroupVersion.String(),
+				Kind:       "BillingAccount",
+			},
+			ObjectMeta: metav1.ObjectMeta{
+				Name:       account.Name,
+				Namespace:  account.Namespace,
+				Finalizers: []string{billingAccountFinalizer},
+			},
+		}
+		if err := r.client.Patch(ctx, apply, client.Apply,
+			client.FieldOwner(billingAccountFieldOwner),
+			client.ForceOwnership,
+		); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
@@ -169,9 +195,25 @@ func (r *BillingAccountReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(account, billingAccountFinalizer)
-	if err := cl.Update(ctx, account); err != nil {
+	// Remove our finalizer via SSA: re-apply with an empty
+	// finalizers list under our field owner. The apiserver drops
+	// our claim on the finalizer entry while leaving other
+	// managers' finalizers (e.g. amberflo-provider's
+	// customer-link finalizer) alone. See the comment on the
+	// Add path above.
+	apply := &billingv1alpha1.BillingAccount{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: billingv1alpha1.GroupVersion.String(),
+			Kind:       "BillingAccount",
+		},
+		ObjectMeta: metav1.ObjectMeta{
+			Name:      account.Name,
+			Namespace: account.Namespace,
+		},
+	}
+	if err := cl.Patch(ctx, apply, client.Apply,
+		client.FieldOwner(billingAccountFieldOwner),
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
