@@ -32,14 +32,6 @@ const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodRe
 
 // BillingAccountSpec defines the desired state of a BillingAccount.
 type BillingAccountSpec struct {
-	// DisplayName is a human-readable label shown in the portal and on
-	// invoices (e.g. "Production", "EMEA — Stripe").
-	//
-	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=128
-	DisplayName string `json:"displayName"`
-
 	// CurrencyCode is the ISO 4217 currency code for this billing account.
 	// This field is immutable once the account transitions past Provisioning phase.
 	//
@@ -279,7 +271,7 @@ type BillingAccountStatus struct {
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
-// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.spec.displayName`
+// +kubebuilder:printcolumn:name="Display Name",type=string,JSONPath=`.metadata.annotations.kubernetes\.io/display-name`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Currency",type=string,JSONPath=`.spec.currencyCode`
 // +kubebuilder:printcolumn:name="Projects",type=integer,JSONPath=`.status.linkedProjectsCount`

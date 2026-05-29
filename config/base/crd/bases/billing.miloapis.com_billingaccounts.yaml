@@ -16,7 +16,7 @@ spec:
   scope: Namespaced
   versions:
   - additionalPrinterColumns:
-    - jsonPath: .spec.displayName
+    - jsonPath: .metadata.annotations.kubernetes\.io/display-name
       name: Display Name
       type: string
     - jsonPath: .status.phase
@@ -171,13 +171,6 @@ spec:
                 required:
                 - name
                 type: object
-              displayName:
-                description: |-
-                  DisplayName is a human-readable label shown in the portal and on
-                  invoices (e.g. "Production", "EMEA — Stripe").
-                maxLength: 128
-                minLength: 1
-                type: string
               paymentTerms:
                 description: PaymentTerms defines the invoicing schedule for this
                   billing account.
@@ -247,7 +240,6 @@ spec:
                 x-kubernetes-list-type: map
             required:
             - currencyCode
-            - displayName
             type: object
           status:
             description: BillingAccountStatus defines the observed state of a BillingAccount.
