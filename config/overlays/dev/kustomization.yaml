@@ -14,7 +14,6 @@ components:
   - ../../components/namespace
   - ../../base/webhook
   - ../../components/controller_rbac
-  - ../../components/prometheus
 
 configMapGenerator:
   - name: billing-config
