@@ -26,10 +26,10 @@ metadata:
   name: billing-gateway-metrics
 spec:
   ports:
-  - name: http-metrics
-    port: 8082
+  - name: https
+    port: 8443
     protocol: TCP
-    targetPort: 8082
+    targetPort: 8443
   selector:
     app.kubernetes.io/name: billing
     app.kubernetes.io/component: gateway

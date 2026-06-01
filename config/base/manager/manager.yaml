@@ -53,7 +53,7 @@ spec:
           name: webhook-server
           protocol: TCP
         - containerPort: 8443
-          name: metrics
+          name: https
           protocol: TCP
         securityContext:
           allowPrivilegeEscalation: false

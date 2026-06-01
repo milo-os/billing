@@ -15,6 +15,7 @@ import (
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
+	"sigs.k8s.io/controller-runtime/pkg/metrics/filters"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"go.miloapis.com/billing/internal/gateway/handler"
@@ -81,7 +82,9 @@ func Run(ctx context.Context, cfg Config) error {
 	mgr, err := ctrl.NewManager(restCfg, ctrl.Options{
 		HealthProbeBindAddress: cfg.HealthProbeAddr,
 		Metrics: metricsserver.Options{
-			BindAddress: cfg.MetricsAddr,
+			BindAddress:    cfg.MetricsAddr,
+			SecureServing:  true,
+			FilterProvider: filters.WithAuthenticationAndAuthorization,
 		},
 		LeaderElection: false,
 	})

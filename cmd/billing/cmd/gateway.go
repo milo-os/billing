@@ -55,7 +55,7 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&natsURL, "nats-url", "", "NATS JetStream URL (required).")
 	cmd.Flags().StringVar(&natsSubjectPrefix, "nats-subject-prefix", "billing.usage", "NATS subject prefix.")
 	cmd.Flags().StringVar(&healthProbeAddr, "health-probe-bind-address", ":8081", "Health/readiness probe address.")
-	cmd.Flags().StringVar(&metricsAddr, "metrics-bind-address", ":8082", "Prometheus metrics address. Set to 0 to disable.")
+	cmd.Flags().StringVar(&metricsAddr, "metrics-bind-address", ":8443", "Prometheus metrics address (HTTPS). Set to 0 to disable.")
 	cmd.Flags().StringVar(&tlsCertFile, "tls-cert-file", "", "Path to TLS certificate file.")
 	cmd.Flags().StringVar(&tlsKeyFile, "tls-key-file", "", "Path to TLS private key file.")
 	cmd.Flags().StringVar(&natsCAFile, "nats-ca-file", "", "Path to NATS CA certificate file.")

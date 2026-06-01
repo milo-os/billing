@@ -55,7 +55,7 @@ spec:
             - name: HEALTH_PROBE_BIND_ADDRESS
               value: ":8081"
             - name: METRICS_BIND_ADDRESS
-              value: ":8082"
+              value: ":8443"
           ports:
             - name: ingest
               containerPort: 8080
@@ -63,8 +63,8 @@ spec:
             - name: health
               containerPort: 8081
               protocol: TCP
-            - name: metrics
-              containerPort: 8082
+            - name: https
+              containerPort: 8443
               protocol: TCP
           livenessProbe:
             httpGet:
