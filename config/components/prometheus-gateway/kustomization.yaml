@@ -4,6 +4,7 @@ resources:
   - monitor.yaml
   - metrics_service.yaml
   - metrics_auth_role_binding.yaml
+  - alerts.yaml
 
 configurations:
   - kustomizeconfig.yaml

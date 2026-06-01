@@ -3,3 +3,4 @@ kind: Component
 resources:
   - monitor.yaml
   - metrics_service.yaml
+  - alerts.yaml
