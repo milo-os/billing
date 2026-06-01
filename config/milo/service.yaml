@@ -7,7 +7,12 @@ metadata:
     app.kubernetes.io/managed-by: kustomize
 spec:
   serviceName: billing.miloapis.com
+  phase: Published
   displayName: Billing
   description: >-
     Billing accounts, payment methods, project bindings, and usage
     metering for the Datum Cloud platform.
+  owner:
+    producerProjectRef:
+      name: datum-cloud
+

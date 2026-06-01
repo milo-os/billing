@@ -11,6 +11,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -24,6 +25,13 @@ import (
 
 const (
 	billingAccountFinalizer = "billing.miloapis.com/billing-account"
+
+	// billingAccountFieldOwner is the field manager name used by this
+	// reconciler when it server-side-applies finalizer changes. SSA
+	// scopes our writes to the fields we declare in the apply payload,
+	// so other managers' writes to spec / status / other finalizers
+	// stay intact even when we apply a stale copy.
+	billingAccountFieldOwner = "billing-controller"
 )
 
 // BillingAccountReconciler reconciles a BillingAccount object.
@@ -53,10 +61,20 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return r.reconcileDelete(ctx, r.client, &account)
 	}
 
-	// Ensure finalizer is present
+	// Ensure finalizer is present via Server-Side Apply. SSA declares
+	// ownership of only the fields in the apply payload (here just
+	// metadata.finalizers), so other managers' writes to spec — e.g.
+	// contactInfo.invoiceEmails set by the portal at create time —
+	// stay intact even when our local copy hasn't observed them yet.
+	// A full Update would PUT our stale spec back and strip such
+	// fields.
 	if !controllerutil.ContainsFinalizer(&account, billingAccountFinalizer) {
-		controllerutil.AddFinalizer(&account, billingAccountFinalizer)
-		if err := r.client.Update(ctx, &account); err != nil {
+		if err := r.client.Patch(ctx,
+			finalizerApply(account.Name, account.Namespace, []string{billingAccountFinalizer}),
+			client.Apply,
+			client.FieldOwner(billingAccountFieldOwner),
+			client.ForceOwnership,
+		); err != nil {
 			return ctrl.Result{}, fmt.Errorf("failed to add finalizer: %w", err)
 		}
 		return ctrl.Result{}, nil
@@ -169,9 +187,16 @@ func (r *BillingAccountReconciler) reconcileDelete(
 		return ctrl.Result{RequeueAfter: 30 * time.Second}, nil
 	}
 
-	// Remove finalizer
-	controllerutil.RemoveFinalizer(account, billingAccountFinalizer)
-	if err := cl.Update(ctx, account); err != nil {
+	// Remove our finalizer via SSA: re-apply with no finalizers
+	// list under our field owner. The apiserver drops our claim
+	// on the entry while leaving other managers' finalizers (e.g.
+	// amberflo-provider's customer-link finalizer) alone. See
+	// the comment on the Add path above.
+	if err := cl.Patch(ctx,
+		finalizerApply(account.Name, account.Namespace, nil),
+		client.Apply,
+		client.FieldOwner(billingAccountFieldOwner),
+	); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to remove finalizer: %w", err)
 	}
 
@@ -269,4 +294,24 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		Complete(r)
+}
+
+// finalizerApply builds the minimal Server-Side Apply payload that
+// claims (or relinquishes) ownership of metadata.finalizers without
+// declaring any spec fields. The typed BillingAccount struct cannot
+// be used directly here: encoding/json serializes the zero-value
+// Spec as `spec: {currencyCode: ""}` even with `omitempty`, and CRD
+// validation rejects the empty currencyCode regardless of whether we
+// intend to own that field. The unstructured payload omits spec
+// entirely.
+//
+// Pass a nil or empty `finalizers` slice on the remove path to
+// release ownership of the entry under our field manager.
+func finalizerApply(name, namespace string, finalizers []string) *unstructured.Unstructured {
+	u := &unstructured.Unstructured{}
+	u.SetGroupVersionKind(billingv1alpha1.GroupVersion.WithKind("BillingAccount"))
+	u.SetName(name)
+	u.SetNamespace(namespace)
+	u.SetFinalizers(finalizers)
+	return u
 }
