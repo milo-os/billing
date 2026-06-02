@@ -19,6 +19,7 @@ spec:
         app.kubernetes.io/name: billing
         app.kubernetes.io/component: gateway
     spec:
+      serviceAccountName: billing-gateway
       securityContext:
         runAsNonRoot: true
       containers:
@@ -36,6 +37,7 @@ spec:
             - --tls-cert-file=$(TLS_CERT_FILE)
             - --tls-key-file=$(TLS_KEY_FILE)
             - --health-probe-bind-address=$(HEALTH_PROBE_BIND_ADDRESS)
+            - --metrics-bind-address=$(METRICS_BIND_ADDRESS)
           env:
             - name: ADDR
               value: ":8080"
@@ -53,12 +55,17 @@ spec:
               value: "/etc/gateway-certs/tls.key"
             - name: HEALTH_PROBE_BIND_ADDRESS
               value: ":8081"
+            - name: METRICS_BIND_ADDRESS
+              value: ":8443"
           ports:
             - name: ingest
               containerPort: 8080
               protocol: TCP
             - name: health
               containerPort: 8081
+              protocol: TCP
+            - name: https
+              containerPort: 8443
               protocol: TCP
           livenessProbe:
             httpGet:

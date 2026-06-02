@@ -7,11 +7,14 @@ import (
 	"flag"
 	"fmt"
 	"os"
+	"time"
 
 	_ "k8s.io/client-go/plugin/pkg/client/auth"
 
 	natsgo "github.com/nats-io/nats.go"
 	"github.com/spf13/cobra"
+	prometheusexporter "go.opentelemetry.io/otel/exporters/prometheus"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
@@ -20,6 +23,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	ctrlmetrics "sigs.k8s.io/controller-runtime/pkg/metrics"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -95,7 +99,16 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				return fmt.Errorf("creating bootstrap client: %w", err)
 			}
 
-			metricsServerOptions := serverConfig.MetricsServer.Options(ctx, bootstrapClient)
+			// The metrics endpoint's authn/authz filter must validate scrape
+			// requests against the LOCAL cluster (where the scraper and this pod
+			// live), not the Milo control plane that `cfg` may point at. Resolve
+			// the local config via the standard in-cluster / KUBECONFIG resolution.
+			metricsAuthConfig, err := ctrl.GetConfig()
+			if err != nil {
+				return fmt.Errorf("loading local rest config for metrics auth: %w", err)
+			}
+
+			metricsServerOptions := serverConfig.MetricsServer.Options(ctx, bootstrapClient, metricsAuthConfig)
 
 			var webhookServer webhook.Server
 			if serverConfig.WebhookServer != nil {
@@ -186,13 +199,28 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 					return fmt.Errorf("creating BillingAccount cache: %w", err)
 				}
 
+				promExporter, err := prometheusexporter.New(
+					prometheusexporter.WithRegisterer(ctrlmetrics.Registry),
+				)
+				if err != nil {
+					nc.Close()
+					return fmt.Errorf("creating Prometheus exporter: %w", err)
+				}
+				mp := sdkmetric.NewMeterProvider(sdkmetric.WithReader(promExporter))
+
+				if err := mgr.Add(meterProviderCloser{mp: mp}); err != nil {
+					nc.Close()
+					return fmt.Errorf("adding MeterProvider closer to manager: %w", err)
+				}
+
 				usageConsumer := &consumer.UsageConsumer{
-					Cache:        mgr.GetCache(),
-					NC:           nc,
-					MeterCache:   meterCache,
-					BindingCache: bindingCache,
-					AccountCache: accountCache,
-					Logger:       ctrl.Log.WithName("usage-consumer"),
+					Cache:         mgr.GetCache(),
+					NC:            nc,
+					MeterCache:    meterCache,
+					BindingCache:  bindingCache,
+					AccountCache:  accountCache,
+					MeterProvider: mp,
+					Logger:        ctrl.Log.WithName("usage-consumer"),
 				}
 				if err := mgr.Add(usageConsumer); err != nil {
 					nc.Close()
@@ -279,5 +307,19 @@ type natsCloser struct {
 func (n natsCloser) Start(ctx context.Context) error {
 	<-ctx.Done()
 	n.nc.Close()
+	return nil
+}
+
+// meterProviderCloser is a manager.Runnable that shuts down the OTel MeterProvider
+// when the manager context is cancelled, ensuring all metrics are flushed.
+type meterProviderCloser struct {
+	mp *sdkmetric.MeterProvider
+}
+
+func (m meterProviderCloser) Start(ctx context.Context) error {
+	<-ctx.Done()
+	shutdownCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_ = m.mp.Shutdown(shutdownCtx)
 	return nil
 }

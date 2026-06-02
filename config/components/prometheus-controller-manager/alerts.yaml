@@ -1,0 +1,96 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: billing-controller-manager-alerts
+  labels:
+    alert-group: billing
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: controller-manager
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  groups:
+    - name: billing-controller-manager.pods
+      rules:
+        - alert: BillingControllerManagerPodCrashLooping
+          expr: |
+            kube_pod_container_status_waiting_reason{
+              job="kube-state-metrics",
+              namespace="billing-system",
+              pod=~"billing-controller-manager-.*",
+              reason="CrashLoopBackOff"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash-looping"
+            description: |
+              Container {{ $labels.container }} in pod
+              {{ $labels.namespace }}/{{ $labels.pod }} has been in
+              CrashLoopBackOff for 5 minutes. Check logs:
+              kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c {{ $labels.container }} --previous
+
+        - alert: BillingControllerManagerDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              job="kube-state-metrics",
+              namespace="billing-system",
+              deployment="billing-controller-manager"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} has unavailable replicas"
+            description: |
+              {{ $value }} replica(s) in deployment
+              {{ $labels.namespace }}/{{ $labels.deployment }} have been
+              unavailable for 5 minutes.
+
+    - name: billing-controller-manager.consumer
+      rules:
+        - alert: BillingConsumerMalformedMessages
+          expr: |
+            sum by (namespace) (
+              rate(billing_consumer_malformed_total{
+                namespace="billing-system"
+              }[5m])
+            ) > 0
+          for: 10m
+          labels:
+            severity: warning
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Billing consumer is dropping malformed messages"
+            description: |
+              The billing consumer has been dropping malformed usage messages
+              for over 10 minutes (current rate: {{ $value }}/s). These events
+              are discarded before processing and represent lost billing data.
+              Check the gateway's event schema and the consumer logs:
+              kubectl logs -n billing-system deployment/billing-controller-manager
+
+        - alert: BillingValidationRejectionsHigh
+          expr: |
+            sum by (namespace) (
+              rate(billing_validation_rejections_total{
+                namespace="billing-system"
+              }[5m])
+            ) > 0
+          for: 15m
+          labels:
+            severity: warning
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Billing consumer is quarantining usage events"
+            description: |
+              The billing consumer has been quarantining usage events for over
+              15 minutes (current rate: {{ $value }}/s). Sustained rejections
+              indicate upstream usage data that fails validation. Inspect the
+              quarantine reasons and recent consumer logs:
+              kubectl logs -n billing-system deployment/billing-controller-manager

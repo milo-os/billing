@@ -1,0 +1,111 @@
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: billing-gateway-alerts
+  labels:
+    alert-group: billing
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: gateway
+    app.kubernetes.io/managed-by: kustomize
+spec:
+  groups:
+    - name: billing-gateway.pods
+      rules:
+        - alert: BillingGatewayPodCrashLooping
+          expr: |
+            kube_pod_container_status_waiting_reason{
+              job="kube-state-metrics",
+              namespace="billing-system",
+              pod=~"billing-gateway-.*",
+              reason="CrashLoopBackOff"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-gateway
+          annotations:
+            summary: "Pod {{ $labels.pod }} is crash-looping"
+            description: |
+              Container {{ $labels.container }} in pod
+              {{ $labels.namespace }}/{{ $labels.pod }} has been in
+              CrashLoopBackOff for 5 minutes. Check logs:
+              kubectl logs -n {{ $labels.namespace }} {{ $labels.pod }} -c {{ $labels.container }} --previous
+
+        - alert: BillingGatewayDeploymentUnavailable
+          expr: |
+            kube_deployment_status_replicas_unavailable{
+              job="kube-state-metrics",
+              namespace="billing-system",
+              deployment="billing-gateway"
+            } > 0
+          for: 5m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-gateway
+          annotations:
+            summary: "Deployment {{ $labels.deployment }} has unavailable replicas"
+            description: |
+              {{ $value }} replica(s) in deployment
+              {{ $labels.namespace }}/{{ $labels.deployment }} have been
+              unavailable for 5 minutes.
+
+    - name: billing-gateway.ingestion
+      rules:
+        - alert: BillingGatewayHighRejectionRate
+          expr: |
+            sum by (namespace) (
+              rate(billing_ingestion_rejections_total{
+                namespace="billing-system"
+              }[5m])
+            )
+            /
+            (
+              sum by (namespace) (
+                rate(billing_ingestion_events_total{
+                  namespace="billing-system"
+                }[5m])
+              )
+              +
+              sum by (namespace) (
+                rate(billing_ingestion_rejections_total{
+                  namespace="billing-system"
+                }[5m])
+              )
+            ) > 0.1
+          for: 10m
+          labels:
+            severity: warning
+            namespace: billing-system
+            service: billing-gateway
+          annotations:
+            summary: "Billing gateway rejection rate above 10%"
+            description: |
+              More than 10% of usage events submitted to the billing gateway
+              have failed structural validation over the last 5 minutes.
+              Rejected events are never committed to JetStream and represent
+              lost billing data. Check the client payloads and gateway logs:
+              kubectl logs -n billing-system deployment/billing-gateway
+
+        - alert: BillingGatewayNoIngestion
+          expr: |
+            sum by (namespace) (
+              rate(billing_ingestion_events_total{
+                namespace="billing-system"
+              }[10m])
+            ) == 0
+          for: 30m
+          labels:
+            severity: warning
+            namespace: billing-system
+            service: billing-gateway
+          annotations:
+            summary: "Billing gateway has accepted no events in 30 minutes"
+            description: |
+              The billing gateway has committed zero usage events to JetStream
+              for over 30 minutes. This may be expected during low-traffic
+              periods, but a sustained zero can indicate the upstream Envoy
+              route, NATS connectivity, or the ingest path is broken. Verify
+              gateway readiness and NATS health:
+              kubectl logs -n billing-system deployment/billing-gateway
