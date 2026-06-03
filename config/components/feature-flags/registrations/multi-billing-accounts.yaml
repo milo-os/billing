@@ -25,10 +25,18 @@ spec:
   baseUnit: feature
   displayUnit: features
   unitConversionFactor: 1
-  # BillingAccount is the resource whose creation is gated by this
-  # feature; declaring it as a claimer ensures an AllowanceBucket is
-  # materialised for the org so the cloud-portal MiloFeatureFlagProvider
-  # can read status.available > 0 to decide whether the flag is on.
+  # claimingResources declares which resource creations decrement the
+  # bucket via ResourceClaim — that's the only thing this list does.
+  # AllowanceBucket materialisation happens from the ResourceGrant
+  # itself (milo's ResourceGrantController.ensureBucketsFromGrant
+  # pre-creates the bucket the moment the grant goes Active), not from
+  # any claimer existing in the cluster. The field is required by the
+  # schema (MinItems=1) but has no effect for a feature flag unless a
+  # ClaimCreationPolicy targets the same resourceType, which none of
+  # the feature-flag registrations in this directory do.
+  #
+  # We list BillingAccount because it's the resource whose creation
+  # this feature gates conceptually — readable, not load-bearing.
   claimingResources:
     - apiGroup: billing.miloapis.com
       kind: BillingAccount
