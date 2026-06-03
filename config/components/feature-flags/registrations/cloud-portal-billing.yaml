@@ -1,0 +1,29 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: ResourceRegistration
+metadata:
+  name: feature-cloud-portal-billing
+  annotations:
+    kubernetes.io/display-name: Cloud Portal Billing
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: feature-flags
+    features.miloapis.com/feature-name: cloud-portal-billing
+spec:
+  consumerType:
+    apiGroup: resourcemanager.miloapis.com
+    kind: Organization
+  type: Feature
+  resourceType: billing.miloapis.com/cloud-portal-billing
+  description: >-
+    Controls visibility of the billing surface in the Datum Cloud
+    portal — billing accounts, payment methods, invoices, and the
+    org / project usage views. The flag is removed once billing is
+    generally available; until then, granting it per-org via a
+    ResourceGrant on an internal-test organisation turns the whole
+    section on for that org's members.
+  baseUnit: feature
+  displayUnit: features
+  unitConversionFactor: 1
+  claimingResources:
+    - apiGroup: billing.miloapis.com
+      kind: BillingAccount
