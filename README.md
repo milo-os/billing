@@ -1,16 +1,16 @@
 # Billing Service
 
-The Billing Service manages how organizations pay for the services they use on the Milo platform. It provides billing accounts, links projects to those accounts, and enforces the business rules that keep billing data consistent and reliable.
+The Billing Service manages how users and organizations pay for services. It provides billing accounts, links projects to those accounts, and enforces the business rules that keep commercial data consistent and reliable.
 
 ## Why This Exists
 
-Milo is a business operating system for B2B service providers -- a control plane that helps them build, price, sell, and operate managed services. Billing is a foundational piece of Milo's **Monetize** horizon, connecting service consumption to payment. Without it, there's no way to charge for the resources organizations use.
+Milo is a business operating system for B2B service providers -- a control plane that helps them build, price, sell, and operate managed services. Billing is a foundational piece of Milo's commercial experience, connecting service consumption through to payment. 
 
 This service owns two core concepts:
 
-- **Billing Accounts** -- the entity that receives charges. An organization can have multiple billing accounts (e.g., for different currencies or business units). Each account tracks its payment profile, payment terms, and lifecycle phase.
+- **Billing Accounts** -- the entity that receives charges. An organization can have multiple billing accounts (e.g., for different currencies, countries, or business units). Each account tracks a payment profile, payment terms, and lifecycle phase.
 
-- **Billing Account Bindings** -- the link between a project and the billing account responsible for paying for it. Every project that consumes resources must be bound to a billing account. Bindings are immutable; re-assigning a project to a different account creates a new binding and supersedes the old one.
+- **Billing Account Bindings** -- the link between a project and the billing account responsible for payment. Every project that consumes resources must be bound to a billing account. Bindings are immutable; re-assigning a project to a different account creates a new binding and supersedes the old one.
 
 ## How It Fits Into Milo
 
