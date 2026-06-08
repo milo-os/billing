@@ -42,6 +42,7 @@ type BillingAccountSpec struct {
 	// PaymentTerms defines the invoicing schedule for this billing account.
 	//
 	// +kubebuilder:validation:Optional
+	// +kubebuilder:default={}
 	PaymentTerms *PaymentTerms `json:"paymentTerms,omitempty"`
 
 	// ContactInfo describes the billing contact and the postal
