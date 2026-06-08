@@ -1,0 +1,40 @@
+apiVersion: quota.miloapis.com/v1alpha1
+kind: GrantCreationPolicy
+metadata:
+  name: default-organization-billingaccount-quota-policy
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/component: default-quota
+spec:
+  # Fires on Organization creation so every org starts with one
+  # BillingAccount of quota — matching the ServiceConfiguration's
+  # declared defaultLimit of 1 for billing.miloapis.com/billingaccount/count.
+  # Without this policy the billingaccount/count bucket is created
+  # with limit=0 and BA creation fails with a quota error for any org
+  # that has not had a grant issued manually or via the
+  # multi-billing-accounts feature flag.
+  trigger:
+    resource:
+      apiVersion: resourcemanager.miloapis.com/v1alpha1
+      kind: Organization
+  target:
+    resourceGrantTemplate:
+      metadata:
+        # Deterministic name keyed off the org makes the grant
+        # idempotent — re-firing the policy will not produce duplicates.
+        name: default-billingaccount-quota
+        # Grants for an org live in its tenant namespace, matching the
+        # default-project-quota convention.
+        namespace: 'organization-{{ trigger.metadata.name }}'
+        labels:
+          quota.miloapis.com/auto-created: "true"
+          quota.miloapis.com/policy: default-organization-billingaccount-quota-policy
+      spec:
+        consumerRef:
+          apiGroup: resourcemanager.miloapis.com
+          kind: Organization
+          name: '{{ trigger.metadata.name }}'
+        allowances:
+          - resourceType: billing.miloapis.com/billingaccount/count
+            buckets:
+              - amount: 1
