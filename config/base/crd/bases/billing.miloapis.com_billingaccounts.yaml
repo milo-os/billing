@@ -172,6 +172,7 @@ spec:
                 - name
                 type: object
               paymentTerms:
+                default: {}
                 description: PaymentTerms defines the invoicing schedule for this
                   billing account.
                 properties:
