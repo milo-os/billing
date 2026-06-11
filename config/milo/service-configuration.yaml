@@ -37,6 +37,11 @@ spec:
     # issuing an additional ResourceGrant on the target org.
     limits:
       - name: billing-accounts-per-organization
+        displayName: Billing Accounts
+        description: >-
+          Maximum number of BillingAccounts an Organization may hold. Defaults
+          to one per organization; raise the cap via an operator-issued
+          ResourceGrant.
         metric: billing.miloapis.com/billingaccount/count
         consumerType:
           apiGroup: resourcemanager.miloapis.com
