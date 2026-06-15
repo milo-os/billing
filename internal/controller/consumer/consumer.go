@@ -18,6 +18,8 @@ import (
 	"go.opentelemetry.io/otel/metric"
 	"go.opentelemetry.io/otel/metric/noop"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
+
+	"go.miloapis.com/billing/internal/event"
 )
 
 const (
@@ -204,6 +206,19 @@ func (c *UsageConsumer) processMessage(
 	vr := validate(&ce, c.MeterCache)
 	if !vr.OK {
 		return c.quarantine(ctx, js, msg, &ce, project, vr.Reason)
+	}
+
+	// Inject project_id as a system dimension after validation so downstream
+	// consumers can filter by project without it being declared on every
+	// MeterDefinition.
+	var eventData event.EventData
+	_ = ce.DataAs(&eventData)
+	if eventData.Dimensions == nil {
+		eventData.Dimensions = make(map[string]string)
+	}
+	eventData.Dimensions["project_id"] = project
+	if err := ce.SetData("application/json", eventData); err != nil {
+		return fmt.Errorf("injecting project_id dimension: %w", err)
 	}
 
 	// Stage 2: Attribution.
