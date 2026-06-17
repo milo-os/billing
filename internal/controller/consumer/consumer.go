@@ -19,6 +19,7 @@ import (
 	"go.opentelemetry.io/otel/metric/noop"
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 
+	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/event"
 )
 
@@ -216,7 +217,7 @@ func (c *UsageConsumer) processMessage(
 	if eventData.Dimensions == nil {
 		eventData.Dimensions = make(map[string]string)
 	}
-	eventData.Dimensions["project_name"] = project
+	eventData.Dimensions[billingv1alpha1.SystemDimensionProjectName] = project
 	if err := ce.SetData("application/json", eventData); err != nil {
 		return fmt.Errorf("injecting project_id dimension: %w", err)
 	}

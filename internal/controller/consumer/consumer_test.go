@@ -333,7 +333,7 @@ func TestUsageConsumer_HappyPath_PublishesToValid(t *testing.T) {
 		if err := enriched.DataAs(&enrichedData); err != nil {
 			t.Fatalf("unmarshaling enriched event data: %v", err)
 		}
-		if got := enrichedData.Dimensions["project_name"]; got != "proj-abc" {
+		if got := enrichedData.Dimensions[billingv1alpha1.SystemDimensionProjectName]; got != "proj-abc" {
 			t.Errorf("expected project_name=proj-abc in dimensions, got %q", got)
 		}
 	case <-time.After(10 * time.Second):
@@ -592,7 +592,7 @@ func TestUsageConsumer_DeprecatedMeter_PassesValidation(t *testing.T) {
 		if err := enriched.DataAs(&enrichedData); err != nil {
 			t.Fatalf("unmarshaling enriched event data: %v", err)
 		}
-		if got := enrichedData.Dimensions["project_name"]; got != "proj-deprecated" {
+		if got := enrichedData.Dimensions[billingv1alpha1.SystemDimensionProjectName]; got != "proj-deprecated" {
 			t.Errorf("expected project_name=proj-deprecated in dimensions, got %q", got)
 		}
 	case <-time.After(10 * time.Second):
