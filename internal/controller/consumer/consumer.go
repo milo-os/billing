@@ -216,7 +216,7 @@ func (c *UsageConsumer) processMessage(
 	if eventData.Dimensions == nil {
 		eventData.Dimensions = make(map[string]string)
 	}
-	eventData.Dimensions["project_id"] = project
+	eventData.Dimensions["project_name"] = project
 	if err := ce.SetData("application/json", eventData); err != nil {
 		return fmt.Errorf("injecting project_id dimension: %w", err)
 	}
