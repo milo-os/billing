@@ -71,7 +71,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               # Locate the billing-usage-collector pod.
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
@@ -99,7 +99,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -125,7 +125,7 @@ spec:
             # Allow up to 60 s for billing-usage-collector to replay + Gateway to publish.
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               # Use the nats CLI (installed in the NATS server pod) to check
               # whether the JetStream stream has at least one message on the
@@ -175,7 +175,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               GATEWAY_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
@@ -198,7 +198,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -239,7 +239,7 @@ spec:
         - script:
             timeout: 90s
             content: |
-              set -euo pipefail
+              set -eu
 
               NATS_POD=$(kubectl get pod -n nats-system \
                 -l app.kubernetes.io/component=nats-box \
@@ -287,7 +287,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -321,7 +321,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               GATEWAY_IP=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \

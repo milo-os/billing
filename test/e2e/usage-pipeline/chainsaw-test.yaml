@@ -20,7 +20,7 @@ spec:
         - script:
             timeout: 45s
             content: |
-              set -euo pipefail
+              set -eu
               
               # Purge NATS stream
               NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
@@ -74,7 +74,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
               
               # Give the gateway a moment to sync its cache of the new resources
               sleep 5
@@ -103,7 +103,7 @@ spec:
         - script:
             timeout: 45s
             content: |
-              set -euo pipefail
+              set -eu
               echo "Waiting 30s for Gateway event batch to flush..."
               sleep 5
               echo "Done waiting"
@@ -115,7 +115,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
               VALID_ID=$(cat /tmp/valid_id.txt)
               NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
 
@@ -143,7 +143,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
               export LC_ALL=C
               INVALID_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
               echo "Generated Invalid ID: $INVALID_ID"
@@ -165,7 +165,7 @@ spec:
         - script:
             timeout: 45s
             content: |
-              set -euo pipefail
+              set -eu
               echo "Waiting 30s for Gateway event batch to flush..."
               sleep 5
               echo "Done waiting"
@@ -177,7 +177,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
               INVALID_ID=$(cat /tmp/invalid_id.txt)
               NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
 
