@@ -3,7 +3,7 @@ kind: Configuration
 metadata:
   name: billing-tests-config
 spec:
-  parallel: 1
+  parallel: 8
   timeouts:
     apply: 120s
     assert: 90s
