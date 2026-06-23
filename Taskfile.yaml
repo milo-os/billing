@@ -196,6 +196,12 @@ tasks:
       - task: dev:load
       - task: dev:deploy
 
+  ci:setup:
+    desc: Setup CI test environment
+    silent: true
+    cmds:
+      - task: dev:setup
+
   dev:deploy:
     desc: Deploy billing using dev overlay
     silent: true

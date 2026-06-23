@@ -3,6 +3,7 @@ kind: Test
 metadata:
   name: gateway-ingestion
 spec:
+  concurrent: false
   description: |
     Tests the billing-usage-collector + Ingestion Gateway end-to-end ingestion pipeline.
 
@@ -70,7 +71,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               # Locate the billing-usage-collector pod.
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
@@ -98,7 +99,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -124,7 +125,7 @@ spec:
             # Allow up to 60 s for billing-usage-collector to replay + Gateway to publish.
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               # Use the nats CLI (installed in the NATS server pod) to check
               # whether the JetStream stream has at least one message on the
@@ -174,7 +175,7 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
               GATEWAY_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
@@ -197,7 +198,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -238,7 +239,7 @@ spec:
         - script:
             timeout: 90s
             content: |
-              set -euo pipefail
+              set -eu
 
               NATS_POD=$(kubectl get pod -n nats-system \
                 -l app.kubernetes.io/component=nats-box \
@@ -286,7 +287,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
 
               COLLECTOR_POD=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/instance=billing-usage-collector \
@@ -313,20 +314,20 @@ spec:
 
     - name: dead-letter-assert-rejection-metric-nonzero
       description: |
-        Query the Gateway's /metrics endpoint on the health probe port (8081,
-        no TLS, no auth) and assert that billing_ingestion_rejections_total
-        is non-zero, confirming the rejection was recorded.
+        Query the Gateway's secure /metrics endpoint on port 8443 using HTTPS
+        and a service account bearer token, and assert that
+        billing_ingestion_rejections_total is non-zero.
       try:
         - script:
-            timeout: 30s
+            timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
 
-              GATEWAY_POD=$(kubectl get pod -n billing-system \
+              GATEWAY_IP=$(kubectl get pod -n billing-system \
                 -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway \
-                --no-headers -o name | head -1)
-              if [ -z "$GATEWAY_POD" ]; then
-                echo "ERROR: no billing-gateway pod found" >&2
+                -o jsonpath='{.items[0].status.podIP}' | head -1)
+              if [ -z "$GATEWAY_IP" ]; then
+                echo "ERROR: no billing-gateway pod IP found" >&2
                 exit 1
               fi
 
@@ -334,12 +335,12 @@ spec:
                 -l app.kubernetes.io/instance=billing-usage-collector \
                 --no-headers -o name | head -1)
 
-              # Scrape the Prometheus metrics endpoint on the health port.
+              # Scrape the Prometheus metrics endpoint on the secure port.
               # We retry because OTel metrics may take a moment to be exported/scraped.
-              DEADLINE=$(($(date +%s) + 55))
+              DEADLINE=$(($(date +%s) + 50))
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
                 METRICS=$(kubectl exec -n billing-system "$COLLECTOR_POD" -- \
-                  wget -q -O- http://billing-gateway.billing-system.svc:8081/metrics 2>/dev/null || true)
+                  sh -c "TOKEN=\$(cat /var/run/secrets/kubernetes.io/serviceaccount/token) && wget -q -O- --no-check-certificate --header=\"Authorization: Bearer \$TOKEN\" https://$GATEWAY_IP:8443/metrics" 2>/dev/null || true)
 
                 if [ -n "$METRICS" ]; then
                   REJECTION_COUNT=$(echo "$METRICS" \

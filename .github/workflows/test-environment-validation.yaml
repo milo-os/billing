@@ -1,0 +1,162 @@
+name: Test Environment Setup and Validation
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      test_suite:
+        description: 'Test suite to run (e.g., usage-consumer, or empty for all)'
+        required: false
+        default: ''
+        type: string
+  pull_request: {}
+
+env:
+  TASK_X_REMOTE_TASKFILES: 1
+  TASK_ASSUME_YES: 'true'
+  TEST_INFRA_CLUSTER_NAME: test-infra
+  BILLING_IMAGE_NAME: ghcr.io/milo-os/billing
+  BILLING_IMAGE_TAG: dev
+
+jobs:
+  test-environment-validation:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: 'go.mod'
+          cache: true
+
+      - name: Install Task CLI
+        run: |
+          sh -c "$(curl --location https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Verify Task installation
+        run: |
+          task --version
+          echo "Available tasks:"
+          task --list
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+        with:
+          buildkitd-config-inline: |
+            [worker.oci]
+              max-parallelism = 4
+
+      - name: Install kubectl
+        uses: azure/setup-kubectl@v4
+        with:
+          version: 'v1.30.0'
+
+      - name: Install KinD
+        uses: helm/kind-action@v1
+        with:
+          install_only: true
+          version: v0.24.0
+
+      - name: Verify prerequisites
+        run: |
+          echo "=== Checking prerequisites ==="
+          docker version
+          kubectl version --client
+          kind version
+          echo "Go version: $(go version)"
+
+      - name: Set up test environment
+        run: |
+          echo "=== Setting up test environment ==="
+          task ci:setup
+
+      - name: Verify Billing components
+        run: |
+          echo "=== Verifying Billing components ==="
+
+          echo "Checking Billing namespace pods:"
+          task test-infra:kubectl -- get pods -n billing-system
+
+          # Wait for controller manager to be ready
+          echo "⏳ Waiting for controller manager to be ready..."
+          task test-infra:kubectl -- wait --for=condition=Ready pod -l control-plane=billing -n billing-system --timeout=300s
+
+          # Wait for Gateway to be ready
+          echo "⏳ Waiting for Gateway to be ready..."
+          task test-infra:kubectl -- wait --for=condition=Ready pod -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway -n billing-system --timeout=300s
+
+          echo "✓ Billing components verification complete"
+
+      - name: Run end-to-end tests
+        run: |
+          echo "=== Running end-to-end tests ==="
+
+          # Determine which tests to run based on input
+          if [ -n "${{ github.event.inputs.test_suite }}" ]; then
+            echo "Running specified test suite: ${{ github.event.inputs.test_suite }}"
+            task e2e -- ${{ github.event.inputs.test_suite }}
+          else
+            echo "Running all end-to-end tests..."
+            task e2e
+          fi
+
+      - name: Collect debug information on failure
+        if: failure()
+        run: |
+          echo "=== Collecting debug information ==="
+
+          # Cluster status
+          echo "=== Infrastructure Cluster Status ==="
+          task test-infra:kubectl -- get pods -A || true
+          task test-infra:kubectl -- get nodes -o wide || true
+
+          # Billing control plane status
+          echo "=== Billing Control Plane Status ==="
+          task test-infra:kubectl -- describe pods -n billing-system || true
+
+          # Gateway logs
+          echo "=== Billing Gateway Logs ==="
+          task test-infra:kubectl -- logs -n billing-system -l app.kubernetes.io/name=billing,app.kubernetes.io/component=gateway --tail=100 || true
+
+          # Controller manager logs
+          echo "=== Controller Manager Logs ==="
+          task test-infra:kubectl -- logs -n billing-system -l control-plane=billing --tail=100 || true
+
+          # Docker container status
+          echo "=== Docker Containers ==="
+          docker ps -a || true
+
+          # KinD cluster info
+          echo "=== KinD cluster info ==="
+          kind get clusters || true
+          kind export logs /tmp/kind-logs --name $TEST_INFRA_CLUSTER_NAME || true
+
+      - name: Upload debug artifacts
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: debug-logs
+          path: |
+            /tmp/kind-logs/
+          if-no-files-found: ignore
+
+      - name: Cleanup test infrastructure
+        if: always()
+        run: |
+          echo "=== Cleaning up test infrastructure ==="
+
+          # Clean up test infrastructure cluster
+          task test-infra:cluster-down || true
+
+          # Verify cleanup
+          echo "Remaining KinD clusters:"
+          kind get clusters || true
+
+          echo "Remaining Docker containers:"
+          docker ps -a --filter "name=test-infra" || true

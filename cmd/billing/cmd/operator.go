@@ -38,6 +38,13 @@ var (
 	codecs = serializer.NewCodecFactory(scheme, serializer.EnableStrict)
 )
 
+// Controller-runtime requires these permissions at runtime:
+// - secrets get;watch for the webhook TLS cert secret (billing-webhook-cert)
+// - leases for leader election
+// These are framework-level requirements, not tied to any specific reconciler.
+// +kubebuilder:rbac:groups="",resources=secrets,verbs=get;watch
+// +kubebuilder:rbac:groups=coordination.k8s.io,resources=leases,verbs=create;get;update
+
 func init() {
 	utilruntime.Must(clientgoscheme.AddToScheme(scheme))
 	utilruntime.Must(config.AddToScheme(scheme))

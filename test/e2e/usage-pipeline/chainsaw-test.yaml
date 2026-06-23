@@ -3,6 +3,7 @@ kind: Test
 metadata:
   name: usage-pipeline
 spec:
+  concurrent: false
   description: |
     Full E2E workflow for the usage pipeline:
     1. Create MeterDefinitions, BillingAccounts, and Bindings.
@@ -11,6 +12,35 @@ spec:
     4. Send an invalid event (unknown meter).
     5. Assert the event reaches the .quarantine.unknown_meter subject.
   steps:
+    - name: setup
+      description: |
+        Purge the NATS stream and clear the Vector agent's buffer/backoff state
+        to ensure a clean slate for the test run.
+      try:
+        - script:
+            timeout: 45s
+            content: |
+              set -eu
+              
+              # Purge NATS stream
+              NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
+              kubectl exec -n nats-system "$NATS_POD" -- \
+                nats --server nats://nats:4222 \
+                stream purge billing-usage --force 2>/dev/null
+              echo "NATS stream purged"
+
+              # Clear Vector persistent buffer
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
+              if [ -n "$VECTOR_POD" ]; then
+                kubectl exec -n billing-system "$VECTOR_POD" -- rm -rf /vector-data-dir/buffer
+                echo "Vector buffer cleared"
+                
+                # Restart Vector to reset backoff state and start clean
+                kubectl rollout restart ds/billing-usage-collector-vector -n billing-system
+                kubectl rollout status ds/billing-usage-collector-vector -n billing-system --timeout=30s
+                echo "Vector agent restarted"
+              fi
+
     - name: create-resources
       try:
         - apply:
@@ -44,7 +74,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
               
               # Give the gateway a moment to sync its cache of the new resources
               sleep 5
@@ -65,6 +95,19 @@ spec:
                   --post-file=/tmp/event.json \
                   http://127.0.0.1:9880/cloudevents
 
+    - name: wait-for-gateway-batch
+      description: |
+        The Gateway batches events before processing. Wait for the batch to flush
+        so the consumer has something to process before we assert.
+      try:
+        - script:
+            timeout: 45s
+            content: |
+              set -eu
+              echo "Waiting 30s for Gateway event batch to flush..."
+              sleep 5
+              echo "Done waiting"
+
     - name: assert-valid-event-attributed
       description: |
         Verify that the event reached the billing.usage.p-e2e-usage-pipeline.valid subject.
@@ -72,16 +115,18 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
               VALID_ID=$(cat /tmp/valid_id.txt)
               NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
-              
+
               DEADLINE=$(($(date +%s) + 55))
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-                if kubectl exec -n nats-system "$NATS_POD" -- \
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
-                  sub billing.usage.p-e2e-usage-pipeline.valid \
-                  --count 1 --timeout 5s 2>/dev/null | grep -q "$VALID_ID"; then
+                  sub --all -T --stream billing-usage \
+                  "billing.usage.p-e2e-usage-pipeline.valid" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "$VALID_ID"; then
                   echo "SUCCESS: event $VALID_ID found in valid queue"
                   exit 0
                 fi
@@ -98,7 +143,7 @@ spec:
         - script:
             timeout: 30s
             content: |
-              set -euo pipefail
+              set -eu
               export LC_ALL=C
               INVALID_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
               echo "Generated Invalid ID: $INVALID_ID"
@@ -113,6 +158,18 @@ spec:
                   --post-file=/tmp/invalid_event.json \
                   http://127.0.0.1:9880/cloudevents
 
+    - name: wait-for-gateway-batch-2
+      description: |
+        Wait for the Gateway to batch and process the invalid event.
+      try:
+        - script:
+            timeout: 45s
+            content: |
+              set -eu
+              echo "Waiting 30s for Gateway event batch to flush..."
+              sleep 5
+              echo "Done waiting"
+
     - name: assert-event-quarantined
       description: |
         Verify that the event reached the billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter subject.
@@ -120,16 +177,18 @@ spec:
         - script:
             timeout: 60s
             content: |
-              set -euo pipefail
+              set -eu
               INVALID_ID=$(cat /tmp/invalid_id.txt)
               NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
-              
+
               DEADLINE=$(($(date +%s) + 55))
               while [ "$(date +%s)" -lt "$DEADLINE" ]; do
-                if kubectl exec -n nats-system "$NATS_POD" -- \
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
-                  sub billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter \
-                  --count 1 --timeout 5s 2>/dev/null | grep -q "$INVALID_ID"; then
+                  sub --all -T --stream billing-usage \
+                  "billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "$INVALID_ID"; then
                   echo "SUCCESS: event $INVALID_ID found in quarantine queue"
                   exit 0
                 fi

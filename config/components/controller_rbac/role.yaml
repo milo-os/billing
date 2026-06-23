@@ -5,6 +5,13 @@ metadata:
   name: billing-controller-manager
 rules:
 - apiGroups:
+  - ""
+  resources:
+  - secrets
+  verbs:
+  - get
+  - watch
+- apiGroups:
   - billing.miloapis.com
   resources:
   - billingaccountbindings
@@ -49,3 +56,11 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - coordination.k8s.io
+  resources:
+  - leases
+  verbs:
+  - create
+  - get
+  - update
