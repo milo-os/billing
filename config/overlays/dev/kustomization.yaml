@@ -9,6 +9,7 @@ resources:
   - ../../base/manager
   - ../../base/certmanager
   - ../../base/gateway
+  - gateway_metrics_auth_role_binding.yaml
 
 components:
   - ../../components/namespace
