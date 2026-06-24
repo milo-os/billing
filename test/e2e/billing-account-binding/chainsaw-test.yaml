@@ -130,3 +130,23 @@ spec:
                 phase: Active
                 billingResponsibility:
                   currentAccount: binding-test-account-b
+
+    - name: reject-deleting-account-with-active-binding
+      description: Verify that deleting a BillingAccount with an active binding is rejected by the webhook.
+      try:
+        - script:
+            content: |
+              if kubectl delete billingaccount binding-test-account-b -n default 2>&1 | grep -q "billing account has active binding"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject deleting billing account with active binding" >&2
+                exit 1
+              fi
+
+    - name: clean-up-bindings
+      description: Delete the billing account bindings so the accounts can be cleaned up successfully.
+      try:
+        - script:
+            content: |
+              kubectl delete billingaccountbinding --all -n default
+
