@@ -84,6 +84,102 @@ spec:
                 exit 1
               fi
 
+    - name: test-payment-terms-validation
+      description: Verify that configuring invalid payment terms is rejected, and valid ones are accepted.
+      try:
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"paymentTerms":{"invoiceFrequency":"Weekly"}}}' 2>&1 | grep -q "invoiceFrequency"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid invoiceFrequency" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"paymentTerms":{"invoiceDayOfMonth":29}}}' 2>&1 | grep -q "invoiceDayOfMonth"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid invoiceDayOfMonth" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"paymentTerms":{"netDays":0}}}' 2>&1 | grep -q "netDays"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid netDays" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"paymentTerms":{"netDays":45,"invoiceFrequency":"Quarterly","invoiceDayOfMonth":15}}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: lifecycle-test-account
+                namespace: default
+              spec:
+                paymentTerms:
+                  netDays: 45
+                  invoiceFrequency: Quarterly
+                  invoiceDayOfMonth: 15
+
+    - name: test-tax-id-validation
+      description: Verify that invalid tax ID formats or duplicates are rejected, and valid ones are accepted.
+      try:
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"taxIds":[{"type":"invalid-type","value":"12345"}]}}' 2>&1 | grep -q -E "tax ID type|type"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid tax ID type format" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"taxIds":[{"type":"us_ein","value":"12-34567"},{"type":"us_ein","value":"98-76543"}]}}' 2>&1 | grep -q -i "duplicate"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject duplicate tax ID types" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"taxIds":[{"type":"us_ein","value":"12-34567"},{"type":"gb_vat","value":"GB1234567"}]}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: lifecycle-test-account
+                namespace: default
+              spec:
+                taxIds:
+                  - type: us_ein
+                    value: "12-34567"
+                  - type: gb_vat
+                    value: "GB1234567"
+
+    - name: test-contact-info-removal
+      description: Verify that contact info can be updated/removed.
+      try:
+        - script:
+            content: |
+              kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"contactInfo":null}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: lifecycle-test-account
+                namespace: default
+
     - name: transition-to-suspended
       description: Verify that setting status phase to Suspended updates the Ready condition to False.
       try:

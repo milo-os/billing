@@ -110,6 +110,17 @@ spec:
                     status: "False"
                     reason: Superseded
 
+    - name: verify-linked-projects-decremented
+      description: Verify the billing account's linkedProjectsCount is decremented back to 0.
+      try:
+        - script:
+            content: |
+              COUNT=$(kubectl get billingaccount binding-test-account-a -n default -o jsonpath='{.status.linkedProjectsCount}')
+              if [ -n "$COUNT" ] && [ "$COUNT" -ne 0 ]; then
+                echo "Error: expected linkedProjectsCount to be 0 or null, got $COUNT" >&2
+                exit 1
+              fi
+
     - name: create-second-binding-after-superseding
       description: |
         Create the second binding again now that the first is Superseded (no longer active).
