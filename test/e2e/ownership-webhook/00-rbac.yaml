@@ -1,0 +1,21 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: services-operator-impersonation-role
+rules:
+- apiGroups: ["billing.miloapis.com"]
+  resources: ["meterdefinitions", "monitoredresourcetypes"]
+  verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: services-operator-impersonation-binding
+subjects:
+- kind: ServiceAccount
+  name: services-operator
+  namespace: services-system
+roleRef:
+  kind: ClusterRole
+  name: services-operator-impersonation-role
+  apiGroup: rbac.authorization.k8s.io
