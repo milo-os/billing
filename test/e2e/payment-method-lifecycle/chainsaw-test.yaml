@@ -1,0 +1,176 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: payment-method-lifecycle
+spec:
+  description: |
+    Tests the PaymentMethod lifecycle and its status projection onto the BillingAccount:
+    1. Creating a PaymentMethod initially sets it to Pending phase and InstrumentReady=False condition.
+    2. Setting the defaultPaymentMethodRef on a BillingAccount initially shows DefaultPaymentMethodReady=False (Reason: NotConfigured).
+    3. Simulating a provider controller by updating the PaymentMethod phase to Active transitions it to InstrumentReady=True.
+    4. Linking the Active payment method as default on the BillingAccount is allowed by the validation webhook and projects DefaultPaymentMethodReady=True.
+    5. Updating the PaymentMethod phase to Failed (simulating provider confirmation/billing failure) transitions it to InstrumentReady=False and propagates to the BillingAccount as DefaultPaymentMethodReady=False (Reason: PaymentMethodDegraded).
+  steps:
+    - name: create-resources
+      description: Create a BillingAccount and a PaymentMethod.
+      try:
+        - create:
+            file: 01-resources.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: payment-lifecycle-pm
+                namespace: default
+              status:
+                phase: Pending
+                conditions:
+                  - type: InstrumentReady
+                    status: "False"
+                    reason: Pending
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: payment-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+
+    - name: reject-pending-payment-method-as-default
+      description: |
+        Verify that trying to set a Pending payment method as default is rejected by the validation webhook.
+      try:
+        - apply:
+            file: 02-link-default-pm.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'only Active payment methods may be designated as default')): true
+
+    - name: set-pm-active
+      description: Simulates the provider controller setting the PaymentMethod to Active.
+      try:
+        - script:
+            content: |
+              kubectl patch paymentmethod payment-lifecycle-pm -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: payment-lifecycle-pm
+                namespace: default
+              status:
+                phase: Active
+                conditions:
+                  - type: InstrumentReady
+                    status: "True"
+                    reason: Active
+
+    - name: link-default-pm
+      description: Configure the defaultPaymentMethodRef on the BillingAccount.
+      try:
+        - apply:
+            file: 02-link-default-pm.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: payment-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "True"
+                    reason: Ready
+
+    - name: set-pm-failed
+      description: Simulates the provider controller setting the PaymentMethod to Failed.
+      try:
+        - script:
+            content: |
+              kubectl patch paymentmethod payment-lifecycle-pm -n default --type=merge --subresource=status --patch '{"status":{"phase":"Failed","failureReason":"card_declined","failureMessage":"Card declined"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: payment-lifecycle-pm
+                namespace: default
+              status:
+                phase: Failed
+                conditions:
+                  - type: InstrumentReady
+                    status: "False"
+                    reason: card_declined
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: payment-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: PaymentMethodDegraded
+
+    - name: reject-deleting-default-payment-method
+      description: Verify that deleting a default PaymentMethod is blocked by the validation webhook.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              name: payment-lifecycle-pm
+              namespace: default
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'is the default for billing account')): true
+
+    - name: unlink-default-pm
+      description: Unlink the default payment method so that both resources can be cleaned up successfully.
+      try:
+        - script:
+            content: |
+              kubectl patch billingaccount payment-lifecycle-acct -n default --type=merge --patch '{"spec":{"defaultPaymentMethodRef":null}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: payment-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
