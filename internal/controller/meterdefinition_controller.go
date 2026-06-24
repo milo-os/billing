@@ -40,6 +40,7 @@ func (r *MeterDefinitionReconciler) Reconcile(ctx context.Context, req reconcile
 	// Compute desired status.
 	newStatus := billingv1alpha1.MeterDefinitionStatus{}
 	newStatus.ObservedGeneration = md.Generation
+	newStatus.SystemDimensions = []string{billingv1alpha1.SystemDimensionProjectName}
 
 	// Preserve publishedAt if already set.
 	newStatus.PublishedAt = md.Status.PublishedAt
@@ -93,7 +94,8 @@ func (r *MeterDefinitionReconciler) Reconcile(ctx context.Context, req reconcile
 	}
 
 	// Skip status update if nothing changed.
-	if statusEqual(md.Status.CatalogStatus, newStatus.CatalogStatus) {
+	if statusEqual(md.Status.CatalogStatus, newStatus.CatalogStatus) &&
+		slicesEqual(md.Status.SystemDimensions, newStatus.SystemDimensions) {
 		return ctrl.Result{}, nil
 	}
 

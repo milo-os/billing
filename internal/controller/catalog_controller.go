@@ -17,6 +17,19 @@ const (
 	ConditionTypePublished = "Published"
 )
 
+// slicesEqual returns true when two string slices have identical contents.
+func slicesEqual(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}
+
 // statusEqual returns true when two CatalogStatus values are semantically
 // identical (same observedGeneration, publishedAt, and condition set).
 func statusEqual(a, b billingv1alpha1.CatalogStatus) bool {

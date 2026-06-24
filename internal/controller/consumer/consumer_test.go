@@ -329,6 +329,13 @@ func TestUsageConsumer_HappyPath_PublishesToValid(t *testing.T) {
 		if billingRef != "acct-1" {
 			t.Errorf("expected billingaccountref=acct-1, got %q", billingRef)
 		}
+		var enrichedData event.EventData
+		if err := enriched.DataAs(&enrichedData); err != nil {
+			t.Fatalf("unmarshaling enriched event data: %v", err)
+		}
+		if got := enrichedData.Dimensions[billingv1alpha1.SystemDimensionProjectName]; got != "proj-abc" {
+			t.Errorf("expected project_name=proj-abc in dimensions, got %q", got)
+		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("valid event not received within 10 seconds")
 	}
@@ -580,6 +587,13 @@ func TestUsageConsumer_DeprecatedMeter_PassesValidation(t *testing.T) {
 		billingRef, _ := ext["billingaccountref"].(string)
 		if billingRef != "acct-1" {
 			t.Errorf("expected billingaccountref=acct-1, got %q", billingRef)
+		}
+		var enrichedData event.EventData
+		if err := enriched.DataAs(&enrichedData); err != nil {
+			t.Fatalf("unmarshaling enriched event data: %v", err)
+		}
+		if got := enrichedData.Dimensions[billingv1alpha1.SystemDimensionProjectName]; got != "proj-deprecated" {
+			t.Errorf("expected project_name=proj-deprecated in dimensions, got %q", got)
 		}
 	case <-time.After(10 * time.Second):
 		t.Fatal("valid event not received: deprecated meter should pass validation")

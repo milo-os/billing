@@ -6,6 +6,13 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// SystemDimensionProjectName is the dimension key injected by the billing
+// consumer on every valid event. It is always present regardless of what is
+// declared in spec.measurement.dimensions, and is surfaced on
+// MeterDefinitionStatus.SystemDimensions so providers can configure it in
+// downstream metering systems (e.g. Amberflo).
+const SystemDimensionProjectName = "project_name"
+
 // MeterAggregation describes how usage samples for a meter roll up over
 // a billing period.
 // +kubebuilder:validation:Enum=Sum;Max;Min;Count;UniqueCount;Latest;Average
@@ -152,6 +159,15 @@ type MeterDefinitionStatus struct {
 	// (publishedAt, conditions, observedGeneration). Phase lives on
 	// spec; status mirrors it via the Published condition.
 	CatalogStatus `json:",inline"`
+
+	// SystemDimensions lists the dimension keys injected by the billing
+	// pipeline on every valid event, in addition to those declared in
+	// spec.measurement.dimensions. Providers must configure these alongside
+	// spec.measurement.dimensions when setting up meters in downstream systems.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	SystemDimensions []string `json:"systemDimensions,omitempty"`
 }
 
 // MeterDefinition is the Schema for the meterdefinitions API. It is a

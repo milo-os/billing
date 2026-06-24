@@ -233,16 +233,10 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
-		// Force the PM to Active. The test adapter mirrors that into the
-		// InstrumentReady condition and the BillingAccount controller
-		// re-reads it via the PaymentMethod watch.
-		Eventually(func(g Gomega) {
-			var fetched billingv1alpha1.PaymentMethod
-			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
-			fetched.Status.Phase = billingv1alpha1.PaymentMethodPhaseActive
-			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
-		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
 
+		// Create the account before setting the PM Active so that the PM watch
+		// event (triggered below) fires while the account already exists and
+		// drives a re-reconcile that observes the Active phase.
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{Name: "dpmr-ready", Namespace: "default"},
 			Spec: billingv1alpha1.BillingAccountSpec{
@@ -251,6 +245,17 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+
+		// Force the PM to Active. The PaymentMethod watch enqueues a reconcile
+		// for the referenced BillingAccount; by this point the account exists, so
+		// the reconcile observes the Active phase and sets the condition True.
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.PaymentMethod
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.PaymentMethodPhaseActive
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
 		Eventually(func(g Gomega) {
 			var fetched billingv1alpha1.BillingAccount
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
