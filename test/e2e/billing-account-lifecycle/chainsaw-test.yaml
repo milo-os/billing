@@ -51,3 +51,53 @@ spec:
                 contactInfo:
                   email: billing@example.com
                   name: Billing Department
+
+    - name: transition-to-suspended
+      description: Verify that setting status phase to Suspended updates the Ready condition to False.
+      try:
+        - script:
+            content: |
+              kubectl patch billingaccount lifecycle-test-account -n default --type=merge --subresource=status --patch '{"status":{"phase":"Suspended"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: lifecycle-test-account
+                namespace: default
+              status:
+                phase: Suspended
+                conditions:
+                  - type: Ready
+                    status: "False"
+                    reason: BillingAccountNotReady
+                    message: "Billing account is in Suspended phase."
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+
+    - name: transition-to-archived
+      description: Verify that setting status phase to Archived updates the Ready condition to False.
+      try:
+        - script:
+            content: |
+              kubectl patch billingaccount lifecycle-test-account -n default --type=merge --subresource=status --patch '{"status":{"phase":"Archived"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: lifecycle-test-account
+                namespace: default
+              status:
+                phase: Archived
+                conditions:
+                  - type: Ready
+                    status: "False"
+                    reason: BillingAccountNotReady
+                    message: "Billing account is in Archived phase."
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
