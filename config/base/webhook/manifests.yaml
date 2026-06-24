@@ -151,6 +151,7 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
+    - DELETE
     resources:
     - paymentmethods
   sideEffects: None
