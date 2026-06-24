@@ -52,6 +52,38 @@ spec:
                   email: billing@example.com
                   name: Billing Department
 
+    - name: reject-currency-update
+      description: Verify that updating the currencyCode on an active account is rejected.
+      try:
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"currencyCode":"EUR"}}' 2>&1 | grep -q "currencyCode is immutable"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject currencyCode change" >&2
+                exit 1
+              fi
+
+    - name: reject-invalid-contact-info
+      description: Verify that contact info updates with invalid emails or country codes are rejected.
+      try:
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"contactInfo":{"email":"not-an-email"}}}' 2>&1 | grep -q "must be a valid email address"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid email address" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"contactInfo":{"email":"billing@example.com","address":{"country":"invalid"}}}}' 2>&1 | grep -q "country"; then
+                echo "Rejected as expected"
+              else
+                echo "Error: Did not reject invalid country code" >&2
+                exit 1
+              fi
+
     - name: transition-to-suspended
       description: Verify that setting status phase to Suspended updates the Ready condition to False.
       try:
