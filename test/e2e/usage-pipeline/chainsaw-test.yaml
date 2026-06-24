@@ -87,7 +87,7 @@ spec:
               echo "$VALID_ID" > /tmp/valid_id.txt
 
               VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
-              echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$VALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100"}}' > event.json
+              echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$VALID_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100","dimensions":{"region":"us-west-1","zone":"us-west-1a"}}}' > event.json
               kubectl cp event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/event.json"
               kubectl exec -n billing-system "$VECTOR_POD" -- \
                 wget -q -O- \
@@ -128,6 +128,7 @@ spec:
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$VALID_ID"; then
                   echo "SUCCESS: event $VALID_ID found in valid queue"
+                  echo "$MSG" | grep "$VALID_ID" | grep "^{" | head -n 1 > /tmp/valid_pipeline_event.json
                   exit 0
                 fi
                 echo "Waiting for event $VALID_ID..."
@@ -135,6 +136,22 @@ spec:
               done
               echo "FAIL: event $VALID_ID did not reach valid queue" >&2
               exit 1
+
+        # check billing account ref
+        - script:
+            timeout: 15s
+            content: |
+              set -eu
+              python3 -c 'import json; d = json.load(open("/tmp/valid_pipeline_event.json")); val = d.get("billingaccountref"); assert val == "e2e-account", f"Expected e2e-account, got {val}"'
+              echo "SUCCESS: billingAccountRef verified"
+
+        # check dimensions
+        - script:
+            timeout: 15s
+            content: |
+              set -eu
+              python3 -c 'import json; d = json.load(open("/tmp/valid_pipeline_event.json")); dims = d.get("data", {}).get("dimensions", {}); r, z, p = dims.get("region"), dims.get("zone"), dims.get("project_name"); assert r == "us-west-1", f"Expected region=us-west-1, got {r}"; assert z == "us-west-1a", f"Expected zone=us-west-1a, got {z}"; assert p == "p-e2e-usage-pipeline", f"Expected project_name=p-e2e-usage-pipeline, got {p}"'
+              echo "SUCCESS: dimensions verified (region, zone, project_name)"
 
     - name: send-invalid-event
       description: |
@@ -174,6 +191,7 @@ spec:
       description: |
         Verify that the event reached the billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter subject.
       try:
+        # check quarantine unknown meter subject
         - script:
             timeout: 60s
             content: |
@@ -186,6 +204,7 @@ spec:
                 MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
                   sub --all -T --stream billing-usage \
+                  --timeout 1s \
                   "billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter" \
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$INVALID_ID"; then
@@ -196,4 +215,130 @@ spec:
                 sleep 2
               done
               echo "FAIL: event $INVALID_ID did not reach quarantine" >&2
+              exit 1
+
+    - name: send-invalid-dimension-event
+      description: |
+        Send an event with an undeclared dimension key ("invalidDim") to billing-usage-collector.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -eu
+              export LC_ALL=C
+              INVDIM_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
+              echo "Generated Invalid Dimension Event ID: $INVDIM_ID"
+              echo "$INVDIM_ID" > /tmp/invalid_dimension_id.txt
+
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
+              echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline","id":"'"$INVDIM_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100","dimensions":{"region":"us-west-1","zone":"us-west-1a","invalidDim":"oops"}}}' > invalid_dimension_event.json
+              kubectl cp invalid_dimension_event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/invalid_dimension_event.json"
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-file=/tmp/invalid_dimension_event.json \
+                  http://127.0.0.1:9880/cloudevents
+
+    - name: wait-for-gateway-batch-3
+      description: |
+        Wait for the Gateway to batch and process the invalid dimension event.
+      try:
+        - script:
+            timeout: 45s
+            content: |
+              set -eu
+              echo "Waiting 30s for Gateway event batch to flush..."
+              sleep 5
+              echo "Done waiting"
+
+    - name: assert-invalid-dimension-event-quarantined
+      description: |
+        Verify that the event reached the billing.usage.p-e2e-usage-pipeline.quarantine.invalid_dimensions subject.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -eu
+              INVDIM_ID=$(cat /tmp/invalid_dimension_id.txt)
+              NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  sub --all -T --stream billing-usage \
+                  --timeout 1s \
+                  "billing.usage.p-e2e-usage-pipeline.quarantine.invalid_dimensions" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "$INVDIM_ID"; then
+                  echo "SUCCESS: event $INVDIM_ID found in quarantine queue"
+                  exit 0
+                fi
+                echo "Waiting for event $INVDIM_ID in quarantine..."
+                sleep 2
+              done
+              echo "FAIL: event $INVDIM_ID did not reach quarantine" >&2
+              exit 1
+
+    - name: send-attribution-failure-event
+      description: |
+        Send a valid event format for a project with no active binding ("p-e2e-usage-pipeline-noattr") to trigger attribution_failure.
+      try:
+        - script:
+            timeout: 30s
+            content: |
+              set -eu
+              export LC_ALL=C
+              NOATTR_ID="01HVJ$(head -c 500 /dev/urandom | tr -dc '0123456789ABCDEFGHJKMNPQRSTVWXYZ' | head -c 21)"
+              echo "Generated Attribution Failure Event ID: $NOATTR_ID"
+              echo "$NOATTR_ID" > /tmp/noattr_id.txt
+
+              VECTOR_POD=$(kubectl get pod -n billing-system -l app.kubernetes.io/instance=billing-usage-collector --no-headers -o name | head -1)
+              echo '{"specversion":"1.0","type":"e2e-cpu-seconds","source":"/e2e/test","subject":"projects/p-e2e-usage-pipeline-noattr","id":"'"$NOATTR_ID"'","time":"2026-05-06T11:00:00Z","datacontenttype":"application/json","data":{"value":"100","dimensions":{"region":"us-west-1","zone":"us-west-1a"}}}' > noattr_event.json
+              kubectl cp noattr_event.json -n billing-system "${VECTOR_POD#pod/}:/tmp/noattr_event.json"
+              kubectl exec -n billing-system "$VECTOR_POD" -- \
+                wget -q -O- \
+                  --header="Content-Type: application/cloudevents+json" \
+                  --post-file=/tmp/noattr_event.json \
+                  http://127.0.0.1:9880/cloudevents
+
+    - name: wait-for-gateway-batch-4
+      description: |
+        Wait for the Gateway to batch and process the attribution failure event.
+      try:
+        - script:
+            timeout: 45s
+            content: |
+              set -eu
+              echo "Waiting 30s for Gateway event batch to flush..."
+              sleep 5
+              echo "Done waiting"
+
+    - name: assert-attribution-failure-event-quarantined
+      description: |
+        Verify that the event reached the billing.usage.p-e2e-usage-pipeline-noattr.quarantine.attribution_failure subject.
+      try:
+        - script:
+            timeout: 60s
+            content: |
+              set -eu
+              NOATTR_ID=$(cat /tmp/noattr_id.txt)
+              NATS_POD=$(kubectl get pod -n nats-system -l app.kubernetes.io/component=nats-box --no-headers -o name | head -1)
+
+              DEADLINE=$(($(date +%s) + 55))
+              while [ "$(date +%s)" -lt "$DEADLINE" ]; do
+                MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
+                  nats --server nats://nats:4222 \
+                  sub --all -T --stream billing-usage \
+                  --timeout 1s \
+                  "billing.usage.p-e2e-usage-pipeline-noattr.quarantine.attribution_failure" \
+                  2>/dev/null || true)
+                if echo "$MSG" | grep -q "$NOATTR_ID"; then
+                  echo "SUCCESS: event $NOATTR_ID found in quarantine queue"
+                  exit 0
+                fi
+                echo "Waiting for event $NOATTR_ID in quarantine..."
+                sleep 2
+              done
+              echo "FAIL: event $NOATTR_ID did not reach quarantine" >&2
               exit 1

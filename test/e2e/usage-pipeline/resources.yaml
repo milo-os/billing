@@ -31,6 +31,9 @@ spec:
   measurement:
     aggregation: Sum
     unit: s
+    dimensions:
+      - region
+      - zone
   billing:
     consumedUnit: s
     pricingUnit: s
