@@ -1,0 +1,18 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MonitoredResourceType
+metadata:
+  name: e2e-compute-mrt
+spec:
+  resourceTypeName: e2e-compute-mrt
+  displayName: E2E Compute Monitored Resource (Updated)
+  phase: Published
+  gvk:
+    group: compute.miloapis.com
+    kind: Instance
+  labels:
+    - name: project_id
+      description: Project ID label
+    - name: zone
+      description: Zone label
+    - name: region
+      description: Region label (added)
