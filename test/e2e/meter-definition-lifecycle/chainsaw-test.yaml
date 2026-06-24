@@ -58,3 +58,77 @@ spec:
                     - region
                     - instance.type
                     - resource.tier
+
+    - name: reject-immutable-fields
+      description: Verify aggregation, unit, consumedUnit, and pricingUnit immutability.
+      try:
+        - script:
+            content: |
+              if kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"measurement":{"aggregation":"Max"}}}' 2>&1 | grep -q "aggregation is immutable"; then
+                echo "Rejected aggregation update as expected"
+              else
+                echo "Error: Did not reject aggregation update" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"measurement":{"unit":"minutes"}}}' 2>&1 | grep -q "unit is immutable"; then
+                echo "Rejected unit update as expected"
+              else
+                echo "Error: Did not reject unit update" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"billing":{"consumedUnit":"minutes"}}}' 2>&1 | grep -q "consumedUnit is immutable"; then
+                echo "Rejected consumedUnit update as expected"
+              else
+                echo "Error: Did not reject consumedUnit update" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              if kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"billing":{"pricingUnit":"minutes"}}}' 2>&1 | grep -q "pricingUnit is immutable"; then
+                echo "Rejected pricingUnit update as expected"
+              else
+                echo "Error: Did not reject pricingUnit update" >&2
+                exit 1
+              fi
+
+    - name: verify-phase-transitions
+      description: Verify forward-only phase transitions (Draft -> Published -> Deprecated -> Retired).
+      try:
+        - script:
+            content: |
+              if kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"phase":"Draft"}}' 2>&1 | grep -q "invalid phase transition"; then
+                echo "Rejected backward transition as expected"
+              else
+                echo "Error: Did not reject backward phase transition" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"phase":"Deprecated"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-compute-cpu-seconds
+              spec:
+                phase: Deprecated
+        - script:
+            content: |
+              kubectl patch meterdefinition e2e-compute-cpu-seconds -n $NAMESPACE --type=merge --patch '{"spec":{"phase":"Retired"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-compute-cpu-seconds
+              spec:
+                phase: Retired
+
+
