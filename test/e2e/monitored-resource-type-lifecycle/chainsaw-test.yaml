@@ -44,6 +44,19 @@ spec:
               - check:
                   ($error != null): true
 
+    - name: reject-change-mrt-kind
+      description: Verify that gvk.kind cannot be changed (immutability).
+      try:
+        - script:
+            content: |
+              if kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"gvk":{"kind":"ChangedKind"}}}' 2>&1 | grep -q "gvk.kind is immutable"; then
+                echo "Rejected kind update as expected"
+              else
+                echo "Error: Did not reject kind update" >&2
+                exit 1
+              fi
+
+
     - name: reject-remove-mrt-label
       description: Verify that removing an existing label is rejected (additive only).
       try:
@@ -72,3 +85,40 @@ spec:
                   - name: project_id
                   - name: zone
                   - name: region
+
+    - name: verify-phase-transitions
+      description: Verify forward-only phase transitions (Published -> Deprecated -> Retired).
+      try:
+        - script:
+            content: |
+              if kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Draft"}}' 2>&1 | grep -q "invalid phase transition"; then
+                echo "Rejected backward transition as expected"
+              else
+                echo "Error: Did not reject backward phase transition" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Deprecated"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                phase: Deprecated
+        - script:
+            content: |
+              kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Retired"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                phase: Retired
+
