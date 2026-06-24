@@ -73,8 +73,9 @@ spec:
 
     - name: create-second-binding-same-project
       description: |
-        Create a second binding for the same project pointing to a different account.
-        This must be rejected by the validation webhook because an active binding already exists.
+        Try to create a second active binding for the same project while the first is active.
+        This must be rejected by the validation webhook because an active billing binding (binding-test-first) already exists.
+        This validates that the webhook acts as our gatekeeper to prevent duplicate active bindings.
       try:
         - create:
             file: 03-second-binding.yaml
@@ -82,3 +83,50 @@ spec:
               - check:
                   ($error != null): true
                   (contains($error, 'already has an active billing account binding')): true
+
+    - name: manually-supersede-first-binding
+      description: |
+        Verify that patching a binding's status phase to "Superseded" is respected by the controller.
+        We patch the status subresource directly to simulate a newer binding superseding this one.
+        We then assert that the phase stays "Superseded" (i.e. the controller does not reconcile it back to Active).
+      try:
+        - script:
+            content: |
+              # Patch the status subresource of the first binding to mark it as Superseded.
+              # We provide lastTransitionTime in the condition block to satisfy API server schema requirements.
+              kubectl patch billingaccountbinding binding-test-first -n default --type=merge --subresource=status --patch '{"status":{"phase":"Superseded","conditions":[{"type":"Bound","status":"False","reason":"Superseded","message":"Superseded by binding binding-test-second.","lastTransitionTime":"2026-06-24T11:51:00Z"}]}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                name: binding-test-first
+                namespace: default
+              status:
+                phase: Superseded
+                conditions:
+                  - type: Bound
+                    status: "False"
+                    reason: Superseded
+
+    - name: create-second-binding-after-superseding
+      description: |
+        Create the second binding again now that the first is Superseded (no longer active).
+        This must succeed because the validation webhook only blocks creation if an ACTIVE binding exists.
+        Once admitted, the controller must process the new binding and set its phase to Active.
+      try:
+        - create:
+            file: 03-second-binding.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                name: binding-test-second
+                namespace: default
+              status:
+                phase: Active
+                billingResponsibility:
+                  currentAccount: binding-test-account-b
