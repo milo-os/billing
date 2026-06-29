@@ -178,8 +178,7 @@ spec:
     - name: valid-event-assert
       description: |
         Poll billing.usage.p-e2e-consumer.valid until the consumer routes the
-        event there. Assert the message body contains the event ID and
-        billingAccountRef=consumer-e2e-account.
+        event there, and verify the properties in sub-verifications.
       try:
         - script:
             timeout: 60s
@@ -204,19 +203,30 @@ spec:
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$VALID_ID"; then
                   echo "SUCCESS: event found on billing.usage.p-e2e-consumer.valid"
-                  if echo "$MSG" | grep -q "consumer-e2e-account"; then
-                    echo "SUCCESS: billingAccountRef=consumer-e2e-account confirmed"
-                    exit 0
-                  else
-                    echo "ERROR: billingAccountRef missing from message body!" >&2
-                    exit 1
-                  fi
+                  echo "$MSG" | grep "$VALID_ID" | grep "^{" | head -n 1 > /tmp/valid_event.json
+                  exit 0
                 fi
                 sleep 3
               done
 
               echo "FAIL: event did not appear on billing.usage.p-e2e-consumer.valid within timeout" >&2
               exit 1
+
+        # verify billingAccountRef
+        - script:
+            timeout: 15s
+            content: |
+              set -eu
+              python3 -c 'import json; d = json.load(open("/tmp/valid_event.json")); val = d.get("billingaccountref"); assert val == "consumer-e2e-account", f"Expected consumer-e2e-account, got {val}"'
+              echo "SUCCESS: billingAccountRef verified"
+
+        # verify project_name dimension
+        - script:
+            timeout: 15s
+            content: |
+              set -eu
+              python3 -c 'import json; d = json.load(open("/tmp/valid_event.json")); dims = d.get("data", {}).get("dimensions", {}); p_name = dims.get("project_name"); assert p_name == "p-e2e-consumer", f"Expected project_name=p-e2e-consumer, got {p_name}"'
+              echo "SUCCESS: project_name dimension verified"
 
     # ------------------------------------------------------------------
     # Step 6: SCENARIO 2 — unknown-meter

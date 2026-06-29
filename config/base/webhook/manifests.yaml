@@ -119,9 +119,51 @@ webhooks:
     service:
       name: billing-webhook
       namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-meterdefinition-ownership
+  failurePolicy: Fail
+  name: vmeterdefinitionownership.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - meterdefinitions
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-monitoredresourcetype
   failurePolicy: Fail
   name: vmonitoredresourcetype.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - monitoredresourcetypes
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-monitoredresourcetype-ownership
+  failurePolicy: Fail
+  name: vmonitoredresourcetypeownership.kb.io
   rules:
   - apiGroups:
     - billing.miloapis.com
@@ -151,6 +193,7 @@ webhooks:
     operations:
     - CREATE
     - UPDATE
+    - DELETE
     resources:
     - paymentmethods
   sideEffects: None

@@ -43,7 +43,7 @@ func SetupPaymentMethodWebhookWithManager(mgr ctrl.Manager) error {
 
 // +kubebuilder:webhook:path=/mutate-billing-miloapis-com-v1alpha1-paymentmethod,mutating=true,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=paymentmethods,verbs=create;update,versions=v1alpha1,name=mpaymentmethod.kb.io,admissionReviewVersions=v1
 
-// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-paymentmethod,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=paymentmethods,verbs=create;update,versions=v1alpha1,name=vpaymentmethod.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-paymentmethod,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=paymentmethods,verbs=create;update;delete,versions=v1alpha1,name=vpaymentmethod.kb.io,admissionReviewVersions=v1
 
 type paymentMethodWebhook struct {
 	client client.Client

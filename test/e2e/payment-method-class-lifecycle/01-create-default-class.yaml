@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: PaymentMethodClass
+metadata:
+  name: e2e-default-class
+  labels:
+    billing.miloapis.com/is-default-class: "true"
+spec:
+  provider: stripe
+  parametersRef:
+    group: stripe.billing.miloapis.com
+    kind: StripeProviderConfig
+    name: stripe-config

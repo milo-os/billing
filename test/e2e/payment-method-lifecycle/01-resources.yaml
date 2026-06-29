@@ -1,0 +1,19 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: payment-lifecycle-acct
+  namespace: default
+spec:
+  currencyCode: USD
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: PaymentMethod
+metadata:
+  name: payment-lifecycle-pm
+  namespace: default
+spec:
+  billingAccountRef:
+    name: payment-lifecycle-acct
+  displayName: "E2E Test Card"
+  paymentMethodClassRef:
+    name: stripe-default

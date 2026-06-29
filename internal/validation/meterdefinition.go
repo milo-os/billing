@@ -28,6 +28,22 @@ func ValidateMeterDefinitionUpdate(oldMD, newMD *billingv1alpha1.MeterDefinition
 		))
 	}
 
+	// billing.consumedUnit is immutable
+	if oldMD.Spec.Billing.ConsumedUnit != newMD.Spec.Billing.ConsumedUnit {
+		allErrs = append(allErrs, field.Forbidden(
+			specPath.Child("billing", "consumedUnit"),
+			"billing.consumedUnit is immutable",
+		))
+	}
+
+	// billing.pricingUnit is immutable
+	if oldMD.Spec.Billing.PricingUnit != newMD.Spec.Billing.PricingUnit {
+		allErrs = append(allErrs, field.Forbidden(
+			specPath.Child("billing", "pricingUnit"),
+			"billing.pricingUnit is immutable",
+		))
+	}
+
 	// measurement.aggregation is immutable
 	if oldMD.Spec.Measurement.Aggregation != newMD.Spec.Measurement.Aggregation {
 		allErrs = append(allErrs, field.Forbidden(

@@ -1,0 +1,134 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: payment-method-class-lifecycle
+spec:
+  description: |
+    Tests the PaymentMethodClass validating webhook rules:
+    - Creating a default PaymentMethodClass.
+    - Re-applying the default label to the same resource is idempotent (allowed).
+    - Creating a duplicate default PaymentMethodClass is rejected.
+    - Deletion of a default PaymentMethodClass is allowed.
+  steps:
+    - name: create-default-class
+      description: Create a PaymentMethodClass with the default label.
+      try:
+        - create:
+            file: 01-create-default-class.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethodClass
+              metadata:
+                name: e2e-default-class
+              spec:
+                provider: stripe
+
+    - name: idempotent-reapply
+      description: Re-applying the default label to the same class is idempotent and allowed.
+      try:
+        - apply:
+            file: 01-create-default-class.yaml
+
+    - name: reject-duplicate-default
+      description: Verify that creating a second default class is rejected.
+      try:
+        - create:
+            file: 02-create-duplicate-class.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'is already the default; only one default class is permitted')): true
+
+    - name: test-defaulting
+      description: Verify that a PaymentMethod created without spec.paymentMethodClassRef is defaulted to the active default class.
+      try:
+        - create:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-pm-default-acct
+                namespace: default
+              spec:
+                currencyCode: USD
+        - create:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: e2e-pm-default-pm
+                namespace: default
+              spec:
+                billingAccountRef:
+                  name: e2e-pm-default-acct
+                displayName: "E2E Defaulted PM"
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: e2e-pm-default-pm
+                namespace: default
+              spec:
+                paymentMethodClassRef:
+                  name: e2e-default-class
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              name: e2e-pm-default-pm
+              namespace: default
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: e2e-pm-default-acct
+              namespace: default
+
+    - name: delete-default-class
+      description: Verify that deletion of a default PaymentMethodClass is permitted by the webhook.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethodClass
+              name: e2e-default-class
+
+    - name: test-creation-fails-without-default-class
+      description: Verify that when no default PaymentMethodClass exists, creating a PaymentMethod without spec.paymentMethodClassRef is rejected.
+      try:
+        - create:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-pm-default-acct-2
+                namespace: default
+              spec:
+                currencyCode: USD
+        - create:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: e2e-pm-default-pm-2
+                namespace: default
+              spec:
+                billingAccountRef:
+                  name: e2e-pm-default-acct-2
+                displayName: "E2E Defaulted PM 2"
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'no default PaymentMethodClass exists')): true
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: e2e-pm-default-acct-2
+              namespace: default
+
+

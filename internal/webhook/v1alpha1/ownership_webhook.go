@@ -27,8 +27,6 @@ var ownershipLog = logf.Log.WithName("ownership-webhook")
 
 // SetupMeterDefinitionOwnershipWebhookWithManager registers the MeterDefinition
 // ownership webhook with the manager.
-//
-// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-meterdefinition-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=meterdefinitions,verbs=create;update;delete,versions=v1alpha1,name=vmeterdefinitionownership.kb.io,admissionReviewVersions=v1
 func SetupMeterDefinitionOwnershipWebhookWithManager(mgr ctrl.Manager, servicesOperatorServiceAccount string) error {
 	wh := &ownershipWebhook{servicesOperatorSA: servicesOperatorServiceAccount}
 
@@ -45,8 +43,6 @@ func SetupMeterDefinitionOwnershipWebhookWithManager(mgr ctrl.Manager, servicesO
 
 // SetupMonitoredResourceTypeOwnershipWebhookWithManager registers the
 // MonitoredResourceType ownership webhook with the manager.
-//
-// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-monitoredresourcetype-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=monitoredresourcetypes,verbs=create;update;delete,versions=v1alpha1,name=vmonitoredresourcetypeownership.kb.io,admissionReviewVersions=v1
 func SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr ctrl.Manager, servicesOperatorServiceAccount string) error {
 	wh := &ownershipWebhook{servicesOperatorSA: servicesOperatorServiceAccount}
 
@@ -60,6 +56,9 @@ func SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr ctrl.Manager, ser
 	)
 	return nil
 }
+
+// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-meterdefinition-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=meterdefinitions,verbs=create;update;delete,versions=v1alpha1,name=vmeterdefinitionownership.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-monitoredresourcetype-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=monitoredresourcetypes,verbs=create;update;delete,versions=v1alpha1,name=vmonitoredresourcetypeownership.kb.io,admissionReviewVersions=v1
 
 // ownershipWebhook rejects mutations to resources managed by the services
 // operator unless the requester IS the services operator service account.

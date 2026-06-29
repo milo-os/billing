@@ -1,0 +1,124 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: monitored-resource-type-lifecycle
+spec:
+  description: |
+    Tests the MonitoredResourceType lifecycle including:
+    - Creating a MonitoredResourceType.
+    - Webhook rejects attempts to change immutable fields (resourceTypeName, gvk.group).
+    - Webhook rejects removing declared labels.
+    - displayName updates and label additions are permitted.
+
+  steps:
+    - name: create-mrt
+      description: Create a MonitoredResourceType.
+      try:
+        - create:
+            file: 01-create-mrt.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                resourceTypeName: e2e-compute-mrt
+
+    - name: reject-change-mrt-name
+      description: Verify that resourceTypeName cannot be changed (immutability).
+      try:
+        - apply:
+            file: test-data/change-mrt-name.yaml
+            expect:
+              - check:
+                  ($error != null): true
+
+    - name: reject-change-mrt-gvk
+      description: Verify that gvk.group cannot be changed (immutability).
+      try:
+        - apply:
+            file: test-data/change-mrt-gvk.yaml
+            expect:
+              - check:
+                  ($error != null): true
+
+    - name: reject-change-mrt-kind
+      description: Verify that gvk.kind cannot be changed (immutability).
+      try:
+        - script:
+            content: |
+              if kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"gvk":{"kind":"ChangedKind"}}}' 2>&1 | grep -q "gvk.kind is immutable"; then
+                echo "Rejected kind update as expected"
+              else
+                echo "Error: Did not reject kind update" >&2
+                exit 1
+              fi
+
+
+    - name: reject-remove-mrt-label
+      description: Verify that removing an existing label is rejected (additive only).
+      try:
+        - apply:
+            file: test-data/remove-mrt-label.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'labels')): true
+
+    - name: edit-editable-fields
+      description: displayName updates and label additions are permitted.
+      try:
+        - apply:
+            file: 02-edit-mrt.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                displayName: E2E Compute Monitored Resource (Updated)
+                labels:
+                  - name: project_id
+                  - name: zone
+                  - name: region
+
+    - name: verify-phase-transitions
+      description: Verify forward-only phase transitions (Published -> Deprecated -> Retired).
+      try:
+        - script:
+            content: |
+              if kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Draft"}}' 2>&1 | grep -q "invalid phase transition"; then
+                echo "Rejected backward transition as expected"
+              else
+                echo "Error: Did not reject backward phase transition" >&2
+                exit 1
+              fi
+        - script:
+            content: |
+              kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Deprecated"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                phase: Deprecated
+        - script:
+            content: |
+              kubectl patch monitoredresourcetype e2e-compute-mrt --type=merge --patch '{"spec":{"phase":"Retired"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MonitoredResourceType
+              metadata:
+                name: e2e-compute-mrt
+              spec:
+                phase: Retired
+

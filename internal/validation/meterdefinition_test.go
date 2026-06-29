@@ -169,14 +169,24 @@ func TestValidateMeterDefinitionUpdate_Immutability(t *testing.T) {
 			wantErrs: 0,
 		},
 		{
-			name: "changing pricingUnit ok",
+			name: "changing pricingUnit errors",
 			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
 				c := md.DeepCopy()
 				c.Spec.Billing.PricingUnit = "d"
 				return c
 			},
-			wantErrs: 0,
+			wantErrs: 1,
 		},
+		{
+			name: "changing consumedUnit errors",
+			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
+				c := md.DeepCopy()
+				c.Spec.Billing.ConsumedUnit = "d"
+				return c
+			},
+			wantErrs: 1,
+		},
+
 		{
 			name: "valid phase transition ok",
 			mutate: func(md *billingv1alpha1.MeterDefinition) *billingv1alpha1.MeterDefinition {
