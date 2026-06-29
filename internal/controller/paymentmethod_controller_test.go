@@ -53,6 +53,13 @@ var _ = Describe("PaymentMethod Controller", func() {
 		}
 		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
 
+		// Wait for initial Pending status.
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.PaymentMethod
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.PaymentMethodPhasePending))
+		}, timeout, interval).Should(Succeed())
+
 		// Patch phase to Active (simulating the provider controller).
 		Eventually(func(g Gomega) {
 			var fetched billingv1alpha1.PaymentMethod
@@ -83,6 +90,13 @@ var _ = Describe("PaymentMethod Controller", func() {
 			},
 		}
 		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
+
+		// Wait for initial Pending status.
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.PaymentMethod
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.PaymentMethodPhasePending))
+		}, timeout, interval).Should(Succeed())
 
 		Eventually(func(g Gomega) {
 			var fetched billingv1alpha1.PaymentMethod
