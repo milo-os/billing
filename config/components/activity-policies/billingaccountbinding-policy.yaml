@@ -18,11 +18,11 @@ spec:
 
   auditRules:
     - name: create-with-refs
-      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.projectRef) && has(audit.requestObject.spec.billingAccountRef)"
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.projectRef) && has(audit.requestObject.spec.billingAccountRef) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300"
       summary: "{{ actor }} bound project {{ audit.requestObject.spec.projectRef.name }} to billing account {{ audit.requestObject.spec.billingAccountRef.name }}"
 
     - name: create-fallback
-      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create'"
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300"
       summary: "{{ actor }} created billing account binding {{ link(audit.responseObject.metadata.name, audit.objectRef) }}"
 
     - name: delete

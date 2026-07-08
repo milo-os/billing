@@ -24,15 +24,15 @@ spec:
 
   auditRules:
     - name: create-with-business-name
-      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.contactInfo) && has(audit.requestObject.spec.contactInfo.businessName)"
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.contactInfo) && has(audit.requestObject.spec.contactInfo.businessName) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300"
       summary: "{{ actor }} created billing account {{ audit.requestObject.spec.contactInfo.businessName }}"
 
     - name: create-with-contact-name
-      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.contactInfo) && has(audit.requestObject.spec.contactInfo.name)"
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.requestObject.spec) && has(audit.requestObject.spec.contactInfo) && has(audit.requestObject.spec.contactInfo.name) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300"
       summary: "{{ actor }} created billing account for {{ audit.requestObject.spec.contactInfo.name }}"
 
     - name: create-fallback
-      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create'"
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300"
       summary: "{{ actor }} created billing account {{ link(audit.responseObject.metadata.name, audit.objectRef) }}"
 
     - name: delete
