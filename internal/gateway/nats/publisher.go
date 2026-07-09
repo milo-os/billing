@@ -20,7 +20,7 @@ var log = ctrl.Log.WithName("nats")
 type Publisher interface {
 	// Publish publishes a single raw CloudEvent JSON payload to the given
 	// NATS subject. Returns an error if publish times out or NATS is unhealthy.
-	Publish(ctx context.Context, subject string, payload []byte) error
+	Publish(ctx context.Context, subject string, payload []byte, msgID string) error
 }
 
 // HealthChecker reports whether the underlying NATS connection is healthy.
@@ -73,13 +73,18 @@ func NewNATSPublisher(url, caFile, certFile, keyFile string) (*NATSPublisher, er
 	}, nil
 }
 
-// Publish publishes payload to subject using the JetStream PublishMsg API with
+// Publish publishes payload to subject using the JetStream Publish API with
 // a per-publish timeout. Returns an error on timeout or connection failure.
-func (p *NATSPublisher) Publish(ctx context.Context, subject string, payload []byte) error {
+func (p *NATSPublisher) Publish(ctx context.Context, subject string, payload []byte, msgID string) error {
 	pubCtx, cancel := context.WithTimeout(ctx, p.publishTimeout)
 	defer cancel()
-	msg := &natsgo.Msg{Subject: subject, Data: payload}
-	_, err := p.js.PublishMsg(pubCtx, msg)
+
+	var opts []jetstream.PublishOpt
+	if msgID != "" {
+		opts = append(opts, jetstream.WithMsgID(msgID))
+	}
+
+	_, err := p.js.Publish(pubCtx, subject, payload, opts...)
 	return err
 }
 

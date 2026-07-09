@@ -53,7 +53,7 @@ func (h *BatchIngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		subject := subjectFor(h.subjectPrefix, cloudEventSubjectFromRaw(raw))
-		if err := h.publisher.Publish(r.Context(), subject, raw); err != nil {
+		if err := h.publisher.Publish(r.Context(), subject, raw, result.ID); err != nil {
 			log.Error(err, "publish failed", "subject", subject)
 			writePublishError(w, err)
 			return
