@@ -368,9 +368,15 @@ Producers use the emission SDK rather than constructing CloudEvents directly.
   (group, kind, namespace, name, uid) for drill-down provenance. Labels are not
   carried in the event — downstream systems look them up from the resource
   directly.
-- **Dedup key is `id` alone.** `id` is a [ULID][ulid] — globally unique by
-  construction. A single-field key simplifies dedup across all pipeline stages
-  and at the provider.
+- **Dedup key is `id` with phase suffixes.** `id` is a [ULID][ulid] — globally unique by
+  construction. Because NATS JetStream deduplication is scoped to the **stream** (and both
+  ingestion and validation subjects reside in the same `billing-usage` stream), using the exact
+  same NATS `Nats-Msg-Id` across stages would cause NATS to discard downstream messages as duplicates.
+  To resolve this:
+  - Ingress events use the raw Event ID (`id`) directly.
+  - Attribution publishes append a `-valid` suffix (e.g. `id + "-valid"`).
+  - Quarantine publishes append a `-quarantine` suffix (e.g. `id + "-quarantine"`).
+  This preserves stage-level idempotency without causing cross-subject deduplication collisions.
 
 ### Emission SDK
 
@@ -671,6 +677,7 @@ alerts, not resource conditions.
 ## Implementation History
 
 - 2026-04-28: Initial enhancement proposal
+- 2026-07-09: Add phase suffixes to NATS message IDs to prevent stream-level deduplication collisions
 
 ## Drawbacks
 
