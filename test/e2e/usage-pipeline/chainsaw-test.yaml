@@ -124,6 +124,7 @@ spec:
                 MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
                   sub --all -T --stream billing-usage \
+                  --wait 1s \
                   "billing.usage.p-e2e-usage-pipeline.valid" \
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$VALID_ID"; then
@@ -204,7 +205,7 @@ spec:
                 MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
                   sub --all -T --stream billing-usage \
-                  --timeout 1s \
+                  --wait 1s \
                   "billing.usage.p-e2e-usage-pipeline.quarantine.unknown_meter" \
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$INVALID_ID"; then
@@ -267,7 +268,7 @@ spec:
                 MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
                   sub --all -T --stream billing-usage \
-                  --timeout 1s \
+                  --wait 1s \
                   "billing.usage.p-e2e-usage-pipeline.quarantine.invalid_dimensions" \
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$INVDIM_ID"; then
@@ -330,7 +331,7 @@ spec:
                 MSG=$(kubectl exec -n nats-system "$NATS_POD" -- \
                   nats --server nats://nats:4222 \
                   sub --all -T --stream billing-usage \
-                  --timeout 1s \
+                  --wait 1s \
                   "billing.usage.p-e2e-usage-pipeline-noattr.quarantine.attribution_failure" \
                   2>/dev/null || true)
                 if echo "$MSG" | grep -q "$NOATTR_ID"; then

@@ -241,7 +241,7 @@ func (c *UsageConsumer) processMessage(
 	pubCtx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 
-	if _, err := js.Publish(pubCtx, validSubject, enriched, msgID(ce.ID())); err != nil {
+	if _, err := js.Publish(pubCtx, validSubject, enriched, msgID(ce.ID(), "valid")); err != nil {
 		return fmt.Errorf("publishing to %s: %w", validSubject, err)
 	}
 
@@ -276,7 +276,7 @@ func (c *UsageConsumer) quarantine(
 	pubCtx, cancel := context.WithTimeout(ctx, publishTimeout)
 	defer cancel()
 
-	if _, err := js.Publish(pubCtx, quarantineSubject, payload, msgID(ce.ID())); err != nil {
+	if _, err := js.Publish(pubCtx, quarantineSubject, payload, msgID(ce.ID(), "quarantine")); err != nil {
 		return fmt.Errorf("publishing to quarantine subject %s: %w", quarantineSubject, err)
 	}
 
@@ -293,8 +293,8 @@ func (c *UsageConsumer) quarantine(
 	return msg.Ack()
 }
 
-// msgID returns a PublishOpt that sets Nats-Msg-Id to the given CloudEvent ID,
-// enabling deduplication on downstream JetStream streams.
-func msgID(id string) jetstream.PublishOpt {
-	return jetstream.WithMsgID(id)
+// msgID returns a PublishOpt that sets Nats-Msg-Id to the given CloudEvent ID with a suffix,
+// enabling deduplication on downstream JetStream streams without colliding with other stream subjects.
+func msgID(id, suffix string) jetstream.PublishOpt {
+	return jetstream.WithMsgID(id + "-" + suffix)
 }
