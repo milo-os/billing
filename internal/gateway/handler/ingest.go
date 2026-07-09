@@ -39,7 +39,7 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	subject := subjectFor(h.subjectPrefix, cloudEventSubjectFromBody(body))
-	if err := h.publish(r.Context(), subject, body); err != nil {
+	if err := h.publish(r.Context(), subject, body, result.ID); err != nil {
 		log.Error(err, "publish failed", "subject", subject)
 		writePublishError(w, err)
 		return
@@ -52,8 +52,8 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 }
 
 // publish wraps publisher.Publish and translates errors to HTTP status codes.
-func (h *IngestHandler) publish(ctx context.Context, subject string, payload []byte) error {
-	return h.publisher.Publish(ctx, subject, payload)
+func (h *IngestHandler) publish(ctx context.Context, subject string, payload []byte, msgID string) error {
+	return h.publisher.Publish(ctx, subject, payload, msgID)
 }
 
 // writePublishError writes the appropriate HTTP response for a NATS publish error.

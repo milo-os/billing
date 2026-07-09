@@ -19,7 +19,7 @@ type fakePublisher struct {
 var _ nats.Publisher = (*fakePublisher)(nil)
 var _ nats.HealthChecker = (*fakePublisher)(nil)
 
-func (f *fakePublisher) Publish(_ context.Context, _ string, _ []byte) error {
+func (f *fakePublisher) Publish(_ context.Context, _ string, _ []byte, _ string) error {
 	return f.err
 }
 
@@ -29,7 +29,7 @@ func (f *fakePublisher) Healthy() bool {
 
 func TestFakePublisher_ok(t *testing.T) {
 	p := &fakePublisher{err: nil, healthy: true}
-	if err := p.Publish(context.Background(), "test.subject", []byte("{}")); err != nil {
+	if err := p.Publish(context.Background(), "test.subject", []byte("{}"), ""); err != nil {
 		t.Fatalf("expected nil, got %v", err)
 	}
 	if !p.Healthy() {
@@ -40,7 +40,7 @@ func TestFakePublisher_ok(t *testing.T) {
 func TestFakePublisher_error(t *testing.T) {
 	want := errors.New("nats: timeout")
 	p := &fakePublisher{err: want, healthy: false}
-	err := p.Publish(context.Background(), "test.subject", []byte("{}"))
+	err := p.Publish(context.Background(), "test.subject", []byte("{}"), "")
 	if !errors.Is(err, want) {
 		t.Fatalf("expected %v, got %v", want, err)
 	}

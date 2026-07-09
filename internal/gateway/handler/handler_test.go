@@ -27,10 +27,11 @@ type fakePublisher struct {
 type publishCall struct {
 	subject string
 	payload []byte
+	msgID   string
 }
 
-func (f *fakePublisher) Publish(_ context.Context, subject string, payload []byte) error {
-	f.calls = append(f.calls, publishCall{subject: subject, payload: payload})
+func (f *fakePublisher) Publish(_ context.Context, subject string, payload []byte, msgID string) error {
+	f.calls = append(f.calls, publishCall{subject: subject, payload: payload, msgID: msgID})
 	return f.err
 }
 
