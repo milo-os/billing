@@ -206,7 +206,7 @@ func (c *UsageConsumer) processMessage(
 	// Stage 1: Central Validation.
 	vr := validate(&ce, c.MeterCache)
 	if !vr.OK {
-		return c.quarantine(ctx, js, msg, &ce, project, vr.Reason)
+		return c.quarantine(ctx, js, msg, &ce, project, vr.Reason, vr.Detail)
 	}
 
 	// Inject project_id as a system dimension after validation so downstream
@@ -225,7 +225,7 @@ func (c *UsageConsumer) processMessage(
 	// Stage 2: Attribution.
 	ar := attribute(project, c.BindingCache, c.AccountCache)
 	if !ar.OK {
-		return c.quarantine(ctx, js, msg, &ce, project, ar.Reason)
+		return c.quarantine(ctx, js, msg, &ce, project, ar.Reason, ar.Detail)
 	}
 
 	// Enrich event with billing account reference as a CloudEvents extension.
@@ -248,7 +248,9 @@ func (c *UsageConsumer) processMessage(
 	log.V(1).Info("event attributed and published to valid",
 		"project", project,
 		"eventID", ce.ID(),
+		"eventType", ce.Type(),
 		"billingAccountRef", ar.BillingAccountRef,
+		"value", eventData.Value,
 	)
 
 	return msg.Ack()
@@ -263,6 +265,7 @@ func (c *UsageConsumer) quarantine(
 	ce *cloudevents.Event,
 	project string,
 	reason QuarantineReason,
+	detail string,
 ) error {
 	log := c.Logger.WithName("usage-consumer")
 
@@ -285,6 +288,7 @@ func (c *UsageConsumer) quarantine(
 	log.Info("event quarantined",
 		"project", project,
 		"reason", reason,
+		"detail", detail,
 		"eventID", ce.ID(),
 		"eventType", ce.Type(),
 		"subject", quarantineSubject,
