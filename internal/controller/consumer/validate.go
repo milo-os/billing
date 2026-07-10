@@ -3,6 +3,8 @@
 package consumer
 
 import (
+	"fmt"
+
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -31,6 +33,8 @@ type ValidationResult struct {
 	OK bool
 	// Reason is set when OK is false.
 	Reason QuarantineReason
+	// Detail describes the specific cause of validation failure when OK is false.
+	Detail string
 	// MeterDefinition is the matched MeterDefinition when OK is true.
 	MeterDefinition *billingv1alpha1.MeterDefinition
 }
@@ -41,7 +45,7 @@ type ValidationResult struct {
 func validate(ce *cloudevents.Event, mc *MeterDefinitionCache) ValidationResult {
 	md := mc.Get(ce.Type())
 	if md == nil {
-		return ValidationResult{OK: false, Reason: ReasonUnknownMeter}
+		return ValidationResult{OK: false, Reason: ReasonUnknownMeter, Detail: fmt.Sprintf("no published meter definition found for event type %q", ce.Type())}
 	}
 
 	var data event.EventData
@@ -55,7 +59,7 @@ func validate(ce *cloudevents.Event, mc *MeterDefinitionCache) ValidationResult 
 
 	for key := range data.Dimensions {
 		if _, ok := declaredDimensions[key]; !ok {
-			return ValidationResult{OK: false, Reason: ReasonInvalidDimensions}
+			return ValidationResult{OK: false, Reason: ReasonInvalidDimensions, Detail: fmt.Sprintf("event contains undeclared dimension key %q", key)}
 		}
 	}
 
