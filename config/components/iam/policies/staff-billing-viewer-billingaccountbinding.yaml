@@ -1,0 +1,15 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: PolicyBinding
+metadata:
+  name: staff-billing-viewer-billingaccountbinding
+spec:
+  roleRef:
+    name: billing.miloapis.com-viewer
+  subjects:
+    - kind: Group
+      name: staff-users
+      namespace: milo-system
+  resourceSelector:
+    resourceKind:
+      apiGroup: billing.miloapis.com
+      kind: BillingAccountBinding

@@ -7,3 +7,7 @@ configurations:
 resources:
   - authenticated-user-meter-definition-read.yaml
   - authenticated-user-payment-method-class-read.yaml
+  - staff-billing-viewer-billingaccount.yaml
+  - staff-billing-viewer-billingaccountbinding.yaml
+  - staff-billing-viewer-organization.yaml
+  - staff-billing-viewer-paymentmethod.yaml
