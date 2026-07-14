@@ -305,6 +305,7 @@ type PaymentMethodStatus struct {
 // +kubebuilder:printcolumn:name="Last4",type=string,JSONPath=`.status.details.card.last4`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Organization"
+// +genclient
 type PaymentMethod struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

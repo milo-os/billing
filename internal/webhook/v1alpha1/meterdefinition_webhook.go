@@ -4,10 +4,8 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -23,8 +21,7 @@ var meterDefinitionLog = logf.Log.WithName("meterdefinition-webhook")
 func SetupMeterDefinitionWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &meterDefinitionWebhook{}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.MeterDefinition{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.MeterDefinition{}).
 		WithValidator(webhook).
 		Complete()
 }
@@ -33,21 +30,16 @@ func SetupMeterDefinitionWebhookWithManager(mgr ctrl.Manager) error {
 
 type meterDefinitionWebhook struct{}
 
-var _ admission.CustomValidator = &meterDefinitionWebhook{}
+var _ admission.Validator[*billingv1alpha1.MeterDefinition] = &meterDefinitionWebhook{}
 
-// ValidateCreate implements webhook.CustomValidator.
-func (r *meterDefinitionWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	md, ok := obj.(*billingv1alpha1.MeterDefinition)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+// ValidateCreate implements admission.Validator.
+func (r *meterDefinitionWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.MeterDefinition) (admission.Warnings, error) {
+	meterDefinitionLog.Info("validating create", "name", obj.GetName())
 
-	meterDefinitionLog.Info("validating create", "name", md.GetName())
-
-	if errs := validation.ValidateMeterDefinitionCreate(md); len(errs) > 0 {
+	if errs := validation.ValidateMeterDefinitionCreate(obj); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			md.Name,
+			obj.Name,
 			errs,
 		)
 	}
@@ -55,24 +47,14 @@ func (r *meterDefinitionWebhook) ValidateCreate(ctx context.Context, obj runtime
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator.
-func (r *meterDefinitionWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldMD, ok := oldObj.(*billingv1alpha1.MeterDefinition)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", oldObj)
-	}
+// ValidateUpdate implements admission.Validator.
+func (r *meterDefinitionWebhook) ValidateUpdate(_ context.Context, oldObj, newObj *billingv1alpha1.MeterDefinition) (admission.Warnings, error) {
+	meterDefinitionLog.Info("validating update", "name", newObj.GetName())
 
-	newMD, ok := newObj.(*billingv1alpha1.MeterDefinition)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
-
-	meterDefinitionLog.Info("validating update", "name", newMD.GetName())
-
-	if errs := validation.ValidateMeterDefinitionUpdate(oldMD, newMD); len(errs) > 0 {
+	if errs := validation.ValidateMeterDefinitionUpdate(oldObj, newObj); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
-			newMD.Name,
+			newObj.Name,
 			errs,
 		)
 	}
@@ -80,8 +62,8 @@ func (r *meterDefinitionWebhook) ValidateUpdate(ctx context.Context, oldObj, new
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator.
-func (r *meterDefinitionWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (r *meterDefinitionWebhook) ValidateDelete(_ context.Context, _ *billingv1alpha1.MeterDefinition) (admission.Warnings, error) {
 	// Allow deletion; GC handles cleanup.
 	return nil, nil
 }

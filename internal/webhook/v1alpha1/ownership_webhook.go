@@ -6,8 +6,8 @@ import (
 	"context"
 	"fmt"
 
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -28,13 +28,12 @@ var ownershipLog = logf.Log.WithName("ownership-webhook")
 // SetupMeterDefinitionOwnershipWebhookWithManager registers the MeterDefinition
 // ownership webhook with the manager.
 func SetupMeterDefinitionOwnershipWebhookWithManager(mgr ctrl.Manager, servicesOperatorServiceAccount string) error {
-	wh := &ownershipWebhook{servicesOperatorSA: servicesOperatorServiceAccount}
+	wh := &ownershipWebhook[*billingv1alpha1.MeterDefinition]{servicesOperatorSA: servicesOperatorServiceAccount}
 
 	mgr.GetWebhookServer().Register(
 		"/validate-billing-miloapis-com-v1alpha1-meterdefinition-ownership",
-		admission.WithCustomValidator(
+		admission.WithValidator[*billingv1alpha1.MeterDefinition](
 			mgr.GetScheme(),
-			&billingv1alpha1.MeterDefinition{},
 			wh,
 		),
 	)
@@ -44,13 +43,12 @@ func SetupMeterDefinitionOwnershipWebhookWithManager(mgr ctrl.Manager, servicesO
 // SetupMonitoredResourceTypeOwnershipWebhookWithManager registers the
 // MonitoredResourceType ownership webhook with the manager.
 func SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr ctrl.Manager, servicesOperatorServiceAccount string) error {
-	wh := &ownershipWebhook{servicesOperatorSA: servicesOperatorServiceAccount}
+	wh := &ownershipWebhook[*billingv1alpha1.MonitoredResourceType]{servicesOperatorSA: servicesOperatorServiceAccount}
 
 	mgr.GetWebhookServer().Register(
 		"/validate-billing-miloapis-com-v1alpha1-monitoredresourcetype-ownership",
-		admission.WithCustomValidator(
+		admission.WithValidator[*billingv1alpha1.MonitoredResourceType](
 			mgr.GetScheme(),
-			&billingv1alpha1.MonitoredResourceType{},
 			wh,
 		),
 	)
@@ -62,40 +60,29 @@ func SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr ctrl.Manager, ser
 
 // ownershipWebhook rejects mutations to resources managed by the services
 // operator unless the requester IS the services operator service account.
-type ownershipWebhook struct {
+type ownershipWebhook[T client.Object] struct {
 	servicesOperatorSA string
 }
 
-var _ admission.CustomValidator = &ownershipWebhook{}
-
-// ValidateCreate implements admission.CustomValidator.
-func (w *ownershipWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateCreate implements admission.Validator.
+func (w *ownershipWebhook[T]) ValidateCreate(ctx context.Context, obj T) (admission.Warnings, error) {
 	return w.validateOwnership(ctx, obj)
 }
 
-// ValidateUpdate implements admission.CustomValidator.
-func (w *ownershipWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
+// ValidateUpdate implements admission.Validator.
+func (w *ownershipWebhook[T]) ValidateUpdate(ctx context.Context, _, newObj T) (admission.Warnings, error) {
 	return w.validateOwnership(ctx, newObj)
 }
 
-// ValidateDelete implements admission.CustomValidator.
-func (w *ownershipWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (w *ownershipWebhook[T]) ValidateDelete(ctx context.Context, obj T) (admission.Warnings, error) {
 	return w.validateOwnership(ctx, obj)
 }
 
 // validateOwnership rejects the request when the object is managed by the
 // services operator but the caller is not the services operator service account.
-func (w *ownershipWebhook) validateOwnership(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	metaObj, ok := obj.(interface {
-		GetLabels() map[string]string
-		GetName() string
-	})
-	if !ok {
-		return nil, fmt.Errorf("object does not implement metav1.Object")
-	}
-
-	labels := metaObj.GetLabels()
-	if labels[ManagedByLabel] != ServicesOperatorValue {
+func (w *ownershipWebhook[T]) validateOwnership(ctx context.Context, obj T) (admission.Warnings, error) {
+	if obj.GetLabels()[ManagedByLabel] != ServicesOperatorValue {
 		// Not managed by services operator; no ownership restriction.
 		return nil, nil
 	}
@@ -112,7 +99,7 @@ func (w *ownershipWebhook) validateOwnership(ctx context.Context, obj runtime.Ob
 	}
 
 	ownershipLog.Info("ownership check failed",
-		"name", metaObj.GetName(),
+		"name", obj.GetName(),
 		"caller", caller,
 		"requiredSA", w.servicesOperatorSA,
 	)

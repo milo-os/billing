@@ -105,6 +105,7 @@ type BillingAccountBindingStatus struct {
 // +kubebuilder:printcolumn:name="Project",type=string,JSONPath=`.spec.projectRef.name`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Organization"
+// +genclient
 type BillingAccountBinding struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

@@ -7,9 +7,10 @@ vars:
   TEST_INFRA_CLUSTER_NAME: "test-infra"
   TEST_INFRA_REPO_REF: 'v0.6.0'
   CONTROLLER_TOOLS_VERSION: "v0.16.4"
-  DEFAULTER_GEN_VERSION: "v0.32.3"
+  DEFAULTER_GEN_VERSION: "v0.35.0"
+  APPLYCONFIGURATION_GEN_VERSION: "v0.35.0"
   GOLANGCI_LINT_VERSION: "v2.1.5"
-  CHAINSAW_VERSION: "v0.2.13"
+  CHAINSAW_VERSION: "v0.2.15"
 
 includes:
   # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
@@ -27,13 +28,18 @@ tasks:
 
   # Code generation
   generate:
-    desc: Run code generation (deepcopy, defaults)
+    desc: Run code generation (deepcopy, defaults, applyconfiguration)
     cmds:
       - |
         set -e
         echo "Running code generation..."
         {{.TOOL_DIR}}/controller-gen object:headerFile="hack/boilerplate.go.txt" paths="./..."
         {{.TOOL_DIR}}/defaulter-gen ./internal/config --output-file=zz_generated.defaults.go
+        {{.TOOL_DIR}}/applyconfiguration-gen \
+          --output-dir applyconfiguration \
+          --output-pkg go.miloapis.com/billing/applyconfiguration \
+          --go-header-file hack/boilerplate.go.txt \
+          go.miloapis.com/billing/api/v1alpha1
         echo "Code generation complete!"
     deps:
       - install-tools
@@ -130,6 +136,14 @@ tasks:
         fi
         ln -sf {{.TOOL_DIR}}/defaulter-gen-{{.DEFAULTER_GEN_VERSION}} {{.TOOL_DIR}}/defaulter-gen
 
+        # applyconfiguration-gen
+        if [ ! -f "{{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}}" ]; then
+          echo "Installing applyconfiguration-gen {{.APPLYCONFIGURATION_GEN_VERSION}}..."
+          GOBIN={{.TOOL_DIR}} go install k8s.io/code-generator/cmd/applyconfiguration-gen@{{.APPLYCONFIGURATION_GEN_VERSION}}
+          mv {{.TOOL_DIR}}/applyconfiguration-gen {{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}}
+        fi
+        ln -sf {{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}} {{.TOOL_DIR}}/applyconfiguration-gen
+
         # golangci-lint
         if [ ! -f "{{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}" ]; then
           echo "Installing golangci-lint {{.GOLANGCI_LINT_VERSION}}..."
@@ -149,6 +163,7 @@ tasks:
     status:
       - test -f {{.TOOL_DIR}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}
       - test -f {{.TOOL_DIR}}/defaulter-gen-{{.DEFAULTER_GEN_VERSION}}
+      - test -f {{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}}
       - test -f {{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}
       - test -f {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
 

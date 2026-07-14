@@ -4,10 +4,8 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,8 +25,7 @@ func SetupBillingAccountBindingWebhookWithManager(mgr ctrl.Manager) error {
 		client: mgr.GetClient(),
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.BillingAccountBinding{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.BillingAccountBinding{}).
 		WithValidator(webhook).
 		Complete()
 }
@@ -39,19 +36,14 @@ type billingAccountBindingWebhook struct {
 	client client.Client
 }
 
-var _ admission.CustomValidator = &billingAccountBindingWebhook{}
+var _ admission.Validator[*billingv1alpha1.BillingAccountBinding] = &billingAccountBindingWebhook{}
 
-// ValidateCreate implements webhook.CustomValidator.
-func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	binding, ok := obj.(*billingv1alpha1.BillingAccountBinding)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
-
+// ValidateCreate implements admission.Validator.
+func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.BillingAccountBinding) (admission.Warnings, error) {
 	billingAccountBindingLog.Info("validating create",
-		"name", binding.GetName(),
-		"project", binding.Spec.ProjectRef.Name,
-		"account", binding.Spec.BillingAccountRef.Name,
+		"name", obj.GetName(),
+		"project", obj.Spec.ProjectRef.Name,
+		"account", obj.Spec.BillingAccountRef.Name,
 	)
 
 	opts := validation.BillingAccountBindingValidationOptions{
@@ -59,10 +51,10 @@ func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj r
 		Client:  r.client,
 	}
 
-	if errs := validation.ValidateBillingAccountBindingCreate(binding, opts); len(errs) > 0 {
+	if errs := validation.ValidateBillingAccountBindingCreate(obj, opts); len(errs) > 0 {
 		return nil, apierrors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			binding.Name,
+			obj.Name,
 			errs,
 		)
 	}
@@ -70,30 +62,20 @@ func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj r
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator.
-func (r *billingAccountBindingWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldBinding, ok := oldObj.(*billingv1alpha1.BillingAccountBinding)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", oldObj)
-	}
-
-	newBinding, ok := newObj.(*billingv1alpha1.BillingAccountBinding)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
-
-	billingAccountBindingLog.Info("validating update", "name", newBinding.GetName())
+// ValidateUpdate implements admission.Validator.
+func (r *billingAccountBindingWebhook) ValidateUpdate(_ context.Context, oldObj, newObj *billingv1alpha1.BillingAccountBinding) (admission.Warnings, error) {
+	billingAccountBindingLog.Info("validating update", "name", newObj.GetName())
 
 	// Spec immutability is enforced by XValidation on the CRD.
 	// Belt-and-suspenders: also reject spec changes in the webhook.
 	var allErrs field.ErrorList
-	if oldBinding.Spec.BillingAccountRef.Name != newBinding.Spec.BillingAccountRef.Name {
+	if oldObj.Spec.BillingAccountRef.Name != newObj.Spec.BillingAccountRef.Name {
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec", "billingAccountRef", "name"),
 			"field is immutable",
 		))
 	}
-	if oldBinding.Spec.ProjectRef.Name != newBinding.Spec.ProjectRef.Name {
+	if oldObj.Spec.ProjectRef.Name != newObj.Spec.ProjectRef.Name {
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec", "projectRef", "name"),
 			"field is immutable",
@@ -103,7 +85,7 @@ func (r *billingAccountBindingWebhook) ValidateUpdate(ctx context.Context, oldOb
 	if len(allErrs) > 0 {
 		return nil, apierrors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
-			newBinding.Name,
+			newObj.Name,
 			allErrs,
 		)
 	}
@@ -111,14 +93,8 @@ func (r *billingAccountBindingWebhook) ValidateUpdate(ctx context.Context, oldOb
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator.
-func (r *billingAccountBindingWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	binding, ok := obj.(*billingv1alpha1.BillingAccountBinding)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
-
-	billingAccountBindingLog.Info("validating delete", "name", binding.GetName())
-
+// ValidateDelete implements admission.Validator.
+func (r *billingAccountBindingWebhook) ValidateDelete(_ context.Context, obj *billingv1alpha1.BillingAccountBinding) (admission.Warnings, error) {
+	billingAccountBindingLog.Info("validating delete", "name", obj.GetName())
 	return nil, nil
 }

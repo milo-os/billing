@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -34,8 +33,7 @@ var paymentMethodLog = logf.Log.WithName("paymentmethod-webhook")
 func SetupPaymentMethodWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &paymentMethodWebhook{client: mgr.GetClient()}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.PaymentMethod{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.PaymentMethod{}).
 		WithDefaulter(webhook).
 		WithValidator(webhook).
 		Complete()
@@ -50,15 +48,11 @@ type paymentMethodWebhook struct {
 }
 
 var (
-	_ admission.CustomDefaulter = &paymentMethodWebhook{}
-	_ admission.CustomValidator = &paymentMethodWebhook{}
+	_ admission.Defaulter[*billingv1alpha1.PaymentMethod] = &paymentMethodWebhook{}
+	_ admission.Validator[*billingv1alpha1.PaymentMethod] = &paymentMethodWebhook{}
 )
 
-func (r *paymentMethodWebhook) Default(ctx context.Context, obj runtime.Object) error {
-	pm, ok := obj.(*billingv1alpha1.PaymentMethod)
-	if !ok {
-		return fmt.Errorf("unexpected type %T", obj)
-	}
+func (r *paymentMethodWebhook) Default(ctx context.Context, pm *billingv1alpha1.PaymentMethod) error {
 	paymentMethodLog.Info("defaulting", "name", pm.Name, "namespace", pm.Namespace)
 
 	if pm.Spec.PaymentMethodClassRef != nil && pm.Spec.PaymentMethodClassRef.Name != "" {
@@ -77,11 +71,7 @@ func (r *paymentMethodWebhook) Default(ctx context.Context, obj runtime.Object) 
 	return nil
 }
 
-func (r *paymentMethodWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	pm, ok := obj.(*billingv1alpha1.PaymentMethod)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+func (r *paymentMethodWebhook) ValidateCreate(ctx context.Context, pm *billingv1alpha1.PaymentMethod) (admission.Warnings, error) {
 	paymentMethodLog.Info("validating create", "name", pm.Name)
 
 	var errs field.ErrorList
@@ -96,20 +86,12 @@ func (r *paymentMethodWebhook) ValidateCreate(ctx context.Context, obj runtime.O
 	errs = append(errs, r.validateBillingAccountRef(ctx, pm)...)
 
 	if len(errs) > 0 {
-		return nil, errors.NewInvalid(obj.GetObjectKind().GroupVersionKind().GroupKind(), pm.Name, errs)
+		return nil, errors.NewInvalid(pm.GetObjectKind().GroupVersionKind().GroupKind(), pm.Name, errs)
 	}
 	return nil, nil
 }
 
-func (r *paymentMethodWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldPM, ok := oldObj.(*billingv1alpha1.PaymentMethod)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", oldObj)
-	}
-	newPM, ok := newObj.(*billingv1alpha1.PaymentMethod)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
+func (r *paymentMethodWebhook) ValidateUpdate(ctx context.Context, oldPM, newPM *billingv1alpha1.PaymentMethod) (admission.Warnings, error) {
 	paymentMethodLog.Info("validating update", "name", newPM.Name)
 
 	var errs field.ErrorList
@@ -128,16 +110,12 @@ func (r *paymentMethodWebhook) ValidateUpdate(ctx context.Context, oldObj, newOb
 	errs = append(errs, r.validateBillingAccountRef(ctx, newPM)...)
 
 	if len(errs) > 0 {
-		return nil, errors.NewInvalid(newObj.GetObjectKind().GroupVersionKind().GroupKind(), newPM.Name, errs)
+		return nil, errors.NewInvalid(newPM.GetObjectKind().GroupVersionKind().GroupKind(), newPM.Name, errs)
 	}
 	return nil, nil
 }
 
-func (r *paymentMethodWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	pm, ok := obj.(*billingv1alpha1.PaymentMethod)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+func (r *paymentMethodWebhook) ValidateDelete(ctx context.Context, pm *billingv1alpha1.PaymentMethod) (admission.Warnings, error) {
 	paymentMethodLog.Info("validating delete", "name", pm.Name)
 
 	// Reject deletion if the PaymentMethod is currently designated as
@@ -157,7 +135,7 @@ func (r *paymentMethodWebhook) ValidateDelete(ctx context.Context, obj runtime.O
 	}
 	if ba.Spec.DefaultPaymentMethodRef != nil && ba.Spec.DefaultPaymentMethodRef.Name == pm.Name {
 		return nil, errors.NewInvalid(
-			obj.GetObjectKind().GroupVersionKind().GroupKind(),
+			pm.GetObjectKind().GroupVersionKind().GroupKind(),
 			pm.Name,
 			field.ErrorList{field.Forbidden(
 				field.NewPath("metadata", "name"),
