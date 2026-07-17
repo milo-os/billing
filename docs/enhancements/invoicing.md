@@ -172,17 +172,9 @@ spec:
   period:
     start: "2026-06-01T00:00:00Z"
     end: "2026-06-30T23:59:59Z"
-status:
+status: # see Invoice Resource for the full shape
   phase: Paid
-  currencyCode: USD
   amountDue: "482.19"
-  dueDate: "2026-07-15T00:00:00Z"
-  paidAt: "2026-07-02T09:14:00Z"
-  documentUri: "https://provider.example/invoices/..."
-  conditions:
-    - type: Ready
-      status: "True"
-      reason: Paid
 ```
 
 No vendor-specific identifiers appear in `status` — only normalized fields,
@@ -250,38 +242,44 @@ if the invoicing provider changes.
 
 ### Resource Overview
 
-| Resource | Scope | Owner | Purpose |
-|---|---|---|---|
-| `Invoice` | Namespace | Invoicing provider | Normalized invoice record; vendor identifiers carried as provider-prefixed annotations |
-
-`Invoice` is the only invoicing resource this document defines, and the only
-one consumers and backend services read directly. A provider's own
-configuration CRDs live in that provider's own API group and repository —
-out of scope here.
+`Invoice` (namespace-scoped, owned by the invoicing provider) is the only
+invoicing resource this document defines, and the only one consumers and
+backend services read directly. A provider's own configuration CRDs live in
+that provider's own API group and repository — out of scope here.
 
 ### Invoice Resource
 
 Namespace-scoped, sharing the `BillingAccount`'s namespace. Created
-exclusively by the invoicing provider.
+exclusively by the invoicing provider. Names are deterministic:
+`<billing-account-name>-<year>-<month>` (e.g. `acme-billing-2026-06`), giving
+the provider a natural idempotency key.
 
-**Spec:**
-
-| Field | Type | Description |
-|---|---|---|
-| `billingAccountRef.name` | string | The owning `BillingAccount` |
-| `period.start` / `period.end` | time | Billing period covered |
-
-**Status:**
-
-| Field | Type | Description |
-|---|---|---|
-| `phase` | enum | `Open`, `Paid`, `PastDue`, `Void` |
-| `currencyCode` | string | Must match `BillingAccount.spec.currencyCode` |
-| `amountDue` | string | Decimal total due |
-| `dueDate` / `paidAt` | time | Due date / payment confirmation time |
-| `documentUri` | string | Link to the provider-hosted invoice document |
-| `conditions` | list | Includes `CurrencyMismatch` when applicable |
-| `observedGeneration` | int | Generation last observed |
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Invoice
+metadata:
+  name: acme-billing-2026-06
+  namespace: acme-corp
+spec:
+  billingAccountRef:
+    name: acme-billing         # the owning BillingAccount
+  period:
+    start: "2026-06-01T00:00:00Z"  # billing period covered
+    end: "2026-06-30T23:59:59Z"
+status:
+  phase: Paid                  # Open | Paid | PastDue | Void
+  currencyCode: USD             # must match BillingAccount.spec.currencyCode
+  amountDue: "482.19"           # decimal total due
+  dueDate: "2026-07-15T00:00:00Z"
+  paidAt: "2026-07-02T09:14:00Z" # set once phase: Paid
+  documentUri: "https://provider.example/invoices/..."  # provider-hosted document
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: Paid               # or CurrencyMismatch, if the provider's total
+                                  # diverges from spec.currencyCode
+  observedGeneration: 3
+```
 
 Status intentionally excludes line items, tax breakdowns, and vendor
 identifiers. Those live in `status.documentUri` (for humans) or
@@ -289,19 +287,20 @@ provider-prefixed annotations (for the provider's own reconciliation and
 support tooling) — the typed schema stays limited to what any reader needs,
 regardless of which provider is deployed.
 
-Names are deterministic: `<billing-account-name>-<year>-<month>` (e.g.
-`acme-billing-2026-06`), giving the provider a natural idempotency key.
-
 ### BillingAccount Changes
 
-`BillingAccountStatus` gains:
+`BillingAccountStatus` gains two fields; there's no spec change, since
+there's no provider to select:
 
-| Field | Type | Description |
-|---|---|---|
-| `latestInvoiceRef.name` | string | Most recently created `Invoice` |
-| Condition `InvoicingReady` | condition | Whether the latest invoice is `Paid`/`Open` (not `PastDue`) |
-
-No spec changes — there's no provider to select.
+```yaml
+status:
+  latestInvoiceRef:
+    name: acme-billing-2026-06   # most recently created Invoice
+  conditions:
+    - type: InvoicingReady
+      status: "True"
+      reason: Current              # NoInvoicesYet | Current | PastDue
+```
 
 ### Provider Implementation Pattern
 
