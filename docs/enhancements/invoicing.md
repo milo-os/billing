@@ -39,36 +39,39 @@ latest-milestone: "v0"
 
 ## Summary
 
-A billing account owner today has no way to tell whether they're paid up.
-Neither does support, or finance — that information exists only inside
-whichever vendor happens to compute the account's invoices, reachable only
-by logging into that vendor's own dashboard. There's no invoice history in
-the portal, no way to flag an at-risk account, and no way to build automated
-dunning or reporting, because the platform itself doesn't know.
+Milo doesn't invoice billing accounts today — no invoice is computed, no
+payment is collected, and nobody (not the account owner, not support, not
+finance) has anywhere to check whether an account is paid up. That's about
+to change: an invoicing vendor will be integrated to compute and collect on
+invoices. This enhancement doesn't decide which vendor or how invoicing
+itself works — it defines the one thing that needs to be decided up front:
+how the result gets surfaced back to the platform, so that invoice and
+payment status show up the same way — in the portal, to support, to finance
+— no matter which vendor ends up doing the invoicing, and regardless of any
+future vendor change.
 
-This enhancement closes that gap. It introduces `Invoice`, a resource the
-invoicing provider keeps up to date as it computes and collects on invoices,
-so any part of the platform — the portal, support tooling, finance systems —
-can see a billing account's invoice history and payment status directly,
-without needing credentials for whichever vendor is doing the invoicing.
+It introduces `Invoice`, a resource the invoicing vendor's integration keeps
+up to date as it computes and collects on invoices, giving the rest of the
+platform one consistent, vendor-agnostic place to read a billing account's
+invoice history and payment status.
 
-This document defines the contract any invoicing provider follows, not any
-one provider's implementation, and assumes a single invoicing provider is
-active per cluster. Amberflo implements this contract today, via
-`amberflo-provider`; its configuration and webhook handling are documented
-in [amberflo-provider][amberflo-provider], not here.
+This document defines that contract, not any one vendor's implementation.
+Amberflo, via `amberflo-provider`, will be the first integration to
+implement it; its configuration and webhook handling belong in
+[amberflo-provider][amberflo-provider], not here.
 
 ## Motivation
 
 `BillingAccount` already carries a `DefaultPaymentMethodReady` condition
 explicitly meant to gate "downstream services (invoicing, charge
-processing)" — the platform was designed assuming something like this would
-exist. Nothing consumes that gate today, because there's nothing on the
-other side of it to act on. Left unaddressed, every provider integration
-that eventually needs to surface invoice or payment state would invent its
-own shape and its own signal for it, and every consumer of that data —
-portal, support tooling, finance systems — would have to special-case
-whichever provider happens to be deployed.
+processing)" — the platform was designed assuming invoicing would exist, but
+nothing implements it yet. Building the first integration directly, without
+first deciding this contract, would tie the portal, support tooling, and
+finance systems to that vendor's specific shape — and switching vendors
+later, or adding a second one, would mean reworking every consumer of that
+data. Deciding the contract now, before any vendor integration is built,
+means invoice and payment state show up the same way regardless of which
+vendor computes it.
 
 ### Goals
 
@@ -323,10 +326,10 @@ RBAC: **read** `BillingAccount` spec (cluster-wide); **create/update**
 defines in its own API group. The billing service does not import or
 reference provider-owned config types.
 
-**Reference implementation.** Amberflo implements this contract via
-`amberflo-provider`. Its configuration CRD, webhook contract, and annotation
-keys are documented in [amberflo-provider][amberflo-provider] — this document
-defines the contract every provider follows, not any one provider's
+**Reference implementation.** Amberflo, via `amberflo-provider`, will be the
+first to implement this contract. Its configuration CRD, webhook contract,
+and annotation keys belong in [amberflo-provider][amberflo-provider] — this
+document defines the contract every provider follows, not any one provider's
 implementation.
 
 ### Cross-Provider Identity Resolution
@@ -353,7 +356,7 @@ pattern is a narrow, explicit exception:
   instead — see [Future Work](#future-work).
 
 Amberflo's specific grant (reading `StripePaymentMethod.status.stripeCustomerId`
-to link its own Stripe integration) is documented in
+to link its own Stripe integration) will be documented in
 [amberflo-provider][amberflo-provider], not here.
 
 ### Portal Integration
