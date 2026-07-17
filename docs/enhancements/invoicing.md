@@ -39,36 +39,36 @@ latest-milestone: "v0"
 
 ## Summary
 
-An invoicing provider computes invoices for `BillingAccount`s from metered
-usage and, depending on the provider, may also collect payment against them.
-Right now that process is invisible to Milo — nothing surfaces whether an
-account is paid up. This enhancement introduces `Invoice`, a namespace-scoped
-resource the invoicing provider writes directly as invoices are computed, so
-the portal, support, and finance tooling can see a billing account's invoice
-history and payment status without talking to the provider's backend
-directly.
+A billing account owner today has no way to tell whether they're paid up.
+Neither does support, or finance — that information exists only inside
+whichever vendor happens to compute the account's invoices, reachable only
+by logging into that vendor's own dashboard. There's no invoice history in
+the portal, no way to flag an at-risk account, and no way to build automated
+dunning or reporting, because the platform itself doesn't know.
 
-This document defines the contract any invoicing provider follows — it does
-not describe any one provider's implementation. Amberflo implements this
-contract via `amberflo-provider`; its configuration, webhook handling, and
-vendor identifiers are documented in [amberflo-provider][amberflo-provider],
-not here.
+This enhancement closes that gap. It introduces `Invoice`, a resource the
+invoicing provider keeps up to date as it computes and collects on invoices,
+so any part of the platform — the portal, support tooling, finance systems —
+can see a billing account's invoice history and payment status directly,
+without needing credentials for whichever vendor is doing the invoicing.
 
-There's no provider-selection layer: a single invoicing provider is assumed
-active per cluster, and it reconciles every `BillingAccount` unconditionally.
+This document defines the contract any invoicing provider follows, not any
+one provider's implementation, and assumes a single invoicing provider is
+active per cluster. Amberflo implements this contract today, via
+`amberflo-provider`; its configuration and webhook handling are documented
+in [amberflo-provider][amberflo-provider], not here.
 
 ## Motivation
 
-`BillingAccount` already carries what an invoicing provider needs to issue
-invoices — currency, payment terms, contact/tax info — and a
-`DefaultPaymentMethodReady` condition meant to gate "downstream services
-(invoicing, charge processing)." But nothing today tells a billing account
-owner, support engineer, or finance system whether an account's latest
-invoice was paid, is overdue, or was even generated — that state lives
-entirely inside whichever backend computes it. Without a shared contract,
-every provider integration invents its own invoice shape and payment signal,
-and every consumer of that state has to special-case whichever provider
-happens to be deployed.
+`BillingAccount` already carries a `DefaultPaymentMethodReady` condition
+explicitly meant to gate "downstream services (invoicing, charge
+processing)" — the platform was designed assuming something like this would
+exist. Nothing consumes that gate today, because there's nothing on the
+other side of it to act on. Left unaddressed, every provider integration
+that eventually needs to surface invoice or payment state would invent its
+own shape and its own signal for it, and every consumer of that data —
+portal, support tooling, finance systems — would have to special-case
+whichever provider happens to be deployed.
 
 ### Goals
 
