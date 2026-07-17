@@ -5,7 +5,7 @@ latest-milestone: "v0"
 ---
 
 <!-- omit from toc -->
-# Invoicing Providers
+# Invoicing
 
 - [Summary](#summary)
 - [Motivation](#motivation)
