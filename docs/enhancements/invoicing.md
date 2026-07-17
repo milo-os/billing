@@ -51,10 +51,10 @@ history and payment status without talking to the provider's backend
 directly.
 
 This document defines the contract any invoicing provider follows — it does
-not describe any one provider's implementation. Amberflo, via
-`amberflo-provider`, is the provider currently deployed; its configuration,
-webhook handling, and vendor identifiers are documented in
-[amberflo-provider][amberflo-provider], not here.
+not describe any one provider's implementation. Amberflo implements this
+contract via `amberflo-provider`; its configuration, webhook handling, and
+vendor identifiers are documented in [amberflo-provider][amberflo-provider],
+not here.
 
 There's no provider-selection layer: a single invoicing provider is assumed
 active per cluster, and it reconciles every `BillingAccount` unconditionally
@@ -333,11 +333,11 @@ RBAC: **read** `BillingAccount` spec (cluster-wide); **create/update**
 defines in its own API group. The billing service does not import or
 reference provider-owned config types.
 
-**Reference implementation.** Amberflo, via `amberflo-provider`, is the
-invoicing provider currently deployed. Its configuration CRD, webhook
-contract, and annotation keys are documented in
-[amberflo-provider][amberflo-provider] — this document defines the contract
-every provider follows, not any one provider's implementation.
+**Reference implementation.** Amberflo implements this contract via
+`amberflo-provider`. Its configuration CRD, webhook contract, and annotation
+keys are documented in [amberflo-provider][amberflo-provider] — this document
+defines the contract every provider follows, not any one provider's
+implementation.
 
 ### Cross-Provider Identity Resolution
 
