@@ -34,6 +34,7 @@ latest-milestone: "v0"
 - [Drawbacks](#drawbacks)
 - [Alternatives](#alternatives)
   - [Consumer-Requested Invoice Generation](#consumer-requested-invoice-generation)
+  - [Provider-Specific Invoice CRD](#provider-specific-invoice-crd)
   - [Provider Config on InvoicingProviderClass Spec](#provider-config-on-invoicingproviderclass-spec)
   - [BillingAccount Owns Invoice Line Items Directly](#billingaccount-owns-invoice-line-items-directly)
   - [Vendor Customer ID on BillingAccount Status](#vendor-customer-id-on-billingaccount-status)
@@ -48,18 +49,26 @@ the provider — may also collect payment against them. This enhancement
 introduces the same `parametersRef` extensibility pattern used by [Payment
 Methods][payment-methods] to invoicing: a cluster-scoped
 `InvoicingProviderClass` configured by operators that names a provider and
-references a provider-specific configuration resource; a namespace-scoped
-`Invoice` that the billing service surfaces as the normalized, provider-agnostic
-record of a billing period's charges; and a provider-specific resource (e.g.
-`AmberfloInvoice`) owned by the provider controller that stores all
-provider-specific state and drives the reconciliation between the provider's
-own invoice lifecycle and the generic resource.
+references a provider-specific configuration resource, and a namespace-scoped
+`Invoice` that the invoicing provider controller writes directly as the
+normalized, provider-agnostic record of a billing period's charges.
 
 Amberflo is the reference implementation, via the existing `amberflo-provider`
 service. Unlike payment methods, invoices are not consumer-initiated —
 `Invoice` resources are created by the provider controller as it observes
 billing-cycle events from the provider (e.g. Amberflo's `ready-product-invoices`
 webhook), not in response to a request from the portal or a consumer.
+
+Unlike the payment methods pattern, there is no intermediate provider-specific
+CRD (no `AmberfloInvoice`) sitting between the provider and `Invoice`. The
+provider controller creates and updates the generic `Invoice` resource
+directly. The split that exists between
+`PaymentMethod` and `StripePaymentMethod` is justified there by a live,
+multi-phase, user-facing setup flow carrying a sensitive credential (the
+SetupIntent client secret) — nothing analogous exists for invoicing, which is
+purely a provider reporting facts after its own billing cycle closes. See
+[Provider-Specific Invoice CRD](#provider-specific-invoice-crd) in Alternatives
+for the full reasoning on why that split was considered and rejected here.
 
 Milo's current billing-account model already carries invoicing configuration
 (`BillingAccount.spec.paymentTerms`, `BillingAccount.spec.contactInfo`) that
@@ -103,7 +112,8 @@ payment methods pattern, applied one layer downstream.
   invoice computation and payment-collection lifecycle without modifying the
   billing service.
 - Support Amberflo as the initial provider via the existing `amberflo-provider`
-  service and a new `AmberfloInvoice` CRD.
+  service, writing `Invoice` resources directly rather than through an
+  intermediate provider-specific CRD.
 - Define how a billing account's invoicing readiness and latest invoice status
   are surfaced onto `BillingAccount` status for the portal and other backend
   services.
@@ -154,10 +164,14 @@ date, payment status, and a link to the provider-hosted invoice document.
 Provider-specific controller services — such as `amberflo-provider` — watch
 `BillingAccount` resources whose injected invoicing class reference points to a
 class they own, react to the provider's own invoice-ready signal (a webhook, in
-Amberflo's case), and create an `Invoice` plus a provider-specific child
-resource (`AmberfloInvoice`) that stores all provider identifiers. As the
+Amberflo's case), and create the `Invoice` resource directly with normalized
+status. Vendor-specific identifiers the provider needs for its own
+reconciliation (e.g. Amberflo's `invoiceKey`, the Stripe PaymentIntent id it
+charged) are carried as well-known, provider-prefixed annotations on `Invoice`
+rather than a separate typed resource — see
+[Amberflo Reference Implementation](#amberflo-reference-implementation). As the
 provider's invoice moves through its payment lifecycle, the provider controller
-keeps both resources in sync.
+keeps `Invoice` status and annotations in sync.
 
 ### How It Works
 
@@ -187,8 +201,7 @@ sequenceDiagram
     Amberflo->>Amberflo: Billing cycle closes,<br/>invoice computed, Stripe PaymentIntent charged
     Amberflo->>AmberfloProv: Webhook: ready-product-invoices
     AmberfloProv->>Amberflo: Fetch invoice detail (line items, totals, payment status)
-    AmberfloProv->>BillingSvc: Create AmberfloInvoice (provider-specific state)
-    AmberfloProv->>BillingSvc: Create/Update Invoice (normalized status)
+    AmberfloProv->>BillingSvc: Create/Update Invoice directly<br/>(normalized status + provider annotations)
     BillingSvc->>BillingSvc: Update BillingAccount<br/>LatestInvoiceRef, InvoicingReady condition
 
     Portal->>BillingSvc: Read Invoice
@@ -196,7 +209,7 @@ sequenceDiagram
     Portal->>Portal: Render invoice list/detail
 
     Amberflo->>AmberfloProv: Webhook: payment status changes (e.g. retried, paid late)
-    AmberfloProv->>BillingSvc: Update AmberfloInvoice + Invoice status
+    AmberfloProv->>BillingSvc: Update Invoice status
 ```
 
 **1. Operator configures an InvoicingProviderClass and AmberfloInvoicingConfig.**
@@ -257,36 +270,17 @@ notifies `amberflo-provider`.
 
 **5. Amberflo notifies amberflo-provider via the `ready-product-invoices` webhook.**
 
-`amberflo-provider` receives the webhook, fetches the full invoice detail from
-Amberflo's invoice API, and creates a provider-specific `AmberfloInvoice`:
+`amberflo-provider` receives the webhook and fetches the full invoice detail
+from Amberflo's invoice API.
 
-```yaml
-apiVersion: amberflo.billing.miloapis.com/v1alpha1
-kind: AmberfloInvoice
-metadata:
-  name: acme-billing-2026-06
-  namespace: acme-corp
-  ownerReferences:
-    - apiVersion: billing.miloapis.com/v1alpha1
-      kind: BillingAccount
-      name: acme-billing
-      controller: false
-spec:
-  billingAccountRef:
-    name: acme-billing
-status:
-  invoiceUri: "https://app.amberflo.io/invoices/..."
-  invoiceKey:
-    accountId: "acme-billing"
-    customerId: "acme-billing"
-    productId: "default"
-    year: 2026
-    month: 6
-  stripePaymentIntentId: "pi_Abc123"
-  paymentStatus: Paid
-```
+**6. amberflo-provider creates or updates the Invoice directly.**
 
-**6. amberflo-provider projects normalized state onto a generic Invoice.**
+There is no intermediate provider-specific resource. `amberflo-provider`
+writes normalized status directly onto `Invoice`, using a deterministic name
+(`<billing-account>-<year>-<month>`) as its idempotency key across webhook
+retries and reconcile loops. Vendor identifiers it needs for its own
+reconciliation are carried as well-known, provider-prefixed annotations rather
+than typed status fields:
 
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
@@ -294,6 +288,15 @@ kind: Invoice
 metadata:
   name: acme-billing-2026-06
   namespace: acme-corp
+  annotations:
+    amberflo.billing.miloapis.com/invoice-uri: "https://app.amberflo.io/invoices/..."
+    amberflo.billing.miloapis.com/invoice-key: "accountId=acme-billing,customerId=acme-billing,productId=default,year=2026,month=6"
+    stripe.billing.miloapis.com/payment-intent-id: "pi_Abc123"
+  ownerReferences:
+    - apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme-billing
+      controller: false
 spec:
   billingAccountRef:
     name: acme-billing
@@ -315,9 +318,14 @@ status:
       reason: Paid
 ```
 
-No Amberflo- or Stripe-specific identifiers appear on `Invoice` status — only
-the normalized fields all backend consumers require, exactly as `PaymentMethod`
-excludes Stripe identifiers from its own status.
+No Amberflo- or Stripe-specific identifiers appear on `Invoice` status —
+`status` stays limited to the normalized fields all backend consumers require,
+exactly as `PaymentMethod` excludes Stripe identifiers from its own status.
+Vendor identifiers live in annotations precisely because annotations are the
+conventional Kubernetes escape hatch for extension data a resource's typed
+schema doesn't (and shouldn't) formalize: readers that don't recognize a given
+provider's annotation prefix simply ignore it, and no provider's presence
+changes `Invoice`'s schema.
 
 **7. Billing service reconciles BillingAccount.**
 
@@ -387,15 +395,21 @@ the `InvoicingReady` condition rather than querying the provider directly.
 ### Notes and Constraints
 
 - `InvoicingProviderClass` and `Invoice` resources must reside in the same
-  cluster as `BillingAccount`. Provider-specific CRDs (e.g. `AmberfloInvoice`)
-  must be namespace-scoped and co-located with the `BillingAccount` and
-  `Invoice` they relate to.
+  cluster as `BillingAccount`. `Invoice` must be namespace-scoped and
+  co-located with the `BillingAccount` it relates to.
 - `BillingAccount.spec.invoicingProviderClassRef` is immutable once set, for
   the same reason `paymentMethodClassRef` is immutable on `PaymentMethod`:
   provider-specific state has already accumulated (Amberflo customer records,
   historical invoices) and cannot be transparently migrated to a different
   provider.
 - Only one `InvoicingProviderClass` may be annotated as the cluster default.
+- **No intermediate provider-specific CRD.** Unlike `PaymentMethod`/
+  `StripePaymentMethod`, the provider controller writes `Invoice` directly.
+  Vendor identifiers needed for the provider's own reconciliation live as
+  well-known, provider-prefixed annotations on `Invoice`
+  (`<provider-group>/<field-name>`), not typed fields — see
+  [Provider-Specific Invoice CRD](#provider-specific-invoice-crd) in
+  Alternatives.
 - **Amberflo owns charging, not `stripe-provider`.** Per the current platform
   decision, Amberflo generates invoices and charges the customer directly
   through its own native Stripe integration (Stripe PaymentIntents driven
@@ -417,12 +431,12 @@ the `InvoicingReady` condition rather than querying the provider directly.
 
 | Risk | Mitigation |
 |------|------------|
-| Duplicate `Invoice`/`AmberfloInvoice` creation from a retried `ready-product-invoices` webhook delivery | Deterministic resource naming from `billingAccountRef` + billing period; creation is a no-op if the resource already exists |
+| Duplicate `Invoice` creation from a retried `ready-product-invoices` webhook delivery | Deterministic resource naming from `billingAccountRef` + billing period; creation is a no-op (falls through to an update) if the resource already exists |
 | Provider webhook delivery failure (invoice never surfaced) | Provider controller polls the provider's invoice-list API on an interval as a fallback |
 | Invoice generated for a billing account with no active default payment method | Amberflo attempts the charge and reports failure through its own payment status; `amberflo-provider` surfaces `status.phase: PastDue` on `Invoice` rather than failing the reconcile. `BillingAccount.status.DefaultPaymentMethodReady` remains the pre-flight signal operators and the portal use to flag the account before an invoice is even attempted |
 | Cross-provider read of `StripePaymentMethod.status.stripeCustomerId` becomes a precedent for broader, uncontrolled coupling between provider CRDs | RBAC grant is scoped to the single field and single CRD kind needed, documented explicitly per provider pairing (see Cross-Provider Identity Resolution), not a generic capability granted to all providers |
-| Provider's invoice total diverges from `BillingAccount.spec.currencyCode` | `amberflo-provider` validates currency match before projecting `Invoice` status and sets a `CurrencyMismatch` condition rather than silently surfacing a mismatched value |
-| Provider-specific resource (`AmberfloInvoice`) deleted independently of `Invoice` | Provider controller re-creates it on its next reconcile if the underlying provider invoice still exists |
+| Provider's invoice total diverges from `BillingAccount.spec.currencyCode` | `amberflo-provider` validates currency match before writing `Invoice` status and sets a `CurrencyMismatch` condition rather than silently surfacing a mismatched value |
+| Vendor-identifier annotations on `Invoice` are edited or stripped by another actor | Annotations are treated as provider-owned, reconciled write-every-time (not merge-patched by identity) on every provider reconcile, so drift self-heals on the next pass |
 
 ## Design Details
 
@@ -431,13 +445,14 @@ the `InvoicingReady` condition rather than querying the provider directly.
 | Resource | Scope | Owner | Purpose |
 |---|---|---|---|
 | `InvoicingProviderClass` | Cluster | Billing service | Operator-configured invoicing provider selector; references provider config via `parametersRef` |
-| `Invoice` | Namespace | Billing service | Normalized, provider-agnostic invoice record for a billing account and period |
+| `Invoice` | Namespace | Invoicing provider controller (per class) | Normalized, provider-agnostic invoice record for a billing account and period; written directly by the provider, with vendor identifiers carried as provider-prefixed annotations |
 | `AmberfloInvoicingConfig` | Cluster | amberflo-provider | Amberflo-specific configuration (API key, webhook secret references) |
-| `AmberfloInvoice` | Namespace | amberflo-provider | Provider-specific state: Amberflo invoice identifiers, Stripe PaymentIntent id, raw payment status |
 
 `Invoice` is the only invoicing resource consumers and other backend services
-read directly. `InvoicingProviderClass` is an operator concern.
-Provider-specific resources are internal implementation details.
+read directly. `InvoicingProviderClass` is an operator concern. Unlike
+`PaymentMethod`, there is no intermediate provider-specific resource — the
+provider controller that reconciles a given `InvoicingProviderClass` has
+create/update access to `Invoice` itself.
 
 ### InvoicingProviderClass Resource
 
@@ -490,10 +505,16 @@ never by a consumer, the portal, or the billing service itself.
 `Invoice` status intentionally excludes line items, tax breakdowns, and any
 provider- or vendor-specific identifiers (Amberflo invoice keys, Stripe
 PaymentIntent ids). Consumers needing that level of detail follow
-`status.documentUri` to the provider's own invoice view. This mirrors
-`PaymentMethod` status excluding Stripe identifiers — the generic resource
+`status.documentUri` to the provider's own invoice view, or — for provider
+reconciliation tooling that genuinely needs the raw identifiers — read them
+from `Invoice`'s provider-prefixed annotations (e.g.
+`amberflo.billing.miloapis.com/invoice-key`,
+`stripe.billing.miloapis.com/payment-intent-id`). This mirrors `PaymentMethod`
+status excluding Stripe identifiers — the generic resource's *typed schema*
 carries only what a provider-agnostic reader needs to answer "how much, by
-when, paid or not."
+when, paid or not"; annotations are the deliberate escape hatch for
+provider-specific extension data that would otherwise force a schema change or
+a second CRD per provider.
 
 Resource names are deterministic:
 `<billing-account-name>-<period-year>-<period-month>` (e.g.
@@ -527,11 +548,12 @@ An invoicing provider controller is responsible for:
    chargeable (already implemented for Amberflo via the existing `BillingAccount`
    → `Customer` sync).
 3. Reacting to the provider's own invoice-ready signal — a webhook, in
-   Amberflo's case — and creating a provider-specific CRD instance (e.g.
-   `AmberfloInvoice`) that stores all provider identifiers.
-4. Creating or updating the corresponding `Invoice` with normalized status.
-5. Keeping both resources in sync as the provider's payment lifecycle
-   progresses (e.g. a charge retried after initial failure).
+   Amberflo's case — and fetching full invoice detail from the provider's API.
+4. Creating or updating the corresponding `Invoice` directly: normalized status
+   fields, plus any vendor identifiers the provider needs for its own
+   reconciliation as provider-prefixed annotations.
+5. Keeping `Invoice` in sync as the provider's payment lifecycle progresses
+   (e.g. a charge retried after initial failure).
 
 Provider controllers require the following Kubernetes RBAC grants:
 
@@ -539,8 +561,11 @@ Provider controllers require the following Kubernetes RBAC grants:
   own).
 - **Read** access to `BillingAccount` spec (to discover accounts and read
   billing configuration).
-- **Create/Patch** access to `Invoice` in the account's namespace.
-- **Full** access to their own provider CRD.
+- **Create/Update** access to `Invoice` in the account's namespace, for
+  `Invoice`s whose `spec.invoicingProviderClassRef` points to a class the
+  controller owns.
+- **Full** access to their own provider config CRD (e.g.
+  `AmberfloInvoicingConfig`).
 
 The billing service does not import or reference provider CRD types. Adding a
 new invoicing provider — for example, a hypothetical `chargebee-provider` —
@@ -562,7 +587,7 @@ requires:
 ingest API (see [amberflo-provider][amberflo-provider]); this enhancement adds
 the invoicing side.
 
-It introduces two CRDs in the `amberflo.billing.miloapis.com` API group.
+It introduces one CRD in the `amberflo.billing.miloapis.com` API group.
 
 **AmberfloInvoicingConfig spec fields:**
 
@@ -571,27 +596,26 @@ It introduces two CRDs in the `amberflo.billing.miloapis.com` API group.
 | `apiKeySecretRef` | object | Reference to the Kubernetes secret carrying the Amberflo API key |
 | `webhookSecretRef` | object | Reference to the secret used to verify `ready-product-invoices` webhook deliveries |
 
-**AmberfloInvoice spec fields:**
+There is no `AmberfloInvoice` CRD. `amberflo-provider` exposes an HTTP webhook
+endpoint that receives Amberflo's `ready-product-invoices` events. On receipt,
+it fetches full invoice detail via Amberflo's invoice query API and writes
+directly onto `Invoice`:
 
-| Field | Type | Description |
-|---|---|---|
-| `billingAccountRef.name` | string | Name of the parent `BillingAccount` in the same namespace |
+- **Status:** `phase`, `currencyCode`, `amountDue`, `dueDate`, `paidAt`,
+  `documentUri`, `conditions` — the normalized fields described in
+  [Invoice Resource](#invoice-resource).
+- **Annotations:** `amberflo.billing.miloapis.com/invoice-uri`,
+  `amberflo.billing.miloapis.com/invoice-key` (Amberflo's own composite key:
+  `accountId`, `customerId`, `productId`, `productPlanId`, `year`, `month`,
+  `day`), and `stripe.billing.miloapis.com/payment-intent-id` (the Stripe
+  PaymentIntent id Amberflo charged, retrieved from Amberflo's Stripe
+  PaymentIntent API). These exist for `amberflo-provider`'s own reconciliation
+  and for support/ops tooling debugging a specific invoice — no other consumer
+  of `Invoice` is expected to parse them.
 
-**AmberfloInvoice status fields:**
-
-| Field | Type | Description |
-|---|---|---|
-| `invoiceUri` | string | Amberflo-hosted invoice URI, from the `ready-product-invoices` webhook payload |
-| `invoiceKey` | object | Amberflo's own composite invoice key: `accountId`, `customerId`, `productId`, `productPlanId`, `year`, `month`, `day` |
-| `stripePaymentIntentId` | string | The Stripe PaymentIntent id Amberflo charged, retrieved from Amberflo's Stripe PaymentIntent API |
-| `paymentStatus` | string | Raw payment status as reported by Amberflo/Stripe |
-
-`amberflo-provider` exposes an HTTP webhook endpoint that receives Amberflo's
-`ready-product-invoices` events. On receipt, it fetches full invoice detail via
-Amberflo's invoice query API, creates or updates `AmberfloInvoice`, and projects
-normalized status onto `Invoice`. It also polls Amberflo's invoice-list API on
-an interval as a fallback for missed webhook deliveries, consistent with the
-polling fallback already established for `stripe-provider`.
+`amberflo-provider` also polls Amberflo's invoice-list API on an interval as a
+fallback for missed webhook deliveries, consistent with the polling fallback
+already established for `stripe-provider`.
 
 ### Cross-Provider Identity Resolution
 
@@ -646,9 +670,12 @@ because invoices are read-only projections, not an interactive flow.
 | View invoice detail / download | `Invoice` | `status.documentUri` |
 | Surface invoicing health | `BillingAccount` | `status.latestInvoiceRef`, `status.conditions[InvoicingReady]` |
 
-The portal has no need to read `InvoicingProviderClass`,
-`AmberfloInvoicingConfig`, or `AmberfloInvoice` — those exist purely to let the
-provider controller do its job without billing-service coupling.
+The portal has no need to read `InvoicingProviderClass` or
+`AmberfloInvoicingConfig` — those exist purely to let the provider controller
+do its job without billing-service coupling. The portal also should not rely
+on `Invoice`'s provider-prefixed annotations; they are reconciliation/debug
+data for the provider controller and support tooling, not a stable UI
+contract.
 
 ### Billing Account Side Effects
 
@@ -672,11 +699,11 @@ a separate enhancement, not this one.
 
 ### Ownership and Deletion
 
-`Invoice` and `AmberfloInvoice` carry a non-controller `ownerReference` to
-`BillingAccount` (not `controller: true`, since a `BillingAccount` accumulates
-many invoices over its lifetime rather than owning exactly one child). Deleting
-a `BillingAccount` cascades deletion of its `Invoice` and provider-specific
-history — consistent with Amberflo's own soft-delete behavior, which
+`Invoice` carries a non-controller `ownerReference` to `BillingAccount` (not
+`controller: true`, since a `BillingAccount` accumulates many invoices over its
+lifetime rather than owning exactly one child). Deleting a `BillingAccount`
+cascades deletion of its `Invoice` history — consistent with Amberflo's own
+soft-delete behavior, which
 deliberately preserves invoice history on the provider side even when the
 Milo-side `BillingAccount` is archived (`AllowCustomerDelete` defaults to
 `false` in `amberflo-provider` for this reason). Archiving a `BillingAccount`
@@ -695,17 +722,16 @@ consumer-facing creation path to guard symmetrically.
 | Billing service | `InvoicingProviderClass` | Read (for defaulting webhook) |
 | Billing service | `Invoice` | Read (reconciles `BillingAccount` status from it) |
 | Billing service | `BillingAccount` | Full (owns the CRD) |
-| Billing service | Provider-specific CRDs | None |
+| Billing service | Provider config CRDs | None |
 | amberflo-provider | `InvoicingProviderClass` | Read |
 | amberflo-provider | `BillingAccount` spec | Read |
-| amberflo-provider | `Invoice` | Create, Update (owns the resource lifecycle for classes it reconciles) |
+| amberflo-provider | `Invoice` | Create, Update, scoped to `Invoice`s whose `spec.invoicingProviderClassRef` names a class amberflo-provider reconciles |
 | amberflo-provider | `AmberfloInvoicingConfig` | Full (owns the CRD) |
-| amberflo-provider | `AmberfloInvoice` | Full (owns the CRD) |
 | amberflo-provider | `PaymentMethod` | Read |
 | amberflo-provider | `StripePaymentMethod.status.stripeCustomerId` | Read (narrow, see [Cross-Provider Identity Resolution](#cross-provider-identity-resolution)) |
 | Portal | `Invoice` | Read |
 | Portal | `BillingAccount` | Read |
-| Portal | `InvoicingProviderClass`, `AmberfloInvoicingConfig`, `AmberfloInvoice` | None |
+| Portal | `InvoicingProviderClass`, `AmberfloInvoicingConfig` | None |
 
 `amberflo-provider`'s read grant on `StripePaymentMethod` is the only
 cross-provider RBAC grant in this design and is scoped to a single field, as
@@ -714,6 +740,9 @@ discussed above.
 ## Implementation History
 
 - 2026-07-17: Enhancement drafted.
+- 2026-07-17: Revised to drop the provider-specific `AmberfloInvoice` CRD;
+  `amberflo-provider` writes `Invoice` directly, with vendor identifiers as
+  provider-prefixed annotations instead of a second resource.
 
 ## Future Work
 
@@ -755,6 +784,14 @@ Surfacing only totals (not line items) on `Invoice` means any backend service
 that needs line-item detail must follow `status.documentUri` to the provider,
 which is not queryable the way a Kubernetes resource is.
 
+Carrying vendor identifiers as annotations rather than a typed provider CRD
+trades away schema validation and discoverability: annotation values are
+untyped strings, there is no `kubectl explain` for them, and a provider that
+writes a malformed annotation fails silently rather than being rejected by the
+API server. This is an accepted tradeoff given invoicing has no interactive
+flow to protect, but it is a real cost compared to the payment methods
+pattern.
+
 ## Alternatives
 
 ### Consumer-Requested Invoice Generation
@@ -767,6 +804,37 @@ providers run their own billing cycles on their own schedule
 force Amberflo to generate an invoice on demand. Modeling `Invoice` as
 provider-created, reactive to the provider's own signal, matches the actual
 control flow.
+
+### Provider-Specific Invoice CRD
+
+The initial draft of this enhancement mirrored `PaymentMethod`/
+`StripePaymentMethod` exactly, introducing a provider-owned `AmberfloInvoice`
+that stored all Amberflo/Stripe identifiers, with `amberflo-provider`
+projecting normalized state onto `Invoice` the way `stripe-provider` projects
+onto `PaymentMethod`. This was reconsidered and rejected.
+
+The split is earned for payment methods by a genuinely different concern: a
+live, multi-phase, user-facing collection flow that carries a sensitive
+credential (the SetupIntent `clientSecret`) which must not be readable by
+every backend service. Invoicing has no analogous flow — `amberflo-provider` is
+reporting facts about a billing cycle Amberflo already closed, not driving an
+interactive session. Introducing a second CRD purely to keep a handful of
+vendor identifiers (an invoice key, a PaymentIntent id) off the generic
+resource is a heavier mechanism than the problem calls for, given Kubernetes
+already has a lighter one — annotations — for exactly this kind of
+provider-specific extension data that shouldn't be part of a shared type's
+formal schema.
+
+Rejecting the separate CRD also removes a full RBAC surface (a CRD, its own
+role bindings, its own reconcile loop keeping two resources in sync) for a
+provider that, unlike Stripe, never needs the portal or any other service to
+read its provider-specific resource mid-flow — nothing in this design reads
+`Invoice` before `amberflo-provider` has already fully populated it. If a
+future invoicing provider does have a genuine multi-phase, credential-bearing
+flow (unlikely, but not impossible for a provider with its own hosted checkout
+step), that provider's implementation can introduce its own provider CRD
+without requiring changes to `Invoice`, `InvoicingProviderClass`, or this
+decision for Amberflo.
 
 ### Provider Config on InvoicingProviderClass Spec
 
