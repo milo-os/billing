@@ -32,8 +32,6 @@ latest-milestone: "v0"
 - [Drawbacks](#drawbacks)
 - [Alternatives](#alternatives)
   - [Consumer-Requested Invoice Generation](#consumer-requested-invoice-generation)
-  - [Provider-Specific Invoice CRD](#provider-specific-invoice-crd)
-  - [Generic InvoicingProviderClass](#generic-invoicingproviderclass)
   - [BillingAccount Owns Invoice Line Items Directly](#billingaccount-owns-invoice-line-items-directly)
   - [Vendor Customer ID on BillingAccount Status](#vendor-customer-id-on-billingaccount-status)
   - [Billing Service Polls Provider Invoice APIs Directly](#billing-service-polls-provider-invoice-apis-directly)
@@ -57,9 +55,7 @@ vendor identifiers are documented in [amberflo-provider][amberflo-provider],
 not here.
 
 There's no provider-selection layer: a single invoicing provider is assumed
-active per cluster, and it reconciles every `BillingAccount` unconditionally
-— see [Generic InvoicingProviderClass](#generic-invoicingproviderclass) for
-why.
+active per cluster, and it reconciles every `BillingAccount` unconditionally.
 
 ## Motivation
 
@@ -87,8 +83,7 @@ happens to be deployed.
 
 ### Non-Goals
 
-- Supporting multiple simultaneous invoicing providers is out of scope; see
-  [Generic InvoicingProviderClass](#generic-invoicingproviderclass).
+- Supporting multiple simultaneous invoicing providers is out of scope.
 - Tax computation, rate cards, pricing, and line-item rating stay entirely
   the provider's responsibility.
 - Invoice PDF rendering/storage stays with the provider; `Invoice` only links
@@ -107,8 +102,7 @@ portal. Status carries period, totals, currency, due date, payment phase, and
 a document link. Vendor identifiers a provider needs for its own
 reconciliation (an invoice key, a payment-processor transaction id) are
 carried as provider-prefixed annotations, not typed fields — Kubernetes'
-existing escape hatch for extension data, rather than a second CRD (see
-[Provider-Specific Invoice CRD](#provider-specific-invoice-crd)).
+existing escape hatch for extension data, rather than a second CRD.
 
 ### How It Works
 
@@ -231,12 +225,9 @@ if the invoicing provider changes.
   `BillingAccount`.
 - This design assumes a single invoicing provider is active per cluster. The
   provider reconciles every `BillingAccount` unconditionally — there's no
-  per-account provider selection to configure or default. See
-  [Generic InvoicingProviderClass](#generic-invoicingproviderclass) for why
-  that indirection is deferred rather than built now.
-- **No intermediate provider-specific CRD** in this repo — see
-  [Provider-Specific Invoice CRD](#provider-specific-invoice-crd). A provider
-  may still define its own config CRD in its own API group; that CRD and its
+  per-account provider selection to configure or default.
+- **No intermediate provider-specific CRD** in this repo. A provider may
+  still define its own config CRD in its own API group; that CRD and its
   fields are that provider's concern, not this document's.
 - A provider that owns charging directly through its own payment integration
   (rather than driving Milo's `PaymentMethod` providers) may need a vendor
@@ -431,16 +422,6 @@ grant in this design, and it's scoped to a single field.
 ## Implementation History
 
 - 2026-07-17: Enhancement drafted.
-- 2026-07-17: Revised to drop the provider-specific `AmberfloInvoice` CRD;
-  the provider writes `Invoice` directly, with vendor identifiers as
-  annotations.
-- 2026-07-17: Renamed from "Invoicing Providers" to "Invoicing".
-- 2026-07-17: Dropped `InvoicingProviderClass` and
-  `BillingAccount.spec.invoicingProviderClassRef` — no realistic need for
-  multiple simultaneous invoicing providers.
-- 2026-07-17: Rewritten as generic provider-integration guidance;
-  Amberflo-specific configuration, webhook contract, and identifiers moved
-  out to the `amberflo-provider` repository.
 
 ## Future Work
 
@@ -481,38 +462,11 @@ judged a better tradeoff than building and maintaining unused indirection.
 
 ### Consumer-Requested Invoice Generation
 
-An earlier framing modeled `Invoice` like `PaymentMethod` — created by the
-portal to request generation. Rejected: invoicing providers run their own
-billing cycles on their own schedule, and Milo has no way to force a provider
-to generate an invoice on demand. Provider-created, reactive to the
-provider's own signal, matches the actual control flow.
-
-### Provider-Specific Invoice CRD
-
-An earlier draft mirrored `PaymentMethod`/`StripePaymentMethod` exactly, with
-a provider-owned CRD storing all identifiers. Rejected: that split is earned
-for payment methods by a live, credential-bearing setup flow (the SetupIntent
-`clientSecret`) that invoicing has no equivalent of — a provider is reporting
-facts about an already-closed billing cycle. A second CRD is a heavier
-mechanism than the problem calls for when annotations already serve as
-Kubernetes' extension-data escape hatch.
-
-### Generic InvoicingProviderClass
-
-An earlier draft introduced `InvoicingProviderClass`, mirroring
-`PaymentMethodClass`'s `parametersRef` pattern, so a `BillingAccount` could be
-routed to a specific invoicing provider. Rejected: `PaymentMethodClass` earns
-its complexity by routing anonymous, consumer-created `PaymentMethod`
-requests to a provider without leaking provider vocabulary into what the
-consumer creates. `Invoice` is never consumer-created, so there's no request
-to route. The remaining justification — supporting multiple invoicing
-providers active in the same cluster at once — isn't realistic today: usage
-metering is already single-sourced, so there's nothing to route between. A
-cluster-wide provider swap doesn't need per-account routing either — a new
-provider service just starts covering every account. Building the
-indirection now would be complexity carried for a scenario with no concrete
-driver; it can be introduced when a second provider is real (see
-[Future Work](#future-work)).
+Modeling `Invoice` like `PaymentMethod` — created by the portal to request
+generation — doesn't fit: invoicing providers run their own billing cycles on
+their own schedule, and Milo has no way to force a provider to generate an
+invoice on demand. Provider-created, reactive to the provider's own signal,
+matches the actual control flow.
 
 ### BillingAccount Owns Invoice Line Items Directly
 
