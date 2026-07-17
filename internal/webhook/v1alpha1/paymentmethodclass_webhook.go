@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,8 +26,7 @@ var paymentMethodClassLog = logf.Log.WithName("paymentmethodclass-webhook")
 func SetupPaymentMethodClassWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &paymentMethodClassWebhook{client: mgr.GetClient()}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.PaymentMethodClass{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.PaymentMethodClass{}).
 		WithValidator(webhook).
 		Complete()
 }
@@ -39,27 +37,19 @@ type paymentMethodClassWebhook struct {
 	client client.Client
 }
 
-var _ admission.CustomValidator = &paymentMethodClassWebhook{}
+var _ admission.Validator[*billingv1alpha1.PaymentMethodClass] = &paymentMethodClassWebhook{}
 
-func (r *paymentMethodClassWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	class, ok := obj.(*billingv1alpha1.PaymentMethodClass)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+func (r *paymentMethodClassWebhook) ValidateCreate(ctx context.Context, class *billingv1alpha1.PaymentMethodClass) (admission.Warnings, error) {
 	paymentMethodClassLog.Info("validating create", "name", class.Name)
 	return nil, r.validateDefaultUniqueness(ctx, class, "")
 }
 
-func (r *paymentMethodClassWebhook) ValidateUpdate(ctx context.Context, _, newObj runtime.Object) (admission.Warnings, error) {
-	class, ok := newObj.(*billingv1alpha1.PaymentMethodClass)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
+func (r *paymentMethodClassWebhook) ValidateUpdate(ctx context.Context, _, class *billingv1alpha1.PaymentMethodClass) (admission.Warnings, error) {
 	paymentMethodClassLog.Info("validating update", "name", class.Name)
 	return nil, r.validateDefaultUniqueness(ctx, class, class.Name)
 }
 
-func (r *paymentMethodClassWebhook) ValidateDelete(_ context.Context, _ runtime.Object) (admission.Warnings, error) {
+func (r *paymentMethodClassWebhook) ValidateDelete(_ context.Context, _ *billingv1alpha1.PaymentMethodClass) (admission.Warnings, error) {
 	return nil, nil
 }
 
@@ -86,7 +76,7 @@ func (r *paymentMethodClassWebhook) validateDefaultUniqueness(ctx context.Contex
 			continue
 		}
 		return errors.NewInvalid(
-			candidate.GroupVersionKind().GroupKind(),
+			candidate.GetObjectKind().GroupVersionKind().GroupKind(),
 			candidate.Name,
 			field.ErrorList{field.Forbidden(
 				field.NewPath("metadata", "labels").Key(billingv1alpha1.IsDefaultPaymentMethodClassLabel),

@@ -7,7 +7,6 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -27,8 +26,7 @@ func SetupBillingAccountWebhookWithManager(mgr ctrl.Manager) error {
 		client: mgr.GetClient(),
 	}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.BillingAccount{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.BillingAccount{}).
 		WithDefaulter(webhook).
 		WithValidator(webhook).
 		Complete()
@@ -42,41 +40,24 @@ type billingAccountWebhook struct {
 	client client.Client
 }
 
-var _ admission.CustomDefaulter = &billingAccountWebhook{}
-var _ admission.CustomValidator = &billingAccountWebhook{}
+var _ admission.Defaulter[*billingv1alpha1.BillingAccount] = &billingAccountWebhook{}
+var _ admission.Validator[*billingv1alpha1.BillingAccount] = &billingAccountWebhook{}
 
-// Default implements webhook.CustomDefaulter.
-func (r *billingAccountWebhook) Default(ctx context.Context, obj runtime.Object) error {
-	account, ok := obj.(*billingv1alpha1.BillingAccount)
-	if !ok {
-		return fmt.Errorf("unexpected type %T", obj)
-	}
-
-	billingAccountLog.Info("defaulting", "name", account.GetName())
-
-	// PaymentTerms field defaults (netDays, invoiceFrequency, invoiceDayOfMonth)
-	// are handled by CRD-level +kubebuilder:default markers. The webhook defaulter
-	// is reserved for defaults that require cross-field or external context.
-
-	_ = account
+// Default implements admission.Defaulter.
+func (r *billingAccountWebhook) Default(_ context.Context, _ *billingv1alpha1.BillingAccount) error {
 	return nil
 }
 
-// ValidateCreate implements webhook.CustomValidator.
-func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	account, ok := obj.(*billingv1alpha1.BillingAccount)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+// ValidateCreate implements admission.Validator.
+func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.BillingAccount) (admission.Warnings, error) {
+	billingAccountLog.Info("validating create", "name", obj.GetName())
 
-	billingAccountLog.Info("validating create", "name", account.GetName())
-
-	errs := validation.ValidateBillingAccountCreate(account)
-	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, account)...)
+	errs := validation.ValidateBillingAccountCreate(obj)
+	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, obj)...)
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			account.Name,
+			obj.Name,
 			errs,
 		)
 	}
@@ -84,28 +65,18 @@ func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj runtime.
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator.
-func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldAccount, ok := oldObj.(*billingv1alpha1.BillingAccount)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", oldObj)
-	}
+// ValidateUpdate implements admission.Validator.
+func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billingv1alpha1.BillingAccount) (admission.Warnings, error) {
+	billingAccountLog.Info("validating update", "name", newObj.GetName())
 
-	newAccount, ok := newObj.(*billingv1alpha1.BillingAccount)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
-
-	billingAccountLog.Info("validating update", "name", newAccount.GetName())
-
-	errs := validation.ValidateBillingAccountUpdate(oldAccount, newAccount)
-	if !defaultPaymentMethodRefUnchanged(oldAccount, newAccount) {
-		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, newAccount)...)
+	errs := validation.ValidateBillingAccountUpdate(oldObj, newObj)
+	if !defaultPaymentMethodRefUnchanged(oldObj, newObj) {
+		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, newObj)...)
 	}
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
-			newAccount.Name,
+			newObj.Name,
 			errs,
 		)
 	}
@@ -125,19 +96,14 @@ func defaultPaymentMethodRefUnchanged(oldAccount, newAccount *billingv1alpha1.Bi
 	return oldName == newName
 }
 
-// ValidateDelete implements webhook.CustomValidator.
+// ValidateDelete implements admission.Validator.
 // Belt-and-suspenders with the controller finalizer: reject deletion if active
 // bindings reference this account.
-func (r *billingAccountWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	account, ok := obj.(*billingv1alpha1.BillingAccount)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
-
-	billingAccountLog.Info("validating delete", "name", account.GetName())
+func (r *billingAccountWebhook) ValidateDelete(ctx context.Context, obj *billingv1alpha1.BillingAccount) (admission.Warnings, error) {
+	billingAccountLog.Info("validating delete", "name", obj.GetName())
 
 	var bindingList billingv1alpha1.BillingAccountBindingList
-	if err := r.client.List(ctx, &bindingList, client.InNamespace(account.Namespace)); err != nil {
+	if err := r.client.List(ctx, &bindingList, client.InNamespace(obj.Namespace)); err != nil {
 		// If we can't list bindings, allow deletion -- the finalizer will catch it.
 		billingAccountLog.Error(err, "failed to list bindings for delete validation, allowing deletion")
 		return nil, nil
@@ -145,7 +111,7 @@ func (r *billingAccountWebhook) ValidateDelete(ctx context.Context, obj runtime.
 
 	for i := range bindingList.Items {
 		binding := &bindingList.Items[i]
-		if binding.Spec.BillingAccountRef.Name == account.Name &&
+		if binding.Spec.BillingAccountRef.Name == obj.Name &&
 			binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseActive {
 			var allErrs field.ErrorList
 			allErrs = append(allErrs, field.Forbidden(
@@ -155,7 +121,7 @@ func (r *billingAccountWebhook) ValidateDelete(ctx context.Context, obj runtime.
 			))
 			return nil, errors.NewInvalid(
 				obj.GetObjectKind().GroupVersionKind().GroupKind(),
-				account.Name,
+				obj.Name,
 				allErrs,
 			)
 		}

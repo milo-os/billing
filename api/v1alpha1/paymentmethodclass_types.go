@@ -96,6 +96,7 @@ type PaymentMethodClassStatus struct {
 // +kubebuilder:printcolumn:name="Provider",type=string,JSONPath=`.spec.provider`
 // +kubebuilder:printcolumn:name="Default",type=string,JSONPath=`.metadata.labels.billing\.miloapis\.com/is-default-class`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
+// +genclient
 type PaymentMethodClass struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`

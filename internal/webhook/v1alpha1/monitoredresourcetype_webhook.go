@@ -4,10 +4,8 @@ package webhook
 
 import (
 	"context"
-	"fmt"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/runtime"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
@@ -23,8 +21,7 @@ var monitoredResourceTypeLog = logf.Log.WithName("monitoredresourcetype-webhook"
 func SetupMonitoredResourceTypeWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &monitoredResourceTypeWebhook{}
 
-	return ctrl.NewWebhookManagedBy(mgr).
-		For(&billingv1alpha1.MonitoredResourceType{}).
+	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.MonitoredResourceType{}).
 		WithValidator(webhook).
 		Complete()
 }
@@ -33,21 +30,16 @@ func SetupMonitoredResourceTypeWebhookWithManager(mgr ctrl.Manager) error {
 
 type monitoredResourceTypeWebhook struct{}
 
-var _ admission.CustomValidator = &monitoredResourceTypeWebhook{}
+var _ admission.Validator[*billingv1alpha1.MonitoredResourceType] = &monitoredResourceTypeWebhook{}
 
-// ValidateCreate implements webhook.CustomValidator.
-func (r *monitoredResourceTypeWebhook) ValidateCreate(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
-	mrt, ok := obj.(*billingv1alpha1.MonitoredResourceType)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", obj)
-	}
+// ValidateCreate implements admission.Validator.
+func (r *monitoredResourceTypeWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.MonitoredResourceType) (admission.Warnings, error) {
+	monitoredResourceTypeLog.Info("validating create", "name", obj.GetName())
 
-	monitoredResourceTypeLog.Info("validating create", "name", mrt.GetName())
-
-	if errs := validation.ValidateMonitoredResourceTypeCreate(mrt); len(errs) > 0 {
+	if errs := validation.ValidateMonitoredResourceTypeCreate(obj); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
-			mrt.Name,
+			obj.Name,
 			errs,
 		)
 	}
@@ -55,24 +47,14 @@ func (r *monitoredResourceTypeWebhook) ValidateCreate(ctx context.Context, obj r
 	return nil, nil
 }
 
-// ValidateUpdate implements webhook.CustomValidator.
-func (r *monitoredResourceTypeWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj runtime.Object) (admission.Warnings, error) {
-	oldMRT, ok := oldObj.(*billingv1alpha1.MonitoredResourceType)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", oldObj)
-	}
+// ValidateUpdate implements admission.Validator.
+func (r *monitoredResourceTypeWebhook) ValidateUpdate(_ context.Context, oldObj, newObj *billingv1alpha1.MonitoredResourceType) (admission.Warnings, error) {
+	monitoredResourceTypeLog.Info("validating update", "name", newObj.GetName())
 
-	newMRT, ok := newObj.(*billingv1alpha1.MonitoredResourceType)
-	if !ok {
-		return nil, fmt.Errorf("unexpected type %T", newObj)
-	}
-
-	monitoredResourceTypeLog.Info("validating update", "name", newMRT.GetName())
-
-	if errs := validation.ValidateMonitoredResourceTypeUpdate(oldMRT, newMRT); len(errs) > 0 {
+	if errs := validation.ValidateMonitoredResourceTypeUpdate(oldObj, newObj); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
-			newMRT.Name,
+			newObj.Name,
 			errs,
 		)
 	}
@@ -80,8 +62,8 @@ func (r *monitoredResourceTypeWebhook) ValidateUpdate(ctx context.Context, oldOb
 	return nil, nil
 }
 
-// ValidateDelete implements webhook.CustomValidator.
-func (r *monitoredResourceTypeWebhook) ValidateDelete(ctx context.Context, obj runtime.Object) (admission.Warnings, error) {
+// ValidateDelete implements admission.Validator.
+func (r *monitoredResourceTypeWebhook) ValidateDelete(_ context.Context, _ *billingv1alpha1.MonitoredResourceType) (admission.Warnings, error) {
 	// Allow deletion; GC handles cleanup.
 	return nil, nil
 }
