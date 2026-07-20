@@ -180,9 +180,8 @@ status: # see Invoice Resource for the full shape
   amountDue: "482.19"
 ```
 
-No vendor-specific identifiers appear in `status` — only normalized fields,
-exactly as `PaymentMethod` excludes Stripe identifiers. Readers that don't
-recognize a provider's annotation prefix simply ignore it.
+Readers that don't recognize a provider's annotation prefix simply ignore it
+(see [Invoice Resource](#invoice-resource) for what `status` does carry).
 
 **5. The billing service reconciles `BillingAccount`**, updating
 `status.latestInvoiceRef` and the `InvoicingReady` condition.
@@ -224,11 +223,9 @@ if the invoicing provider changes.
 - **No intermediate provider-specific CRD** in this repo. A provider may
   still define its own config CRD in its own API group; that CRD and its
   fields are that provider's concern, not this document's.
-- A provider that owns charging directly through its own payment integration
-  (rather than driving Milo's `PaymentMethod` providers) may need a vendor
-  customer id a payment-method provider already established, since
-  `PaymentMethod` deliberately doesn't expose provider identifiers generically.
-  See [Cross-Provider Identity Resolution](#cross-provider-identity-resolution).
+- A provider that owns charging directly may need a vendor identifier a
+  payment-method provider already established — see
+  [Cross-Provider Identity Resolution](#cross-provider-identity-resolution).
 
 ### Risks and Mitigations
 
@@ -241,13 +238,8 @@ method. Rather than fail the reconcile, the provider surfaces `PastDue` on
 the `Invoice`; `DefaultPaymentMethodReady` remains the pre-flight signal
 consumers should watch.
 
-The bigger open risk is the cross-provider RBAC grant: letting an invoicing
-provider read another provider's vendor identifier (e.g. a Stripe customer
-id set by `stripe-provider`) is a real crack in the isolation between
-providers. Scoping the grant to one field on one CRD kind, documented
-explicitly per provider pairing, keeps it from becoming a general-purpose
-coupling mechanism — but it's still a precedent worth watching if a third
-provider needs the same kind of read.
+The cross-provider RBAC grant needed for identity resolution is a design
+tradeoff rather than an operational risk — see [Drawbacks](#drawbacks).
 
 ## Design Details
 
@@ -378,8 +370,7 @@ stable UI contract.
 ### Billing Account Side Effects
 
 The billing service watches `Invoice` and reconciles the owning
-`BillingAccount`, mirroring the `DefaultPaymentMethodReady` pattern. It sets
-`InvoicingReady` to `True` with reason `NoInvoicesYet` before any `Invoice`
+`BillingAccount`, setting `InvoicingReady` to `True` with reason `NoInvoicesYet` before any `Invoice`
 exists (not a problem), `True` with reason `Current` while the latest
 `Invoice` is `Open` or `Paid`, and `False` with reason `PastDue` once the
 latest `Invoice` is `PastDue`.
