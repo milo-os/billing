@@ -370,27 +370,22 @@ to link its own Stripe integration) will be documented in
 ### Portal Integration
 
 The portal reads `Invoice` directly — no provider discovery or SDK loading,
-since invoices are read-only projections, not an interactive flow.
-
-| Purpose | Resource | Fields |
-|---|---|---|
-| List invoices | `Invoice` (list, scoped to namespace) | `spec.period`, `status.phase`, `status.amountDue`, `status.currencyCode` |
-| View/download | `Invoice` | `status.documentUri` |
-| Invoicing health | `BillingAccount` | `status.latestInvoiceRef`, `InvoicingReady` |
-
-The portal shouldn't rely on `Invoice`'s provider-prefixed annotations —
-those are reconciliation/debug data, not a stable UI contract.
+since invoices are read-only projections, not an interactive flow. It lists
+invoices off `spec.period`, `status.phase`, `status.amountDue`, and
+`status.currencyCode`, links out to `status.documentUri` for view/download,
+and reads `BillingAccount.status.latestInvoiceRef` and `InvoicingReady` to
+show invoicing health. The portal shouldn't rely on `Invoice`'s
+provider-prefixed annotations — those are reconciliation/debug data, not a
+stable UI contract.
 
 ### Billing Account Side Effects
 
 The billing service watches `Invoice` and reconciles the owning
-`BillingAccount`, mirroring the `DefaultPaymentMethodReady` pattern.
-
-| Reason | Status | Meaning |
-|---|---|---|
-| `NoInvoicesYet` | `True` | No `Invoice` created yet; not a problem |
-| `Current` | `True` | Latest `Invoice` is `Open` or `Paid` |
-| `PastDue` | `False` | Latest `Invoice` is `PastDue` |
+`BillingAccount`, mirroring the `DefaultPaymentMethodReady` pattern. It sets
+`InvoicingReady` to `True` with reason `NoInvoicesYet` before any `Invoice`
+exists (not a problem), `True` with reason `Current` while the latest
+`Invoice` is `Open` or `Paid`, and `False` with reason `PastDue` once the
+latest `Invoice` is `PastDue`.
 
 `InvoicingReady` doesn't affect `BillingAccount` phase — it's a health signal
 downstream consumers gate on, not a lifecycle failure. Whether sustained
@@ -413,18 +408,16 @@ since there's no consumer-facing creation path to guard symmetrically.
 
 ### RBAC Boundaries
 
-| Service | Resource | Access |
-|---|---|---|
-| Billing service | `Invoice` | Read (reconciles `BillingAccount` from it) |
-| Billing service | `BillingAccount` | Full |
-| Billing service | Provider config CRDs | None |
-| Invoicing provider | `BillingAccount` spec | Read (all accounts) |
-| Invoicing provider | `Invoice` | Create, Update (all accounts) |
-| Invoicing provider | its own config CRD(s) | Full |
-| Invoicing provider | `PaymentMethod` | Read |
-| Invoicing provider | a payment provider's vendor-identifier field (e.g. `StripePaymentMethod.status.stripeCustomerId`) | Read (narrow, see [Cross-Provider Identity Resolution](#cross-provider-identity-resolution)) |
-| Portal | `Invoice`, `BillingAccount` | Read |
-| Portal | Provider config CRDs | None |
+The billing service reads `Invoice` (to reconcile the owning
+`BillingAccount`) and has full access to `BillingAccount` itself, but no
+access to any provider's config CRDs. An invoicing provider reads
+`BillingAccount` spec across all accounts, creates and updates `Invoice`
+across all accounts, has full access to its own config CRD(s), reads
+`PaymentMethod`, and — narrowly — reads a payment provider's
+vendor-identifier field (e.g. `StripePaymentMethod.status.stripeCustomerId`,
+see [Cross-Provider Identity Resolution](#cross-provider-identity-resolution)).
+The portal reads `Invoice` and `BillingAccount` only, with no access to any
+provider's config CRDs.
 
 The cross-provider vendor-identifier read is the only cross-provider RBAC
 grant in this design, and it's scoped to a single field.
