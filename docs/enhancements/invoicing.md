@@ -440,7 +440,8 @@ design — a second consumer of the same pattern should prompt revisiting it.
 Carrying vendor identifiers as annotations rather than a typed CRD trades away
 schema validation and discoverability — no `kubectl explain`, and a malformed
 annotation fails silently rather than being rejected by the API server. An
-accepted tradeoff given invoicing has no interactive flow to protect.
+accepted tradeoff: `Invoice` is provider-created and reactive, so there's no
+consumer-facing request to validate against a schema.
 
 Assuming a single invoicing provider means a future second provider requires
 a real migration — introducing a selection mechanism and back-filling which
@@ -469,19 +470,18 @@ listable resource per invoice is the correct shape.
 
 To solve the identity-resolution problem generically, considered exposing a
 vendor customer id (or an opaque `externalReferences` map) directly on
-`BillingAccount.status`. Rejected for the same reason `PaymentMethod` excludes
-provider identifiers: `BillingAccount` is read by every backend service, and
-leaking a provider identifier onto it — even "opaquely" — reintroduces the
-leakage the payment methods design avoided. A narrow RBAC grant between the
-two specific CRDs that need it is a smaller blast radius.
+`BillingAccount.status`. Rejected: `BillingAccount` is read by every backend
+service, and leaking a provider identifier onto it — even "opaquely" —
+defeats the purpose of keeping vendor identifiers off shared resources. A
+narrow RBAC grant between the two specific CRDs that need it is a smaller
+blast radius.
 
 ### Billing Service Polls Provider Invoice APIs Directly
 
 Considered having the billing service call a provider's invoice API directly.
-Rejected for the same reason Stripe was kept out of the billing service: it
-makes the billing service responsible for provider-specific credentials,
-webhooks, and rate limits, and blocks changing providers without a billing
-service release.
+Rejected: it makes the billing service responsible for provider-specific
+credentials, webhooks, and rate limits, and blocks changing providers
+without a billing service release.
 
 ## References
 
