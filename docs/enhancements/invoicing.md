@@ -361,10 +361,9 @@ to link its own Stripe integration) will be documented in
 
 ### Portal Integration
 
-The portal reads `Invoice` and `BillingAccount` directly — no provider
-discovery or SDK loading, since invoices are read-only projections, not an
-interactive flow. It shouldn't rely on `Invoice`'s
-provider-prefixed annotations — those are reconciliation/debug data, not a
+The portal reads `Invoice` and `BillingAccount` directly. It shouldn't rely
+on `Invoice`'s provider-prefixed annotations — those are reconciliation/debug
+data, not a
 stable UI contract.
 
 ### Billing Account Side Effects
