@@ -132,7 +132,7 @@ sequenceDiagram
     BillingSvc->>BillingSvc: Update BillingAccount<br/>LatestInvoiceRef, InvoicingReady condition
 
     Portal->>BillingSvc: Read Invoice
-    BillingSvc-->>Portal: period, amountDue, currency, status, documentUri
+    BillingSvc-->>Portal: period, total, amountDue, currency, status, documentUri
     Portal->>Portal: Render invoice list/detail
 
     Backend->>Provider: Signal: payment status changed
@@ -176,7 +176,8 @@ spec:
     start: "2026-06-01T00:00:00Z"
     end: "2026-06-30T23:59:59Z"
 status: # see Invoice Resource for the full shape
-  phase: Paid
+  phase: Open
+  total: "482.19"
   amountDue: "482.19"
 ```
 
@@ -272,9 +273,12 @@ spec:
 status:
   phase: Paid                  # Open | Paid | PastDue | Void
   currencyCode: USD             # must match BillingAccount.spec.currencyCode
-  amountDue: "482.19"           # decimal total due
+  total: "482.19"               # invoice total, as computed by the provider
+  amountPaid: "482.19"          # amount collected so far
+  amountDue: "0.00"             # remaining balance; provider-authoritative,
+                                 # not derived client-side
   dueDate: "2026-07-15T00:00:00Z"
-  paidAt: "2026-07-02T09:14:00Z" # set once phase: Paid
+  paidAt: "2026-07-02T09:14:00Z" # set once amountDue reaches zero
   documentUri: "https://provider.example/invoices/..."  # provider-hosted document
   conditions:
     - type: Ready
