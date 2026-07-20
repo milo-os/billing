@@ -369,12 +369,9 @@ to link its own Stripe integration) will be documented in
 
 ### Portal Integration
 
-The portal reads `Invoice` directly — no provider discovery or SDK loading,
-since invoices are read-only projections, not an interactive flow. It lists
-invoices off `spec.period`, `status.phase`, `status.amountDue`, and
-`status.currencyCode`, links out to `status.documentUri` for view/download,
-and reads `BillingAccount.status.latestInvoiceRef` and `InvoicingReady` to
-show invoicing health. The portal shouldn't rely on `Invoice`'s
+The portal reads `Invoice` and `BillingAccount` directly — no provider
+discovery or SDK loading, since invoices are read-only projections, not an
+interactive flow. It shouldn't rely on `Invoice`'s
 provider-prefixed annotations — those are reconciliation/debug data, not a
 stable UI contract.
 
