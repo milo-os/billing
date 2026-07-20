@@ -232,14 +232,22 @@ if the invoicing provider changes.
 
 ### Risks and Mitigations
 
-| Risk | Mitigation |
-|------|------------|
-| Duplicate `Invoice` creation from a retried invoice-ready signal | Deterministic naming from account + period; creation is a no-op update if it already exists |
-| Provider signal delivery failure (e.g. missed webhook) | Provider polls its own invoice-list API as a fallback |
-| Invoice generated with no active default payment method | The provider surfaces `PastDue` on `Invoice` rather than failing the reconcile; `DefaultPaymentMethodReady` remains the pre-flight signal |
-| Cross-provider read of another provider's vendor identifier becomes precedent for broader coupling | RBAC grant scoped to one field on one CRD kind, documented explicitly per provider pairing, not a generic capability |
-| Provider's invoice total diverges from `BillingAccount.spec.currencyCode` | Provider validates currency match and sets a `CurrencyMismatch` condition rather than surfacing a mismatch silently |
-| Vendor-identifier annotations edited or stripped by another actor | Provider rewrites them on every reconcile, so drift self-heals |
+A retried invoice-ready signal shouldn't create a duplicate `Invoice` —
+naming `Invoice`s deterministically from account + period makes creation a
+no-op if one already exists.
+
+A `BillingAccount` can generate an invoice with no active default payment
+method. Rather than fail the reconcile, the provider surfaces `PastDue` on
+the `Invoice`; `DefaultPaymentMethodReady` remains the pre-flight signal
+consumers should watch.
+
+The bigger open risk is the cross-provider RBAC grant: letting an invoicing
+provider read another provider's vendor identifier (e.g. a Stripe customer
+id set by `stripe-provider`) is a real crack in the isolation between
+providers. Scoping the grant to one field on one CRD kind, documented
+explicitly per provider pairing, keeps it from becoming a general-purpose
+coupling mechanism — but it's still a precedent worth watching if a third
+provider needs the same kind of read.
 
 ## Design Details
 
