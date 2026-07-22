@@ -221,13 +221,14 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				}
 
 				usageConsumer := &consumer.UsageConsumer{
-					Cache:         mgr.GetCache(),
-					NC:            nc,
-					MeterCache:    meterCache,
-					BindingCache:  bindingCache,
-					AccountCache:  accountCache,
-					MeterProvider: mp,
-					Logger:        ctrl.Log.WithName("usage-consumer"),
+					Cache:                                 mgr.GetCache(),
+					NC:                                    nc,
+					MeterCache:                            meterCache,
+					BindingCache:                          bindingCache,
+					AccountCache:                          accountCache,
+					MeterProvider:                         mp,
+					Logger:                                ctrl.Log.WithName("usage-consumer"),
+					DisableQuarantineOnAttributionFailure: serverConfig.DisableQuarantineOnAttributionFailure,
 				}
 				if err := mgr.Add(usageConsumer); err != nil {
 					nc.Close()

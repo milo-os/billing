@@ -48,6 +48,11 @@ type BillingOperator struct {
 	// Nats configures the NATS JetStream connection used by the
 	// UsageConsumer.
 	Nats NATSConfig `json:"nats"`
+
+	// DisableQuarantineOnAttributionFailure disables publishing quarantined
+	// events to NATS when attribution fails (e.g. no billing account/binding exists).
+	// TODO: Disable / remove this configuration once all projects have a billing account.
+	DisableQuarantineOnAttributionFailure bool `json:"disableQuarantineOnAttributionFailure,omitempty"`
 }
 
 // +k8s:deepcopy-gen=true

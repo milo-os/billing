@@ -77,6 +77,10 @@ type UsageConsumer struct {
 	// Logger is the structured logger for this consumer.
 	Logger logr.Logger
 
+	// DisableQuarantineOnAttributionFailure disables publishing quarantined
+	// events to NATS when attribution fails (e.g. no billing account/binding exists).
+	DisableQuarantineOnAttributionFailure bool
+
 	// metrics holds the OTel counters for this consumer.
 	metrics consumerMetrics
 }
@@ -225,6 +229,17 @@ func (c *UsageConsumer) processMessage(
 	// Stage 2: Attribution.
 	ar := attribute(project, c.BindingCache, c.AccountCache)
 	if !ar.OK {
+		if c.DisableQuarantineOnAttributionFailure && ar.Reason == ReasonAttributionFailure {
+			recordRejection(ctx, c.metrics, project, ar.Reason)
+			log.Info("event attribution failed; dropping event (quarantine disabled)",
+				"project", project,
+				"reason", ar.Reason,
+				"detail", ar.Detail,
+				"eventID", ce.ID(),
+				"eventType", ce.Type(),
+			)
+			return msg.Ack()
+		}
 		return c.quarantine(ctx, js, msg, &ce, project, ar.Reason, ar.Detail)
 	}
 
