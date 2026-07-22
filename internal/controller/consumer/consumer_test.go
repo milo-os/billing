@@ -438,6 +438,58 @@ func TestUsageConsumer_NoBinding_QuarantinesAttributionFailure(t *testing.T) {
 	}
 }
 
+func TestUsageConsumer_NoBinding_DisableQuarantine_DropsEvent(t *testing.T) {
+	_, nc := startTestNATSServer(t)
+	createBillingUsageStream(t, nc)
+
+	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
+	fc := newFakeCache(true) // no bindings
+	mp, ctr := newCountingMeterProvider()
+	c := &UsageConsumer{
+		Cache:                                 fc,
+		NC:                                    nc,
+		MeterCache:                            newTestMeterCache(md),
+		BindingCache:                          newTestBindingCache(),
+		AccountCache:                          newTestAccountCache(),
+		MeterProvider:                         mp,
+		Logger:                                logr.Discard(),
+		DisableQuarantineOnAttributionFailure: true,
+	}
+
+	quarantineCh := subscribeSubject(t, nc, "billing.usage.proj-abc.quarantine.attribution_failure")
+
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() { _ = c.Start(ctx) }()
+	t.Cleanup(cancel)
+
+	ce := cloudevents.NewEvent()
+	ce.SetID("01HZZZZZZZZZZZZZZZZZZZZZZ")
+	ce.SetType("compute.miloapis.com/instance/cpu-seconds")
+	ce.SetSource("/test")
+	_ = ce.SetData("application/json", event.EventData{Dimensions: map[string]string{"region": "us-east-1"}})
+	mustPublishIngest(t, nc, "proj-abc", ce)
+
+	// Wait to verify the rejection counter was incremented, meaning it processed the event.
+	deadline := time.Now().Add(5 * time.Second)
+	for time.Now().Before(deadline) {
+		if ctr.Load() == 1 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if got := ctr.Load(); got != 1 {
+		t.Fatalf("expected rejection counter=1, got %d", got)
+	}
+
+	// Verify no event was published to the quarantine channel.
+	select {
+	case <-quarantineCh:
+		t.Fatal("expected no quarantine event when DisableQuarantineOnAttributionFailure is true, but received one")
+	case <-time.After(500 * time.Millisecond):
+		// Success: no quarantine event published.
+	}
+}
+
 // --------------------------------------------------------------------------
 // Integration: ATTRIBUTION_FAILURE — archived account.
 // --------------------------------------------------------------------------
