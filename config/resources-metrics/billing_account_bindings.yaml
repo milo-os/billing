@@ -1,0 +1,45 @@
+kind: CustomResourceStateMetrics
+spec:
+  resources:
+    - groupVersionKind:
+        group: "billing.miloapis.com"
+        kind: "BillingAccountBinding"
+        version: "v1alpha1"
+      labelsFromPath:
+        name: [metadata, name]
+        namespace: [metadata, namespace]
+      metricNamePrefix: milo_billing_account_bindings
+      metrics:
+        - name: "info"
+          each:
+            type: Info
+            info:
+              labelsFromPath:
+                billing_account_ref_name: ["spec", "billingAccountRef", "name"]
+                project_ref_name: ["spec", "projectRef", "name"]
+                phase: ["status", "phase"]
+                uid: [metadata, uid]
+        - name: "created_timestamp"
+          each:
+            type: Gauge
+            gauge:
+              path: [metadata, creationTimestamp]
+        - name: "status_condition"
+          each:
+            type: Gauge
+            gauge:
+              path: [status, conditions]
+              labelsFromPath:
+                type: ["type"]
+                reason: ["reason"]
+              valueFrom: ["status"]
+        - name: "status_condition_last_transition_time"
+          each:
+            type: Gauge
+            gauge:
+              path: [status, conditions]
+              labelsFromPath:
+                type: ["type"]
+                reason: ["reason"]
+                status: ["status"]
+              valueFrom: ["lastTransitionTime"]
