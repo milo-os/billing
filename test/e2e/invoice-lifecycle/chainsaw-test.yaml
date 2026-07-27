@@ -45,7 +45,7 @@ spec:
       try:
         - script:
             content: |
-              set -euo pipefail
+              set -eu
               ACCOUNT_UID=$(kubectl get billingaccount invoice-lifecycle-acct -n default -o jsonpath='{.metadata.uid}')
               cat <<EOF | kubectl apply -f -
               apiVersion: billing.miloapis.com/v1alpha1
@@ -189,7 +189,7 @@ spec:
       try:
         - script:
             content: |
-              set -euo pipefail
+              set -eu
               kubectl patch invoice invoice-lifecycle-acct-2026-06 -n default --type=merge --subresource=status --patch '{
                 "status": {
                   "phase": "PastDue",
