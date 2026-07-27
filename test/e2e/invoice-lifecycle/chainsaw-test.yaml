@@ -1,0 +1,126 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: invoice-lifecycle
+spec:
+  description: |
+    Tests Invoice lifecycle and its status projection onto the BillingAccount:
+    1. A BillingAccount with no invoices reports InvoicingReady=True / NoInvoicesYet.
+    2. Creating an Invoice (simulating the invoicing provider) and setting status.phase=Open
+       projects latestInvoiceRef and InvoicingReady=True / Current.
+    3. Updating the Invoice to PastDue projects InvoicingReady=False / PastDue without
+       changing BillingAccount phase.
+  steps:
+    - name: create-account
+      description: Create a BillingAccount and assert InvoicingReady=NoInvoicesYet.
+      try:
+        - create:
+            file: 01-create-account.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: invoice-lifecycle-acct
+                namespace: default
+              status:
+                phase: Ready
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+
+    - name: create-open-invoice
+      description: |
+        Simulate the invoicing provider by creating an Invoice and setting status to Open.
+      try:
+        - create:
+            file: 02-create-invoice.yaml
+        - script:
+            content: |
+              set -euo pipefail
+              ACCOUNT_UID=$(kubectl get billingaccount invoice-lifecycle-acct -n default -o jsonpath='{.metadata.uid}')
+              kubectl patch invoice invoice-lifecycle-acct-2026-06 -n default --type=merge --patch "{
+                \"metadata\": {
+                  \"ownerReferences\": [{
+                    \"apiVersion\": \"billing.miloapis.com/v1alpha1\",
+                    \"kind\": \"BillingAccount\",
+                    \"name\": \"invoice-lifecycle-acct\",
+                    \"uid\": \"${ACCOUNT_UID}\",
+                    \"controller\": false,
+                    \"blockOwnerDeletion\": true
+                  }]
+                }
+              }"
+              kubectl patch invoice invoice-lifecycle-acct-2026-06 -n default --type=merge --subresource=status --patch '{
+                "status": {
+                  "phase": "Open",
+                  "currencyCode": "USD",
+                  "total": "482.19",
+                  "amountPaid": "0.00",
+                  "amountDue": "482.19"
+                }
+              }'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Invoice
+              metadata:
+                name: invoice-lifecycle-acct-2026-06
+                namespace: default
+              status:
+                phase: Open
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: invoice-lifecycle-acct
+                namespace: default
+              status:
+                phase: Ready
+                latestInvoiceRef:
+                  name: invoice-lifecycle-acct-2026-06
+                conditions:
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: Current
+
+    - name: mark-invoice-past-due
+      description: |
+        Simulate the provider marking the invoice PastDue and assert InvoicingReady flips
+        to False without changing BillingAccount phase.
+      try:
+        - script:
+            content: |
+              kubectl patch invoice invoice-lifecycle-acct-2026-06 -n default --type=merge --subresource=status --patch '{
+                "status": {
+                  "phase": "PastDue",
+                  "currencyCode": "USD",
+                  "total": "482.19",
+                  "amountPaid": "0.00",
+                  "amountDue": "482.19"
+                }
+              }'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: invoice-lifecycle-acct
+                namespace: default
+              status:
+                phase: Ready
+                latestInvoiceRef:
+                  name: invoice-lifecycle-acct-2026-06
+                conditions:
+                  - type: InvoicingReady
+                    status: "False"
+                    reason: PastDue

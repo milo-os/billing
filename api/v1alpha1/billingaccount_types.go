@@ -30,6 +30,12 @@ const (
 // gate on this condition rather than on account phase.
 const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodReady"
 
+// BillingAccountConditionInvoicingReady is set by the billing service
+// controller and reflects whether the account's latest invoice is current.
+// Downstream consumers gate on this condition rather than on account phase.
+// Reasons: NoInvoicesYet | Current | PastDue.
+const BillingAccountConditionInvoicingReady = "InvoicingReady"
+
 // BillingAccountSpec defines the desired state of a BillingAccount.
 type BillingAccountSpec struct {
 	// CurrencyCode is the ISO 4217 currency code for this billing account.
@@ -155,6 +161,17 @@ type DefaultPaymentMethodRef struct {
 	Name string `json:"name"`
 }
 
+// LatestInvoiceRef references an Invoice in the same namespace as the
+// BillingAccount. Set by the billing service controller to the most
+// recently created Invoice for the account.
+type LatestInvoiceRef struct {
+	// Name is the name of the Invoice.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	Name string `json:"name"`
+}
+
 // PaymentTerms defines the payment schedule for a billing account.
 type PaymentTerms struct {
 	// NetDays is the number of days after invoice date that payment is due.
@@ -259,6 +276,12 @@ type BillingAccountStatus struct {
 	//
 	// +kubebuilder:validation:Optional
 	LinkedProjectsCount int32 `json:"linkedProjectsCount,omitempty"`
+
+	// LatestInvoiceRef references the most recently created Invoice for
+	// this billing account. Cleared when no invoices exist.
+	//
+	// +kubebuilder:validation:Optional
+	LatestInvoiceRef *LatestInvoiceRef `json:"latestInvoiceRef,omitempty"`
 
 	// ObservedGeneration is the most recent generation observed by the controller.
 	//

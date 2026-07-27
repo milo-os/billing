@@ -98,6 +98,26 @@ webhooks:
     service:
       name: billing-webhook
       namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-invoice
+  failurePolicy: Fail
+  name: vinvoice.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - invoices
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-meterdefinition
   failurePolicy: Fail
   name: vmeterdefinition.kb.io

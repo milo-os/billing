@@ -307,6 +307,18 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              latestInvoiceRef:
+                description: |-
+                  LatestInvoiceRef references the most recently created Invoice for
+                  this billing account. Cleared when no invoices exist.
+                properties:
+                  name:
+                    description: Name is the name of the Invoice.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               linkedProjectsCount:
                 description: |-
                   LinkedProjectsCount is the number of projects currently bound to this

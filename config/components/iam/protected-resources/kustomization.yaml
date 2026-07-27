@@ -12,3 +12,4 @@ resources:
   - monitoredresourcetype.yaml
   - paymentmethod.yaml
   - paymentmethodclass.yaml
+  - invoice.yaml

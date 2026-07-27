@@ -20,6 +20,10 @@ const (
 	// by their project reference.
 	BindingProjectRefField = ".spec.projectRef.name"
 
+	// InvoiceBillingAccountRefField is the field index for looking up invoices
+	// by their billing account reference.
+	InvoiceBillingAccountRefField = ".spec.billingAccountRef.name"
+
 	// MeterDefinitionMeterNameField is the field index for looking up
 	// MeterDefinitions by their canonical meter name.
 	MeterDefinitionMeterNameField = "spec.meterName"
@@ -46,6 +50,18 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			binding := obj.(*billingv1alpha1.BillingAccountBinding)
 			return []string{binding.Spec.ProjectRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.Invoice{},
+		InvoiceBillingAccountRefField,
+		func(obj client.Object) []string {
+			invoice := obj.(*billingv1alpha1.Invoice)
+			return []string{invoice.Spec.BillingAccountRef.Name}
 		},
 	); err != nil {
 		return err

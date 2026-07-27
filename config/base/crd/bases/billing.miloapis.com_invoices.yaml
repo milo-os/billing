@@ -1,0 +1,235 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: invoices.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: Invoice
+    listKind: InvoiceList
+    plural: invoices
+    singular: invoice
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.total
+      name: Total
+      type: string
+    - jsonPath: .status.amountDue
+      name: Amount Due
+      type: string
+    - jsonPath: .status.dueDate
+      name: Due
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Invoice is the Schema for the invoices API.
+
+          Invoice is the provider-written, vendor-agnostic record of a billing
+          account's invoice for a period. Names are deterministic
+          (`<billing-account>-<year>-<month>`) so creation is idempotent.
+          Vendor identifiers live as provider-prefixed annotations, not typed
+          fields.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              InvoiceSpec defines the desired state of an Invoice.
+
+              Invoice is created and updated exclusively by an invoicing provider —
+              never by a consumer or the portal. Spec fields are immutable once set.
+            properties:
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef references the BillingAccount this invoice
+                  belongs to. The BillingAccount must reside in the same namespace.
+                  Immutable once set.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: billingAccountRef is immutable
+                  rule: self == oldSelf
+              period:
+                description: Period is the billing period this invoice covers. Immutable
+                  once set.
+                properties:
+                  end:
+                    description: End is the inclusive end of the billing period.
+                    format: date-time
+                    type: string
+                  start:
+                    description: Start is the inclusive start of the billing period.
+                    format: date-time
+                    type: string
+                required:
+                - end
+                - start
+                type: object
+                x-kubernetes-validations:
+                - message: period is immutable
+                  rule: self == oldSelf
+            required:
+            - billingAccountRef
+            - period
+            type: object
+          status:
+            description: |-
+              InvoiceStatus defines the observed state of an Invoice. Populated
+              exclusively by the invoicing provider.
+            properties:
+              amountDue:
+                description: |-
+                  AmountDue is the remaining balance. Provider-authoritative — not
+                  derived client-side from total and amountPaid.
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
+              amountPaid:
+                description: AmountPaid is the amount collected so far, as a decimal
+                  string.
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  invoice's state. See InvoiceConditionReady.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currencyCode:
+                description: |-
+                  CurrencyCode is the ISO 4217 currency code for the invoice totals.
+                  Must match BillingAccount.spec.currencyCode; providers that detect
+                  a mismatch surface Ready=False with reason CurrencyMismatch.
+                pattern: ^[A-Z]{3}$
+                type: string
+              documentUri:
+                description: |-
+                  DocumentUri is a provider-hosted link to the human-readable
+                  invoice document (PDF or HTML).
+                type: string
+              dueDate:
+                description: DueDate is when payment is due.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  reconciling provider controller.
+                format: int64
+                type: integer
+              paidAt:
+                description: PaidAt is set once amountDue reaches zero.
+                format: date-time
+                type: string
+              phase:
+                description: Phase represents the current payment lifecycle phase.
+                enum:
+                - Open
+                - Paid
+                - PastDue
+                - Void
+                type: string
+              total:
+                description: |-
+                  Total is the invoice total as computed by the provider, expressed
+                  as a decimal string (e.g. "482.19").
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

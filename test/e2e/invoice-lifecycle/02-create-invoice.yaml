@@ -1,0 +1,11 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Invoice
+metadata:
+  name: invoice-lifecycle-acct-2026-06
+  namespace: default
+spec:
+  billingAccountRef:
+    name: invoice-lifecycle-acct
+  period:
+    start: "2026-06-01T00:00:00Z"
+    end: "2026-06-30T23:59:59Z"
