@@ -204,6 +204,9 @@ spec:
                   - type: DefaultPaymentMethodReady
                     status: "False"
                     reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
 
     - name: transition-to-archived
       description: Verify that setting status phase to Archived updates the Ready condition to False.
@@ -229,3 +232,6 @@ spec:
                   - type: DefaultPaymentMethodReady
                     status: "False"
                     reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet

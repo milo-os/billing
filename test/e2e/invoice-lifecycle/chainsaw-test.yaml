@@ -31,6 +31,9 @@ spec:
                   - type: Ready
                     status: "True"
                     reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
@@ -96,6 +99,12 @@ spec:
                 latestInvoiceRef:
                   name: invoice-lifecycle-acct-2026-06
                 conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
                   - type: InvoicingReady
                     status: "True"
                     reason: Current
@@ -129,6 +138,12 @@ spec:
                 latestInvoiceRef:
                   name: invoice-lifecycle-acct-2026-06
                 conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
                   - type: InvoicingReady
                     status: "False"
                     reason: PastDue
@@ -157,6 +172,12 @@ spec:
                 namespace: default
               status:
                 conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
                   - type: InvoicingReady
                     status: "True"
                     reason: Current
@@ -222,6 +243,12 @@ spec:
                 latestInvoiceRef:
                   name: invoice-lifecycle-acct-2026-07
                 conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
                   - type: InvoicingReady
                     status: "False"
                     reason: PastDue
