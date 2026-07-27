@@ -105,6 +105,8 @@ spec:
                 x-kubernetes-validations:
                 - message: period is immutable
                   rule: self == oldSelf
+                - message: period.start must be less than or equal to period.end
+                  rule: self.start <= self.end
             required:
             - billingAccountRef
             - period

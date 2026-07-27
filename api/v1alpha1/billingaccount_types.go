@@ -31,9 +31,19 @@ const (
 const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodReady"
 
 // BillingAccountConditionInvoicingReady is set by the billing service
-// controller and reflects whether the account's latest invoice is current.
-// Downstream consumers gate on this condition rather than on account phase.
-// Reasons: NoInvoicesYet | Current | PastDue.
+// controller and reflects whether the account's invoices are in a
+// healthy payment state. Downstream consumers gate on this condition
+// rather than on account phase.
+//
+// Reasons:
+//   - NoInvoicesYet — no Invoice resources exist (True)
+//   - Current — readiness is driven by Open/Paid, or only Void invoices remain (True)
+//   - PastDue — the newest Open/Paid/PastDue invoice is PastDue (False)
+//   - PhasePending — invoices exist but none have a projected phase yet (Unknown)
+//
+// Void invoices are skipped when evaluating readiness so a newer Void
+// cannot mask an older PastDue. status.latestInvoiceRef still points at
+// the most recently created Invoice regardless of phase.
 const BillingAccountConditionInvoicingReady = "InvoicingReady"
 
 // BillingAccountSpec defines the desired state of a BillingAccount.

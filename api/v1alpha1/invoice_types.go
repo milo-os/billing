@@ -54,6 +54,8 @@ type InvoiceSpec struct {
 }
 
 // InvoicePeriod is the closed billing window covered by an Invoice.
+//
+// +kubebuilder:validation:XValidation:rule="self.start <= self.end",message="period.start must be less than or equal to period.end"
 type InvoicePeriod struct {
 	// Start is the inclusive start of the billing period.
 	//

@@ -261,6 +261,11 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 // condition in lock-step with the account's Invoice resources. List failures
 // bubble up as reconcile errors; an empty invoice set is a healthy
 // NoInvoicesYet state, not an error.
+//
+// latestInvoiceRef always tracks the most recently created Invoice.
+// InvoicingReady ignores Void and empty-phase invoices when choosing which
+// invoice drives the condition, so a newer Void cannot hide an older
+// PastDue and an invoice without a projected phase does not look Current.
 func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
@@ -290,21 +295,46 @@ func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 	latest := pickLatestInvoice(invoiceList.Items)
 	account.Status.LatestInvoiceRef = &billingv1alpha1.LatestInvoiceRef{Name: latest.Name}
 
-	switch latest.Status.Phase {
-	case billingv1alpha1.InvoicePhasePastDue:
-		cond.Status = metav1.ConditionFalse
-		cond.Reason = "PastDue"
-		cond.Message = fmt.Sprintf("Latest invoice %q is past due.", latest.Name)
-	case billingv1alpha1.InvoicePhaseOpen, billingv1alpha1.InvoicePhasePaid, billingv1alpha1.InvoicePhaseVoid:
+	if readiness := pickReadinessInvoice(invoiceList.Items); readiness != nil {
+		switch readiness.Status.Phase {
+		case billingv1alpha1.InvoicePhasePastDue:
+			cond.Status = metav1.ConditionFalse
+			cond.Reason = "PastDue"
+			cond.Message = fmt.Sprintf("Invoice %q is past due.", readiness.Name)
+		default:
+			// Open or Paid.
+			cond.Status = metav1.ConditionTrue
+			cond.Reason = "Current"
+			cond.Message = fmt.Sprintf("Invoice %q is %s.", readiness.Name, readiness.Status.Phase)
+		}
+		apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+		return nil
+	}
+
+	// No Open/Paid/PastDue invoice: classify remaining resources.
+	hasEmptyPhase := false
+	hasVoid := false
+	for i := range invoiceList.Items {
+		switch invoiceList.Items[i].Status.Phase {
+		case "":
+			hasEmptyPhase = true
+		case billingv1alpha1.InvoicePhaseVoid:
+			hasVoid = true
+		}
+	}
+	switch {
+	case hasEmptyPhase:
+		cond.Status = metav1.ConditionUnknown
+		cond.Reason = "PhasePending"
+		cond.Message = fmt.Sprintf("Invoice %q has not yet reported a payment phase.", latest.Name)
+	case hasVoid:
 		cond.Status = metav1.ConditionTrue
 		cond.Reason = "Current"
-		cond.Message = fmt.Sprintf("Latest invoice %q is %s.", latest.Name, latest.Status.Phase)
+		cond.Message = "All invoices for this billing account have been voided."
 	default:
-		// Phase not yet projected by the provider — treat like no usable
-		// invoice signal without failing the reconcile.
-		cond.Status = metav1.ConditionTrue
-		cond.Reason = "Current"
-		cond.Message = fmt.Sprintf("Latest invoice %q has not yet reported a payment phase.", latest.Name)
+		cond.Status = metav1.ConditionUnknown
+		cond.Reason = "PhasePending"
+		cond.Message = fmt.Sprintf("Invoice %q has not yet reported a payment phase.", latest.Name)
 	}
 
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
@@ -312,8 +342,8 @@ func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 }
 
 // pickLatestInvoice returns the Invoice with the most recent
-// creationTimestamp, breaking ties by name ascending so selection is
-// deterministic.
+// creationTimestamp. Equal timestamps break ties by lexicographically
+// greater name so selection is deterministic.
 func pickLatestInvoice(invoices []billingv1alpha1.Invoice) *billingv1alpha1.Invoice {
 	latest := &invoices[0]
 	for i := 1; i < len(invoices); i++ {
@@ -327,6 +357,24 @@ func pickLatestInvoice(invoices []billingv1alpha1.Invoice) *billingv1alpha1.Invo
 		}
 	}
 	return latest
+}
+
+// pickReadinessInvoice returns the newest Invoice whose phase is Open,
+// Paid, or PastDue. Void and empty-phase invoices are skipped.
+func pickReadinessInvoice(invoices []billingv1alpha1.Invoice) *billingv1alpha1.Invoice {
+	candidates := make([]billingv1alpha1.Invoice, 0, len(invoices))
+	for i := range invoices {
+		switch invoices[i].Status.Phase {
+		case billingv1alpha1.InvoicePhaseOpen,
+			billingv1alpha1.InvoicePhasePaid,
+			billingv1alpha1.InvoicePhasePastDue:
+			candidates = append(candidates, invoices[i])
+		}
+	}
+	if len(candidates) == 0 {
+		return nil
+	}
+	return pickLatestInvoice(candidates)
 }
 
 // SetupWithManager sets up the controller with the Manager.
