@@ -44,6 +44,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DefaultPaymentMethodRef"):
 		return &apiv1alpha1.DefaultPaymentMethodRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("Invoice"):
+		return &apiv1alpha1.InvoiceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoicePeriod"):
+		return &apiv1alpha1.InvoicePeriodApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceSpec"):
+		return &apiv1alpha1.InvoiceSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceStatus"):
+		return &apiv1alpha1.InvoiceStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("LatestInvoiceRef"):
+		return &apiv1alpha1.LatestInvoiceRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("MeterBilling"):
 		return &apiv1alpha1.MeterBillingApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("MeterDefinition"):

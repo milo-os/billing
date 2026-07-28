@@ -1,0 +1,32 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Invoice
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingaccount-sample-2026-06
+  # Replace REPLACE_WITH_ACCOUNT_UID with the BillingAccount's metadata.uid.
+  # Providers must set a non-controller ownerReference so account deletion
+  # cascades to invoice history.
+  ownerReferences:
+    - apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: billingaccount-sample
+      uid: REPLACE_WITH_ACCOUNT_UID
+      controller: false
+      blockOwnerDeletion: true
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  period:
+    start: "2026-06-01T00:00:00Z"
+    end: "2026-06-30T23:59:59Z"
+# status is written exclusively by the invoicing provider:
+# status:
+#   phase: Open
+#   currencyCode: USD
+#   total: "482.19"
+#   amountPaid: "0.00"
+#   amountDue: "482.19"
+#   dueDate: "2026-07-15T00:00:00Z"
+#   documentUri: "https://provider.example/invoices/..."

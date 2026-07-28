@@ -50,6 +50,7 @@ rules:
 - apiGroups:
   - billing.miloapis.com
   resources:
+  - invoices
   - paymentmethodclasses
   - paymentmethods
   verbs:

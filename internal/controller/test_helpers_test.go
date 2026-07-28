@@ -92,7 +92,11 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 
 	// Mirror the production controller's default-payment-method
 	// projection so envtests exercise the same code path.
-	(&BillingAccountReconciler{client: r.client}).reconcileDefaultPaymentMethodCondition(ctx, &account)
+	prod := &BillingAccountReconciler{client: r.client}
+	prod.reconcileDefaultPaymentMethodCondition(ctx, &account)
+	if err := prod.reconcileInvoicingCondition(ctx, &account); err != nil {
+		return ctrl.Result{}, err
+	}
 
 	return ctrl.Result{}, r.client.Status().Update(ctx, &account)
 }
@@ -157,6 +161,25 @@ func reconcileAccountFromPaymentMethod(cl client.Client) handler.EventHandler {
 				NamespacedName: types.NamespacedName{
 					Name:      pm.Spec.BillingAccountRef.Name,
 					Namespace: pm.Namespace,
+				},
+			}}
+		},
+	)
+}
+
+// reconcileAccountFromInvoice enqueues the referenced BillingAccount
+// when an Invoice changes.
+func reconcileAccountFromInvoice(cl client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(
+		func(ctx context.Context, obj client.Object) []reconcile.Request {
+			invoice, ok := obj.(*billingv1alpha1.Invoice)
+			if !ok {
+				return nil
+			}
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      invoice.Spec.BillingAccountRef.Name,
+					Namespace: invoice.Namespace,
 				},
 			}}
 		},

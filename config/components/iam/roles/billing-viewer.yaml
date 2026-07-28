@@ -17,3 +17,6 @@ spec:
     - billing.miloapis.com/paymentmethods.list
     - billing.miloapis.com/paymentmethods.get
     - billing.miloapis.com/paymentmethods.watch
+    - billing.miloapis.com/invoices.list
+    - billing.miloapis.com/invoices.get
+    - billing.miloapis.com/invoices.watch

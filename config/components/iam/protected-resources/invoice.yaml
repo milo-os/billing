@@ -1,0 +1,21 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: billing.miloapis.com-invoice
+spec:
+  serviceRef:
+    name: "billing.miloapis.com"
+  kind: Invoice
+  plural: invoices
+  singular: invoice
+  permissions:
+    - list
+    - get
+    - create
+    - update
+    - patch
+    - delete
+    - watch
+  parentResources:
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Organization

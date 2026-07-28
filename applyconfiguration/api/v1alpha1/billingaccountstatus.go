@@ -22,6 +22,9 @@ type BillingAccountStatusApplyConfiguration struct {
 	// LinkedProjectsCount is the number of projects currently bound to this
 	// billing account.
 	LinkedProjectsCount *int32 `json:"linkedProjectsCount,omitempty"`
+	// LatestInvoiceRef references the most recently created Invoice for
+	// this billing account. Cleared when no invoices exist.
+	LatestInvoiceRef *LatestInvoiceRefApplyConfiguration `json:"latestInvoiceRef,omitempty"`
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
@@ -58,6 +61,14 @@ func (b *BillingAccountStatusApplyConfiguration) WithConditions(values ...*v1.Co
 // If called multiple times, the LinkedProjectsCount field is set to the value of the last call.
 func (b *BillingAccountStatusApplyConfiguration) WithLinkedProjectsCount(value int32) *BillingAccountStatusApplyConfiguration {
 	b.LinkedProjectsCount = &value
+	return b
+}
+
+// WithLatestInvoiceRef sets the LatestInvoiceRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the LatestInvoiceRef field is set to the value of the last call.
+func (b *BillingAccountStatusApplyConfiguration) WithLatestInvoiceRef(value *LatestInvoiceRefApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	b.LatestInvoiceRef = value
 	return b
 }
 

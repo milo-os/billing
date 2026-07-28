@@ -268,6 +268,378 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		Expect(k8sClient.Delete(ctx, pm)).To(Succeed())
 	})
 
+	It("InvoicingReady=True NoInvoicesYet when no invoices exist", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-none", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("NoInvoicesYet"))
+			g.Expect(fetched.Status.LatestInvoiceRef).To(BeNil())
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("InvoicingReady=True Current and latestInvoiceRef when an Open invoice exists", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-open-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		start := metav1.NewTime(time.Date(2026, 6, 1, 0, 0, 0, 0, time.UTC))
+		end := metav1.NewTime(time.Date(2026, 6, 30, 23, 59, 59, 0, time.UTC))
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-open-acct-2026-06", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-open-acct"},
+				Period:            billingv1alpha1.InvoicePeriod{Start: start, End: end},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(invoice), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhaseOpen
+			fetched.Status.CurrencyCode = "USD"
+			fetched.Status.Total = "100.00"
+			fetched.Status.AmountPaid = "0.00"
+			fetched.Status.AmountDue = "100.00"
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).NotTo(BeNil())
+			g.Expect(fetched.Status.LatestInvoiceRef.Name).To(Equal("inv-open-acct-2026-06"))
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("Current"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("InvoicingReady=False PastDue when the latest invoice is PastDue", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-pastdue-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		start := metav1.NewTime(time.Date(2026, 5, 1, 0, 0, 0, 0, time.UTC))
+		end := metav1.NewTime(time.Date(2026, 5, 31, 23, 59, 59, 0, time.UTC))
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-pastdue-acct-2026-05", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-pastdue-acct"},
+				Period:            billingv1alpha1.InvoicePeriod{Start: start, End: end},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(invoice), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhasePastDue
+			fetched.Status.CurrencyCode = "USD"
+			fetched.Status.Total = "50.00"
+			fetched.Status.AmountPaid = "0.00"
+			fetched.Status.AmountDue = "50.00"
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).NotTo(BeNil())
+			g.Expect(fetched.Status.LatestInvoiceRef.Name).To(Equal("inv-pastdue-acct-2026-05"))
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(c.Reason).To(Equal("PastDue"))
+			// InvoicingReady must not affect account phase.
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("InvoicingReady=True Current when the latest invoice is Void", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-void-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		start := metav1.NewTime(time.Date(2026, 4, 1, 0, 0, 0, 0, time.UTC))
+		end := metav1.NewTime(time.Date(2026, 4, 30, 23, 59, 59, 0, time.UTC))
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-void-acct-2026-04", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-void-acct"},
+				Period:            billingv1alpha1.InvoicePeriod{Start: start, End: end},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(invoice), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhaseVoid
+			fetched.Status.CurrencyCode = "USD"
+			fetched.Status.Total = "0.00"
+			fetched.Status.AmountPaid = "0.00"
+			fetched.Status.AmountDue = "0.00"
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("Current"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("InvoicingReady=Unknown PhasePending when invoice phase is empty", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-pending-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		start := metav1.NewTime(time.Date(2026, 3, 1, 0, 0, 0, 0, time.UTC))
+		end := metav1.NewTime(time.Date(2026, 3, 31, 23, 59, 59, 0, time.UTC))
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-pending-acct-2026-03", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-pending-acct"},
+				Period:            billingv1alpha1.InvoicePeriod{Start: start, End: end},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).NotTo(BeNil())
+			g.Expect(fetched.Status.LatestInvoiceRef.Name).To(Equal("inv-pending-acct-2026-03"))
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionUnknown))
+			g.Expect(c.Reason).To(Equal("PhasePending"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("InvoicingReady=True Current when an invoice is Paid", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-paid-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		start := metav1.NewTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC))
+		end := metav1.NewTime(time.Date(2026, 2, 28, 23, 59, 59, 0, time.UTC))
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-paid-acct-2026-02", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-paid-acct"},
+				Period:            billingv1alpha1.InvoicePeriod{Start: start, End: end},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(invoice), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhasePaid
+			fetched.Status.CurrencyCode = "USD"
+			fetched.Status.Total = "10.00"
+			fetched.Status.AmountPaid = "10.00"
+			fetched.Status.AmountDue = "0.00"
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("Current"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("skips a newer Void when projecting InvoicingReady from an older PastDue", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-mask-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		pastDue := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-mask-acct-2026-01", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-mask-acct"},
+				Period: billingv1alpha1.InvoicePeriod{
+					Start: metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+					End:   metav1.NewTime(time.Date(2026, 1, 31, 23, 59, 59, 0, time.UTC)),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pastDue)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pastDue), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhasePastDue
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Reason).To(Equal("PastDue"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		// Ensure the void invoice is created after the past-due one so it is
+		// newest by creationTimestamp.
+		time.Sleep(1100 * time.Millisecond)
+		voided := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-mask-acct-2026-02", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-mask-acct"},
+				Period: billingv1alpha1.InvoicePeriod{
+					Start: metav1.NewTime(time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)),
+					End:   metav1.NewTime(time.Date(2026, 2, 28, 23, 59, 59, 0, time.UTC)),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, voided)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(voided), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhaseVoid
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).NotTo(BeNil())
+			g.Expect(fetched.Status.LatestInvoiceRef.Name).To(Equal("inv-mask-acct-2026-02"))
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionFalse))
+			g.Expect(c.Reason).To(Equal("PastDue"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, voided)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, pastDue)).To(Succeed())
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
+	It("clears latestInvoiceRef and returns to NoInvoicesYet when the last invoice is deleted", func() {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-delete-acct", Namespace: "default"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		invoice := &billingv1alpha1.Invoice{
+			ObjectMeta: metav1.ObjectMeta{Name: "inv-delete-acct-2026-01", Namespace: "default"},
+			Spec: billingv1alpha1.InvoiceSpec{
+				BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "inv-delete-acct"},
+				Period: billingv1alpha1.InvoicePeriod{
+					Start: metav1.NewTime(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)),
+					End:   metav1.NewTime(time.Date(2026, 1, 31, 23, 59, 59, 0, time.UTC)),
+				},
+			},
+		}
+		Expect(k8sClient.Create(ctx, invoice)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.Invoice
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(invoice), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.InvoicePhaseOpen
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).NotTo(BeNil())
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, invoice)).To(Succeed())
+
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.LatestInvoiceRef).To(BeNil())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoicingReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("NoInvoicesYet"))
+		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+
+		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+	})
+
 	It("should reject invalid currency code", func() {
 		account := &billingv1alpha1.BillingAccount{
 			ObjectMeta: metav1.ObjectMeta{

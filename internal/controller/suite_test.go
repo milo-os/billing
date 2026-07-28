@@ -92,6 +92,17 @@ var _ = BeforeSuite(func() {
 	)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.Invoice{},
+		InvoiceBillingAccountRefField,
+		func(obj client.Object) []string {
+			invoice := obj.(*billingv1alpha1.Invoice)
+			return []string{invoice.Spec.BillingAccountRef.Name}
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Register BillingAccount controller. We use a thin test adapter rather
 	// than the production reconciler so that test-specific behavior (e.g.,
 	// refetching before status update to avoid stale conflicts) can be
@@ -104,6 +115,9 @@ var _ = BeforeSuite(func() {
 		).
 		Watches(&billingv1alpha1.PaymentMethod{},
 			reconcileAccountFromPaymentMethod(mgr.GetClient()),
+		).
+		Watches(&billingv1alpha1.Invoice{},
+			reconcileAccountFromInvoice(mgr.GetClient()),
 		).
 		Complete(&testBillingAccountReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
