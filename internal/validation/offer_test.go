@@ -28,6 +28,22 @@ func newDraftOffer(name string) *billingv1alpha1.Offer {
 	}
 }
 
+func sampleSnapshot() []billingv1alpha1.ServicePricingSnapshot {
+	return []billingv1alpha1.ServicePricingSnapshot{
+		{
+			Name: "cpu-allocated",
+			Spec: billingv1alpha1.ServicePricingSpec{
+				ChargeType:  billingv1alpha1.ChargeTypeUsage,
+				ServiceRef:  "compute.datumapis.com",
+				Currency:    "USD",
+				Metric:      "compute.datumapis.com/instance/cpu-allocated",
+				PricingUnit: "vcpu",
+				Rates:       []billingv1alpha1.PricingRate{{Flat: "0.05"}},
+			},
+		},
+	}
+}
+
 func TestValidateOfferUpdate_GAImmutability(t *testing.T) {
 	tests := []struct {
 		name     string
@@ -99,21 +115,9 @@ func TestValidateOfferUpdate_GAImmutability(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			old := newDraftOffer("pro-v1")
 			old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
-			old.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
-				{
-					Name: "cpu-allocated",
-					Spec: billingv1alpha1.ServicePricingSpec{
-						ChargeType:  billingv1alpha1.ChargeTypeUsage,
-						ServiceRef:  "compute.datumapis.com",
-						Currency:    "USD",
-						Metric:      "compute.datumapis.com/instance/cpu-allocated",
-						PricingUnit: "vcpu",
-						Rates:       []billingv1alpha1.PricingRate{{Flat: "0.05"}},
-					},
-				},
-			}
+			old.Spec.ServicePricings = sampleSnapshot()
 			newOffer := tc.mutate(old)
-			errs := ValidateOfferUpdate(old, newOffer)
+			errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{})
 			if len(errs) != tc.wantErrs {
 				t.Errorf("got %d errors, want %d: %v", len(errs), tc.wantErrs, errs)
 			}
@@ -121,45 +125,77 @@ func TestValidateOfferUpdate_GAImmutability(t *testing.T) {
 	}
 }
 
-func TestValidateOfferUpdate_PublishTransitionsAllowed(t *testing.T) {
-	t.Run("draft to GA ok", func(t *testing.T) {
+func TestValidateOfferUpdate_PublishTransitions(t *testing.T) {
+	t.Run("draft to GA with empty snapshot ok", func(t *testing.T) {
 		old := newDraftOffer("pro-v1")
 		newOffer := old.DeepCopy()
 		newOffer.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
-		errs := ValidateOfferUpdate(old, newOffer)
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{})
 		if len(errs) != 0 {
 			t.Errorf("expected no errors for Draft→GA, got: %v", errs)
 		}
 	})
 
-	t.Run("controller snapshot fill ok", func(t *testing.T) {
+	t.Run("draft to GA with client snapshot rejected", func(t *testing.T) {
+		old := newDraftOffer("pro-v1")
+		newOffer := old.DeepCopy()
+		newOffer.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+		newOffer.Spec.ServicePricings = sampleSnapshot()
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{})
+		if len(errs) == 0 {
+			t.Fatal("expected error when client injects servicePricings on Draft→GA")
+		}
+	})
+
+	t.Run("controller snapshot fill ok when allowed", func(t *testing.T) {
 		old := newDraftOffer("pro-v1")
 		old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
 		newOffer := old.DeepCopy()
-		newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
-			{
-				Name: "cpu-allocated",
-				Spec: billingv1alpha1.ServicePricingSpec{
-					ChargeType:  billingv1alpha1.ChargeTypeUsage,
-					ServiceRef:  "compute.datumapis.com",
-					Currency:    "USD",
-					Metric:      "compute.datumapis.com/instance/cpu-allocated",
-					PricingUnit: "vcpu",
-					Rates:       []billingv1alpha1.PricingRate{{Flat: "0.05"}},
-				},
-			},
-		}
-		errs := ValidateOfferUpdate(old, newOffer)
+		newOffer.Spec.ServicePricings = sampleSnapshot()
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
 		if len(errs) != 0 {
-			t.Errorf("expected no errors for snapshot fill, got: %v", errs)
+			t.Errorf("expected no errors for allowed snapshot fill, got: %v", errs)
+		}
+	})
+
+	t.Run("controller snapshot fill rejected without allow", func(t *testing.T) {
+		old := newDraftOffer("pro-v1")
+		old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+		newOffer := old.DeepCopy()
+		newOffer.Spec.ServicePricings = sampleSnapshot()
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{})
+		if len(errs) == 0 {
+			t.Fatal("expected error when client writes servicePricings without AllowSnapshotWrite")
 		}
 	})
 }
 
-func TestValidateOfferCreate_ChargeTypesCoverSnapshot(t *testing.T) {
+func TestValidateOfferCreate_RejectsClientSnapshot(t *testing.T) {
+	offer := newDraftOffer("pro-v1")
+	offer.Spec.ServicePricings = sampleSnapshot()
+	errs := ValidateOfferCreate(offer)
+	if len(errs) == 0 {
+		t.Fatal("expected error when create includes servicePricings")
+	}
+}
+
+func TestValidateOfferCreate_GARequiresRefs(t *testing.T) {
 	offer := newDraftOffer("pro-v1")
 	offer.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
-	offer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+	offer.Spec.ServicePricingRefs = nil
+	errs := ValidateOfferCreate(offer)
+	if len(errs) == 0 {
+		t.Fatal("expected error when GA create has no servicePricingRefs")
+	}
+}
+
+func TestValidateOfferCreate_ChargeTypesCoverSnapshot(t *testing.T) {
+	// Create path forbids client snapshots entirely, so charge-type coverage
+	// of a snapshot is exercised on the controller-allowed update path.
+	old := newDraftOffer("pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
 		{
 			Name: "setup-fee",
 			Spec: billingv1alpha1.ServicePricingSpec{
@@ -172,8 +208,25 @@ func TestValidateOfferCreate_ChargeTypesCoverSnapshot(t *testing.T) {
 		},
 	}
 
-	errs := ValidateOfferCreate(offer)
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
 	if len(errs) == 0 {
 		t.Fatal("expected error when chargeTypes missing OneTime from snapshot")
+	}
+}
+
+func TestOfferIsAssignable(t *testing.T) {
+	draft := newDraftOffer("pro-v1")
+	if OfferIsAssignable(draft) {
+		t.Fatal("draft should not be assignable")
+	}
+	gaEmpty := draft.DeepCopy()
+	gaEmpty.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	if OfferIsAssignable(gaEmpty) {
+		t.Fatal("GA without snapshot should not be assignable")
+	}
+	gaReady := gaEmpty.DeepCopy()
+	gaReady.Spec.ServicePricings = sampleSnapshot()
+	if !OfferIsAssignable(gaReady) {
+		t.Fatal("GA with snapshot should be assignable")
 	}
 }

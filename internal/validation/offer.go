@@ -12,25 +12,43 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
+// OfferUpdateOptions carries admission context for Offer update validation.
+type OfferUpdateOptions struct {
+	// AllowSnapshotWrite permits the one-time empty→populated servicePricings
+	// fill. Only the billing operator service account should set this.
+	AllowSnapshotWrite bool
+}
+
 // ValidateOfferCreate validates an Offer on creation.
+// servicePricings must be empty: the Offer reconciler owns the snapshot.
 func ValidateOfferCreate(offer *billingv1alpha1.Offer) field.ErrorList {
 	var allErrs field.ErrorList
 
 	allErrs = append(allErrs, validateOfferChargeTypes(offer)...)
-	allErrs = append(allErrs, validateOfferChargeTypesCoverSnapshot(offer)...)
+	allErrs = append(allErrs, validateOfferClientSnapshotEmpty(offer)...)
+	allErrs = append(allErrs, validateOfferGAHasRefs(offer)...)
 
 	return allErrs
 }
 
 // ValidateOfferUpdate validates an Offer on update.
-func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer) field.ErrorList {
+func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUpdateOptions) field.ErrorList {
 	var allErrs field.ErrorList
 
 	allErrs = append(allErrs, validateOfferChargeTypes(newOffer)...)
 	allErrs = append(allErrs, validateOfferChargeTypesCoverSnapshot(newOffer)...)
-	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer)...)
+	allErrs = append(allErrs, validateOfferGAHasRefs(newOffer)...)
+	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer, opts)...)
 
 	return allErrs
+}
+
+// OfferIsAssignable reports whether an Offer may be referenced by a
+// BillingEntitlement: GA with a non-empty controller snapshot.
+func OfferIsAssignable(offer *billingv1alpha1.Offer) bool {
+	return offer != nil &&
+		offer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageGA &&
+		len(offer.Spec.ServicePricings) > 0
 }
 
 func validateOfferChargeTypes(offer *billingv1alpha1.Offer) field.ErrorList {
@@ -43,10 +61,35 @@ func validateOfferChargeTypes(offer *billingv1alpha1.Offer) field.ErrorList {
 	return allErrs
 }
 
+func validateOfferClientSnapshotEmpty(offer *billingv1alpha1.Offer) field.ErrorList {
+	var allErrs field.ErrorList
+	if len(offer.Spec.ServicePricings) > 0 {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "servicePricings"),
+			"servicePricings is owned by the Offer controller and must not be set by clients",
+		))
+	}
+	return allErrs
+}
+
+func validateOfferGAHasRefs(offer *billingv1alpha1.Offer) field.ErrorList {
+	var allErrs field.ErrorList
+	if offer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA {
+		return allErrs
+	}
+	// Once the controller has written the snapshot, refs may still be present
+	// for audit; either refs or an existing snapshot is required to publish.
+	if len(offer.Spec.ServicePricingRefs) == 0 && len(offer.Spec.ServicePricings) == 0 {
+		allErrs = append(allErrs, field.Required(
+			field.NewPath("spec", "servicePricingRefs"),
+			"GA Offer requires servicePricingRefs so the controller can snapshot rates",
+		))
+	}
+	return allErrs
+}
+
 // validateOfferChargeTypesCoverSnapshot ensures chargeTypes covers every
-// charge type present in the snapshotted servicePricings. Live refs are
-// checked at controller time (admission cannot resolve them without a client
-// round-trip on every draft edit).
+// charge type present in the snapshotted servicePricings.
 func validateOfferChargeTypesCoverSnapshot(offer *billingv1alpha1.Offer) field.ErrorList {
 	var allErrs field.ErrorList
 	if len(offer.Spec.ServicePricings) == 0 {
@@ -83,9 +126,9 @@ func validateOfferChargeTypesCoverSnapshot(offer *billingv1alpha1.Offer) field.E
 }
 
 // validateOfferGAImmutability rejects mutations once an Offer is GA, except
-// for the kubernetes.io/display-name annotation. Draft→GA and the controller's
-// one-time snapshot population are permitted publish-path transitions.
-func validateOfferGAImmutability(oldOffer, newOffer *billingv1alpha1.Offer) field.ErrorList {
+// for the kubernetes.io/display-name annotation. Draft→GA (without a client
+// snapshot) and the controller's one-time snapshot population are permitted.
+func validateOfferGAImmutability(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUpdateOptions) field.ErrorList {
 	var allErrs field.ErrorList
 
 	if oldOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA &&
@@ -93,7 +136,23 @@ func validateOfferGAImmutability(oldOffer, newOffer *billingv1alpha1.Offer) fiel
 		return allErrs
 	}
 
-	if isOfferPublishTransition(oldOffer, newOffer) {
+	if isDraftToGATransition(oldOffer, newOffer) {
+		if len(newOffer.Spec.ServicePricings) > 0 {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec", "servicePricings"),
+				"servicePricings must remain empty on Draft→GA; the Offer controller writes the snapshot",
+			))
+		}
+		return allErrs
+	}
+
+	if isControllerSnapshotFill(oldOffer, newOffer) {
+		if !opts.AllowSnapshotWrite {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("spec", "servicePricings"),
+				"servicePricings may only be written by the billing Offer controller",
+			))
+		}
 		return allErrs
 	}
 
@@ -112,34 +171,36 @@ func validateOfferGAImmutability(oldOffer, newOffer *billingv1alpha1.Offer) fiel
 	return allErrs
 }
 
-// isOfferPublishTransition reports whether the update is the allowed Draft→GA
-// transition and/or the controller filling an empty servicePricings snapshot.
-func isOfferPublishTransition(oldOffer, newOffer *billingv1alpha1.Offer) bool {
+// isDraftToGATransition reports Draft→GA with all other spec fields equal,
+// ignoring servicePricings (callers must separately require it empty on new).
+func isDraftToGATransition(oldOffer, newOffer *billingv1alpha1.Offer) bool {
+	if oldOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageDraft ||
+		newOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA {
+		return false
+	}
 	oldSpec := oldOffer.Spec.DeepCopy()
 	newSpec := newOffer.Spec.DeepCopy()
-
-	switch {
-	case oldOffer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageDraft &&
-		newOffer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageGA:
-		oldSpec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
-		if len(oldSpec.ServicePricings) == 0 {
-			oldSpec.ServicePricings = newSpec.ServicePricings
-		}
-		return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
-
-	case oldOffer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageGA &&
-		newOffer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageGA &&
-		len(oldOffer.Spec.ServicePricings) == 0 &&
-		len(newOffer.Spec.ServicePricings) > 0:
-		oldSpec.ServicePricings = newSpec.ServicePricings
-		return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
-	}
-
-	return false
+	oldSpec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	oldSpec.ServicePricings = newSpec.ServicePricings
+	return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
 }
 
-// normalizeOfferForImmutabilityCompare equalizes display-name and strips
-// admission noise so Semantic.DeepEqual can compare user-visible identity.
+// isControllerSnapshotFill reports GA→GA with empty→non-empty servicePricings
+// and no other spec changes.
+func isControllerSnapshotFill(oldOffer, newOffer *billingv1alpha1.Offer) bool {
+	if oldOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA ||
+		newOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA {
+		return false
+	}
+	if len(oldOffer.Spec.ServicePricings) != 0 || len(newOffer.Spec.ServicePricings) == 0 {
+		return false
+	}
+	oldSpec := oldOffer.Spec.DeepCopy()
+	newSpec := newOffer.Spec.DeepCopy()
+	oldSpec.ServicePricings = newSpec.ServicePricings
+	return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
+}
+
 func normalizeOfferForImmutabilityCompare(oldOffer, newOffer *billingv1alpha1.Offer) {
 	equalizeDisplayNameAnnotation(oldOffer, newOffer)
 	clearOfferMetadataNoise(oldOffer)
@@ -180,7 +241,6 @@ func clearOfferMetadataNoise(offer *billingv1alpha1.Offer) {
 	offer.DeletionGracePeriodSeconds = nil
 	offer.OwnerReferences = nil
 	offer.Finalizers = nil
-	// Status is not part of the immutability contract.
 	offer.Status = billingv1alpha1.OfferStatus{}
 	offer.TypeMeta = metav1.TypeMeta{}
 }

@@ -72,6 +72,15 @@ func validateBillingEntitlementOfferRef(
 			be.Spec.OfferRef.Name,
 			fmt.Sprintf("offer %q has launchStage %q; only GA Offers may be assigned", offer.Name, offer.Spec.LaunchStage),
 		))
+		return allErrs
+	}
+
+	if len(offer.Spec.ServicePricings) == 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath,
+			be.Spec.OfferRef.Name,
+			fmt.Sprintf("offer %q is GA but has no servicePricings snapshot yet; wait for the Offer controller to publish rates", offer.Name),
+		))
 	}
 
 	return allErrs

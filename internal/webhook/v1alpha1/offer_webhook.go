@@ -17,8 +17,11 @@ import (
 var offerLog = logf.Log.WithName("offer-webhook")
 
 // SetupOfferWebhookWithManager registers the Offer webhook with the manager.
-func SetupOfferWebhookWithManager(mgr ctrl.Manager) error {
-	webhook := &offerWebhook{}
+// billingOperatorSA is the username allowed to write the one-time
+// servicePricings snapshot (typically
+// system:serviceaccount:billing-system:billing-controller-manager).
+func SetupOfferWebhookWithManager(mgr ctrl.Manager, billingOperatorSA string) error {
+	webhook := &offerWebhook{billingOperatorSA: billingOperatorSA}
 
 	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.Offer{}).
 		WithValidator(webhook).
@@ -27,7 +30,9 @@ func SetupOfferWebhookWithManager(mgr ctrl.Manager) error {
 
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-offer,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=offers,verbs=create;update,versions=v1alpha1,name=voffer.kb.io,admissionReviewVersions=v1
 
-type offerWebhook struct{}
+type offerWebhook struct {
+	billingOperatorSA string
+}
 
 var _ admission.Validator[*billingv1alpha1.Offer] = &offerWebhook{}
 
@@ -47,10 +52,17 @@ func (r *offerWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.Of
 }
 
 // ValidateUpdate implements admission.Validator.
-func (r *offerWebhook) ValidateUpdate(_ context.Context, oldObj, newObj *billingv1alpha1.Offer) (admission.Warnings, error) {
+func (r *offerWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billingv1alpha1.Offer) (admission.Warnings, error) {
 	offerLog.Info("validating update", "name", newObj.GetName())
 
-	if errs := validation.ValidateOfferUpdate(oldObj, newObj); len(errs) > 0 {
+	opts := validation.OfferUpdateOptions{}
+	if req, err := admission.RequestFromContext(ctx); err != nil {
+		offerLog.Error(err, "failed to retrieve admission request; denying snapshot writes")
+	} else if req.UserInfo.Username == r.billingOperatorSA {
+		opts.AllowSnapshotWrite = true
+	}
+
+	if errs := validation.ValidateOfferUpdate(oldObj, newObj, opts); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
 			newObj.Name,

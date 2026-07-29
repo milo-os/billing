@@ -12,10 +12,12 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/validation"
 )
 
 // BillingEntitlementReconciler reconciles a BillingEntitlement object.
@@ -57,7 +59,7 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 	offerErr := r.client.Get(ctx, types.NamespacedName{Name: be.Spec.OfferRef.Name}, &offer)
 
 	baReady := accountErr == nil && account.DeletionTimestamp.IsZero()
-	offerGA := offerErr == nil && offer.Spec.LaunchStage == billingv1alpha1.OfferLaunchStageGA
+	offerAssignable := offerErr == nil && validation.OfferIsAssignable(&offer)
 
 	switch {
 	case accountErr != nil:
@@ -66,71 +68,26 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 		if !apierrors.IsNotFound(accountErr) {
 			return ctrl.Result{}, fmt.Errorf("getting billing account: %w", accountErr)
 		}
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               ConditionTypeReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             reason,
-			Message:            msg,
-		})
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             reason,
-			Message:            msg,
-		})
+		setBEConditions(newStatus, be.Generation, false, reason, msg)
 
 	case !baReady:
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               ConditionTypeReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "BillingAccountDeleting",
-			Message:            fmt.Sprintf("BillingAccount %q is being deleted.", account.Name),
-		})
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "BillingAccountDeleting",
-			Message:            fmt.Sprintf("BillingAccount %q is being deleted.", account.Name),
-		})
+		setBEConditions(newStatus, be.Generation, false, "BillingAccountDeleting",
+			fmt.Sprintf("BillingAccount %q is being deleted.", account.Name))
 
 	case offerErr != nil:
 		if !apierrors.IsNotFound(offerErr) {
 			return ctrl.Result{}, fmt.Errorf("getting offer: %w", offerErr)
 		}
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               ConditionTypeReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "OfferNotFound",
-			Message:            fmt.Sprintf("Offer %q was not found.", be.Spec.OfferRef.Name),
-		})
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "OfferNotFound",
-			Message:            fmt.Sprintf("Offer %q was not found.", be.Spec.OfferRef.Name),
-		})
+		setBEConditions(newStatus, be.Generation, false, "OfferNotFound",
+			fmt.Sprintf("Offer %q was not found.", be.Spec.OfferRef.Name))
 
-	case !offerGA:
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               ConditionTypeReady,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "OfferNotGA",
-			Message:            fmt.Sprintf("Offer %q has launchStage %q; GA is required.", offer.Name, offer.Spec.LaunchStage),
-		})
-		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
-			Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
-			Status:             metav1.ConditionFalse,
-			ObservedGeneration: be.Generation,
-			Reason:             "OfferNotGA",
-			Message:            fmt.Sprintf("Offer %q has launchStage %q; GA is required.", offer.Name, offer.Spec.LaunchStage),
-		})
+	case offer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA:
+		setBEConditions(newStatus, be.Generation, false, "OfferNotGA",
+			fmt.Sprintf("Offer %q has launchStage %q; GA is required.", offer.Name, offer.Spec.LaunchStage))
+
+	case !offerAssignable:
+		setBEConditions(newStatus, be.Generation, false, "OfferSnapshotPending",
+			fmt.Sprintf("Offer %q is GA but has no servicePricings snapshot yet.", offer.Name))
 
 	default:
 		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
@@ -138,14 +95,14 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: be.Generation,
 			Reason:             "BillingEntitlementReady",
-			Message:            fmt.Sprintf("BillingAccount %q is bound to GA Offer %q.", account.Name, offer.Name),
+			Message:            fmt.Sprintf("BillingAccount %q is bound to published Offer %q.", account.Name, offer.Name),
 		})
 		apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
 			Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
 			Status:             metav1.ConditionTrue,
 			ObservedGeneration: be.Generation,
 			Reason:             "OfferAssigned",
-			Message:            fmt.Sprintf("Offer %q is GA and assigned.", offer.Name),
+			Message:            fmt.Sprintf("Offer %q is GA with a rate snapshot and assigned.", offer.Name),
 		})
 	}
 
@@ -162,6 +119,27 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 		"offer", be.Spec.OfferRef.Name,
 	)
 	return ctrl.Result{}, nil
+}
+
+func setBEConditions(status *billingv1alpha1.BillingEntitlementStatus, generation int64, ready bool, reason, msg string) {
+	readyStatus := metav1.ConditionFalse
+	if ready {
+		readyStatus = metav1.ConditionTrue
+	}
+	apimeta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:               ConditionTypeReady,
+		Status:             readyStatus,
+		ObservedGeneration: generation,
+		Reason:             reason,
+		Message:            msg,
+	})
+	apimeta.SetStatusCondition(&status.Conditions, metav1.Condition{
+		Type:               billingv1alpha1.BillingEntitlementConditionOfferAssigned,
+		Status:             readyStatus,
+		ObservedGeneration: generation,
+		Reason:             reason,
+		Message:            msg,
+	})
 }
 
 func billingEntitlementStatusEqual(a, b billingv1alpha1.BillingEntitlementStatus) bool {
@@ -188,5 +166,61 @@ func (r *BillingEntitlementReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billing-billingentitlement").
 		For(&billingv1alpha1.BillingEntitlement{}).
+		Watches(&billingv1alpha1.Offer{},
+			handler.EnqueueRequestsFromMapFunc(r.mapOfferToBillingEntitlements),
+		).
+		Watches(&billingv1alpha1.BillingAccount{},
+			handler.EnqueueRequestsFromMapFunc(r.mapBillingAccountToBillingEntitlements),
+		).
 		Complete(r)
+}
+
+func (r *BillingEntitlementReconciler) mapOfferToBillingEntitlements(ctx context.Context, obj client.Object) []reconcile.Request {
+	offer, ok := obj.(*billingv1alpha1.Offer)
+	if !ok {
+		return nil
+	}
+	var list billingv1alpha1.BillingEntitlementList
+	if err := r.client.List(ctx, &list,
+		client.MatchingFields{BillingEntitlementOfferRefField: offer.Name},
+	); err != nil {
+		log.FromContext(ctx).Error(err, "listing BillingEntitlements for Offer", "offer", offer.Name)
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for i := range list.Items {
+		reqs = append(reqs, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: list.Items[i].Namespace,
+				Name:      list.Items[i].Name,
+			},
+		})
+	}
+	return reqs
+}
+
+func (r *BillingEntitlementReconciler) mapBillingAccountToBillingEntitlements(ctx context.Context, obj client.Object) []reconcile.Request {
+	account, ok := obj.(*billingv1alpha1.BillingAccount)
+	if !ok {
+		return nil
+	}
+	var list billingv1alpha1.BillingEntitlementList
+	if err := r.client.List(ctx, &list,
+		client.InNamespace(account.Namespace),
+		client.MatchingFields{BillingEntitlementBillingAccountRefField: account.Name},
+	); err != nil {
+		log.FromContext(ctx).Error(err, "listing BillingEntitlements for BillingAccount",
+			"billingAccount", account.Name, "namespace", account.Namespace)
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for i := range list.Items {
+		reqs = append(reqs, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: list.Items[i].Namespace,
+				Name:      list.Items[i].Name,
+			},
+		})
+	}
+	return reqs
 }
