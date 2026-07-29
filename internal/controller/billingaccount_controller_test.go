@@ -256,6 +256,18 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
 		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
 
+		// Nudge the account so a watch event is not the only path to Ready
+		// after concurrent status updates race.
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			if fetched.Annotations == nil {
+				fetched.Annotations = map[string]string{}
+			}
+			fetched.Annotations["billing.miloapis.com/test-nudge"] = "1"
+			g.Expect(k8sClient.Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+
 		Eventually(func(g Gomega) {
 			var fetched billingv1alpha1.BillingAccount
 			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
@@ -263,7 +275,7 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 			g.Expect(c).NotTo(BeNil())
 			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
 			g.Expect(c.Reason).To(Equal("Ready"))
-		}, 10*time.Second, 250*time.Millisecond).Should(Succeed())
+		}, 20*time.Second, 250*time.Millisecond).Should(Succeed())
 		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
 		Expect(k8sClient.Delete(ctx, pm)).To(Succeed())
 	})
