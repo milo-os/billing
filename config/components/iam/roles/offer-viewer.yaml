@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-offer-viewer
+  annotations:
+    kubernetes.io/display-name: Offer Viewer
+    kubernetes.io/description: "View access to all offer resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/offers.list
+    - billing.miloapis.com/offers.get
+    - billing.miloapis.com/offers.watch

@@ -1,0 +1,279 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Platform
+  name: servicepricings.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: ServicePricing
+    listKind: ServicePricingList
+    plural: servicepricings
+    singular: servicepricing
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.chargeType
+      name: ChargeType
+      type: string
+    - jsonPath: .spec.serviceRef
+      name: Service
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ServicePricing is the Schema for the servicepricings API. One resource
+          per priced metric or fixed charge, emitted by service-catalog into
+          milo-system.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ServicePricingSpec defines the desired state of a ServicePricing.
+
+              ServicePricing resources are emitted by service-catalog fan-out
+              controllers (PricingFanOut / ChargeFanOut) and must not be authored by
+              hand. Providers watch this single shape — distinguished by chargeType —
+              rather than parsing ServiceConfiguration.
+            properties:
+              amount:
+                description: |-
+                  Amount is the fixed USD decimal string for OneTime and Recurring
+                  charges.
+                pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                type: string
+              chargeType:
+                description: ChargeType distinguishes Usage, OneTime, and Recurring
+                  pricing.
+                enum:
+                - Usage
+                - OneTime
+                - Recurring
+                type: string
+              currency:
+                default: USD
+                description: Currency is the ISO 4217 currency code. USD only in v1.
+                pattern: ^USD$
+                type: string
+              displayName:
+                description: DisplayName is a human-readable label for invoices and
+                  portals.
+                maxLength: 128
+                type: string
+              interval:
+                description: Interval is the cadence for a Recurring charge.
+                enum:
+                - monthly
+                type: string
+              metric:
+                description: |-
+                  Metric is the full metric name for Usage charges (e.g.
+                  "compute.datumapis.com/instance/cpu-allocated"). Required when
+                  chargeType is Usage.
+                maxLength: 253
+                type: string
+              pricingUnit:
+                description: |-
+                  PricingUnit is a human-readable billing unit label (e.g. "vcpu",
+                  "gib"). Required when chargeType is Usage. Does not need to be the
+                  literal UCUM unit string of the meter.
+                maxLength: 64
+                type: string
+              rates:
+                description: |-
+                  Rates is the ordered list of rate entries for Usage charges.
+                  Required when chargeType is Usage.
+                items:
+                  description: |-
+                    PricingRate is a single rate entry. Exactly one of Flat or Tiered must
+                    be set. An optional Match filters the rate by dimension value; the last
+                    unmatched entry is the default catch-all.
+                  properties:
+                    flat:
+                      description: |-
+                        Flat is a single decimal USD string multiplied by metered usage.
+                        Mutually exclusive with Tiered.
+                      pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                      type: string
+                    match:
+                      description: Match optionally restricts this rate to a single
+                        dimension value.
+                      properties:
+                        dimension:
+                          description: |-
+                            Dimension is the label key declared on the monitored resource type
+                            (e.g. "tier", "region", "model").
+                          maxLength: 63
+                          minLength: 1
+                          type: string
+                        value:
+                          description: Value is the dimension value this rate applies
+                            to.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                      required:
+                      - dimension
+                      - value
+                      type: object
+                    tiered:
+                      description: |-
+                        Tiered is an ordered list of graduated volume bands.
+                        Mutually exclusive with Flat.
+                      items:
+                        description: |-
+                          PricingTierBand is a single graduated volume band. Aggregation for
+                          tier breaks is monthly at billing-account scope. Each band has a rate
+                          and an exclusive upper bound upTo in pricingUnit units. The last band
+                          omits upTo (open-ended).
+                        properties:
+                          rate:
+                            description: |-
+                              Rate is the USD decimal string applied to usage within this band.
+                              Zero ("0") is valid for free allowances.
+                            pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                            type: string
+                          upTo:
+                            description: |-
+                              UpTo is the exclusive upper bound of this band in pricingUnit units.
+                              Omit on the last band for an open-ended range.
+                            pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                            type: string
+                        required:
+                        - rate
+                        type: object
+                      minItems: 1
+                      type: array
+                      x-kubernetes-list-type: atomic
+                  type: object
+                  x-kubernetes-validations:
+                  - message: exactly one of flat or tiered must be set
+                    rule: has(self.flat) != has(self.tiered)
+                minItems: 1
+                type: array
+                x-kubernetes-list-type: atomic
+              serviceRef:
+                description: |-
+                  ServiceRef is the canonical service identifier (e.g.
+                  "compute.datumapis.com").
+                maxLength: 253
+                minLength: 1
+                type: string
+              trigger:
+                description: Trigger identifies when a OneTime charge fires.
+                enum:
+                - BillingAccountActivation
+                type: string
+            required:
+            - chargeType
+            - currency
+            - serviceRef
+            type: object
+            x-kubernetes-validations:
+            - message: Usage ServicePricing requires metric, pricingUnit, and rates
+              rule: self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit)
+                && has(self.rates))
+            - message: OneTime ServicePricing requires amount and trigger
+              rule: self.chargeType != 'OneTime' || (has(self.amount) && has(self.trigger))
+            - message: Recurring ServicePricing requires amount and interval
+              rule: self.chargeType != 'Recurring' || (has(self.amount) && has(self.interval))
+          status:
+            description: ServicePricingStatus defines the observed state of a ServicePricing.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  resource's state.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  controller.
+                format: int64
+                type: integer
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

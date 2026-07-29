@@ -4,11 +4,14 @@
 resources:
 - bases/billing.miloapis.com_billingaccounts.yaml
 - bases/billing.miloapis.com_billingaccountbindings.yaml
+- bases/billing.miloapis.com_billingentitlements.yaml
 - bases/billing.miloapis.com_meterdefinitions.yaml
 - bases/billing.miloapis.com_monitoredresourcetypes.yaml
+- bases/billing.miloapis.com_offers.yaml
 - bases/billing.miloapis.com_paymentmethods.yaml
 - bases/billing.miloapis.com_paymentmethodclasses.yaml
 - bases/billing.miloapis.com_invoices.yaml
+- bases/billing.miloapis.com_servicepricings.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

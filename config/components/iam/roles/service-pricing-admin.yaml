@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-service-pricing-admin
+  annotations:
+    kubernetes.io/display-name: Service Pricing Admin
+    kubernetes.io/description: "Full access to all service pricing resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-service-pricing-viewer
+  includedPermissions:
+    - billing.miloapis.com/servicepricings.create
+    - billing.miloapis.com/servicepricings.update
+    - billing.miloapis.com/servicepricings.patch
+    - billing.miloapis.com/servicepricings.delete

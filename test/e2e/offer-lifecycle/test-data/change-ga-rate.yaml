@@ -1,0 +1,25 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-standard-compute
+  annotations:
+    kubernetes.io/display-name: E2E Standard Compute
+spec:
+  chargeTypes:
+    - Usage
+  launchStage: GA
+  servicePricingRefs:
+    - name: e2e-offer-cpu-allocated
+      namespace: milo-system
+  # Attempt to mutate snapshotted rates after GA — must be rejected.
+  servicePricings:
+    - name: e2e-offer-cpu-allocated
+      spec:
+        chargeType: Usage
+        serviceRef: compute.datumapis.com
+        currency: USD
+        displayName: E2E Offer CPU Allocated
+        metric: compute.datumapis.com/instance/cpu-allocated
+        pricingUnit: vcpu
+        rates:
+          - flat: "9.99"

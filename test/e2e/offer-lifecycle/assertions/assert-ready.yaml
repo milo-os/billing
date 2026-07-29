@@ -1,0 +1,14 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-standard-compute
+  annotations:
+    kubernetes.io/display-name: E2E Standard Compute
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: OfferReady
+    - type: Published
+      status: "True"
+      reason: OfferPublished

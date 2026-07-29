@@ -154,6 +154,12 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.PaymentMethodReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating PaymentMethod controller: %w", err)
 			}
+			if err = (&controller.OfferReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating Offer controller: %w", err)
+			}
+			if err = (&controller.BillingEntitlementReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating BillingEntitlement controller: %w", err)
+			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)
@@ -269,11 +275,23 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				if err = billingwebhooks.SetupInvoiceWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating Invoice webhook: %w", err)
 				}
+				if err = billingwebhooks.SetupServicePricingWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating ServicePricing webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupOfferWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating Offer webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupBillingEntitlementWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating BillingEntitlement webhook: %w", err)
+				}
 				if err = billingwebhooks.SetupMeterDefinitionOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
 					return fmt.Errorf("creating MeterDefinitionOwnership webhook: %w", err)
 				}
 				if err = billingwebhooks.SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
 					return fmt.Errorf("creating MonitoredResourceTypeOwnership webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupServicePricingOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
+					return fmt.Errorf("creating ServicePricingOwnership webhook: %w", err)
 				}
 			}
 

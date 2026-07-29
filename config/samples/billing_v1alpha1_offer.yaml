@@ -1,0 +1,16 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  annotations:
+    kubernetes.io/display-name: Standard Compute
+  name: standard-compute
+spec:
+  chargeTypes:
+    - Usage
+  launchStage: Draft
+  servicePricingRefs:
+    - name: compute-instance-cpu-allocated
+      namespace: milo-system

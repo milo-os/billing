@@ -1,0 +1,95 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: offer-lifecycle
+spec:
+  description: |
+    Tests the Offer lifecycle including:
+    - Creating a Draft Offer with a ServicePricing reference
+    - Publishing (launchStage=GA) snapshots rates and becomes Ready/Published
+    - Webhook rejects mutations to GA Offer rates/spec
+
+  steps:
+    - name: ensure-milo-system
+      description: Ensure milo-system exists for ServicePricing defaults.
+      try:
+        - script:
+            content: |
+              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: create-servicepricing
+      description: Create a ServicePricing without managed-by so e2e can author it.
+      try:
+        - create:
+            file: 01-create-servicepricing.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: ServicePricing
+              metadata:
+                name: e2e-offer-cpu-allocated
+                namespace: milo-system
+              spec:
+                chargeType: Usage
+
+    - name: create-draft-offer
+      description: Create a Draft Offer referencing the ServicePricing.
+      try:
+        - create:
+            file: 01-create-offer.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-standard-compute
+              spec:
+                launchStage: Draft
+
+    - name: publish-offer
+      description: Patch launchStage to GA and wait for snapshot + Ready/Published.
+      try:
+        - script:
+            content: |
+              kubectl patch offer e2e-standard-compute --type=merge --patch '{"spec":{"launchStage":"GA"}}'
+        - assert:
+            timeout: 60s
+            file: assertions/assert-ready.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-standard-compute
+              spec:
+                launchStage: GA
+                servicePricings:
+                  - name: e2e-offer-cpu-allocated
+
+    - name: reject-ga-rate-change
+      description: Verify that mutating snapshotted rates on a GA Offer is rejected.
+      try:
+        - apply:
+            file: test-data/change-ga-rate.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'immutable')): true
+
+    - name: cleanup
+      description: Delete cluster-scoped Offer and milo-system ServicePricing.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              name: e2e-standard-compute
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: ServicePricing
+              name: e2e-offer-cpu-allocated
+              namespace: milo-system

@@ -8,8 +8,12 @@
 resources:
   - billingaccount.yaml
   - billingaccountbinding.yaml
+  - billingentitlement.yaml
   - meterdefinition.yaml
   - monitoredresourcetype.yaml
+  - offer.yaml
   - paymentmethod.yaml
   - paymentmethodclass.yaml
   - invoice.yaml
+  - servicepricing.yaml
+

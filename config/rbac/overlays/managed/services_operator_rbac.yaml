@@ -4,5 +4,5 @@ metadata:
   name: services-operator-billing-meterdefinitions
 rules:
 - apiGroups: ["billing.miloapis.com"]
-  resources: ["meterdefinitions", "monitoredresourcetypes"]
+  resources: ["meterdefinitions", "monitoredresourcetypes", "servicepricings"]
   verbs: ["create", "get", "list", "watch", "update", "patch", "delete"]

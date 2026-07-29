@@ -6,9 +6,15 @@
 resources:
   - billing-admin.yaml
   - billing-viewer.yaml
+  - billing-entitlement-admin.yaml
+  - billing-entitlement-viewer.yaml
   - meter-definition-admin.yaml
   - meter-definition-viewer.yaml
   - monitored-resource-type-admin.yaml
   - monitored-resource-type-viewer.yaml
+  - offer-admin.yaml
+  - offer-viewer.yaml
   - payment-method-class-admin.yaml
   - payment-method-class-viewer.yaml
+  - service-pricing-admin.yaml
+  - service-pricing-viewer.yaml

@@ -36,6 +36,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAddressApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingContactInfo"):
 		return &apiv1alpha1.BillingContactInfoApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlement"):
+		return &apiv1alpha1.BillingEntitlementApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlementSpec"):
+		return &apiv1alpha1.BillingEntitlementSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlementStatus"):
+		return &apiv1alpha1.BillingEntitlementStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingResponsibility"):
 		return &apiv1alpha1.BillingResponsibilityApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CardBillingAddress"):
@@ -44,6 +50,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DefaultPaymentMethodRef"):
 		return &apiv1alpha1.DefaultPaymentMethodRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("DimensionMatch"):
+		return &apiv1alpha1.DimensionMatchApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Invoice"):
 		return &apiv1alpha1.InvoiceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoicePeriod"):
@@ -74,6 +82,14 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.MonitoredResourceTypeSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("MonitoredResourceTypeStatus"):
 		return &apiv1alpha1.MonitoredResourceTypeStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("Offer"):
+		return &apiv1alpha1.OfferApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("OfferReference"):
+		return &apiv1alpha1.OfferReferenceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("OfferSpec"):
+		return &apiv1alpha1.OfferSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("OfferStatus"):
+		return &apiv1alpha1.OfferStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PaymentMethod"):
 		return &apiv1alpha1.PaymentMethodApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PaymentMethodCardDetails"):
@@ -98,8 +114,22 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.PaymentMethodUSBankAccountDetailsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PaymentTerms"):
 		return &apiv1alpha1.PaymentTermsApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PricingRate"):
+		return &apiv1alpha1.PricingRateApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PricingTierBand"):
+		return &apiv1alpha1.PricingTierBandApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ProjectRef"):
 		return &apiv1alpha1.ProjectRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricing"):
+		return &apiv1alpha1.ServicePricingApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricingRef"):
+		return &apiv1alpha1.ServicePricingRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricingSnapshot"):
+		return &apiv1alpha1.ServicePricingSnapshotApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricingSpec"):
+		return &apiv1alpha1.ServicePricingSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricingStatus"):
+		return &apiv1alpha1.ServicePricingStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("TaxID"):
 		return &apiv1alpha1.TaxIDApplyConfiguration{}
 
