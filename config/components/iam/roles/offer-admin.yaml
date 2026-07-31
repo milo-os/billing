@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-offer-admin
+  annotations:
+    kubernetes.io/display-name: Offer Admin
+    kubernetes.io/description: "Full access to all offer resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-offer-viewer
+  includedPermissions:
+    - billing.miloapis.com/offers.create
+    - billing.miloapis.com/offers.update
+    - billing.miloapis.com/offers.patch
+    - billing.miloapis.com/offers.delete

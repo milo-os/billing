@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-service-pricing-viewer
+  annotations:
+    kubernetes.io/display-name: Service Pricing Viewer
+    kubernetes.io/description: "View access to all service pricing resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/servicepricings.list
+    - billing.miloapis.com/servicepricings.get
+    - billing.miloapis.com/servicepricings.watch

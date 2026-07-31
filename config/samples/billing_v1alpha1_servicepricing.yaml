@@ -1,0 +1,17 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: compute-instance-cpu-allocated
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  serviceRef: compute.datumapis.com
+  currency: USD
+  displayName: Compute Instance CPU Allocated
+  metric: compute.datumapis.com/instance/cpu-allocated
+  pricingUnit: vcpu
+  rates:
+    - flat: "0.031"

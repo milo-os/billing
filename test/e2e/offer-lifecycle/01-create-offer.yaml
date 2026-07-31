@@ -1,0 +1,13 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-standard-compute
+  annotations:
+    kubernetes.io/display-name: E2E Standard Compute
+spec:
+  chargeTypes:
+    - Usage
+  launchStage: Draft
+  servicePricingRefs:
+    - name: e2e-offer-cpu-allocated
+      namespace: milo-system

@@ -1,0 +1,13 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingEntitlement
+metadata:
+  name: e2e-be-entitlement
+  namespace: default
+status:
+  conditions:
+    - type: Ready
+      status: "True"
+      reason: BillingEntitlementReady
+    - type: OfferAssigned
+      status: "True"
+      reason: OfferAssigned

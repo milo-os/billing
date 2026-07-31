@@ -1,0 +1,16 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-billing-entitlement-admin
+  annotations:
+    kubernetes.io/display-name: Billing Entitlement Admin
+    kubernetes.io/description: "Full access to all billing entitlement resources"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-billing-entitlement-viewer
+  includedPermissions:
+    - billing.miloapis.com/billingentitlements.create
+    - billing.miloapis.com/billingentitlements.update
+    - billing.miloapis.com/billingentitlements.patch
+    - billing.miloapis.com/billingentitlements.delete

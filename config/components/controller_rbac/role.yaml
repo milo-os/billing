@@ -16,8 +16,10 @@ rules:
   resources:
   - billingaccountbindings
   - billingaccounts
+  - billingentitlements
   - meterdefinitions
   - monitoredresourcetypes
+  - offers
   verbs:
   - create
   - delete
@@ -31,8 +33,10 @@ rules:
   resources:
   - billingaccountbindings/finalizers
   - billingaccounts/finalizers
+  - billingentitlements/finalizers
   - meterdefinitions/finalizers
   - monitoredresourcetypes/finalizers
+  - offers/finalizers
   verbs:
   - update
 - apiGroups:
@@ -40,8 +44,10 @@ rules:
   resources:
   - billingaccountbindings/status
   - billingaccounts/status
+  - billingentitlements/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
+  - offers/status
   - paymentmethods/status
   verbs:
   - get
@@ -53,6 +59,7 @@ rules:
   - invoices
   - paymentmethodclasses
   - paymentmethods
+  - servicepricings
   verbs:
   - get
   - list

@@ -19,8 +19,13 @@ const (
 	// manages a resource.
 	ManagedByLabel = "app.kubernetes.io/managed-by"
 
-	// ServicesOperatorValue is the label value set by the services operator.
+	// ServicesOperatorValue is the label value set by the services operator
+	// (legacy).
 	ServicesOperatorValue = "services-operator"
+
+	// ServicesOperatorValueCurrent is the current managed-by value used by
+	// service-catalog fan-out controllers.
+	ServicesOperatorValueCurrent = "services.miloapis.com"
 )
 
 var ownershipLog = logf.Log.WithName("ownership-webhook")
@@ -55,8 +60,24 @@ func SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr ctrl.Manager, ser
 	return nil
 }
 
+// SetupServicePricingOwnershipWebhookWithManager registers the ServicePricing
+// ownership webhook with the manager.
+func SetupServicePricingOwnershipWebhookWithManager(mgr ctrl.Manager, servicesOperatorServiceAccount string) error {
+	wh := &ownershipWebhook[*billingv1alpha1.ServicePricing]{servicesOperatorSA: servicesOperatorServiceAccount}
+
+	mgr.GetWebhookServer().Register(
+		"/validate-billing-miloapis-com-v1alpha1-servicepricing-ownership",
+		admission.WithValidator[*billingv1alpha1.ServicePricing](
+			mgr.GetScheme(),
+			wh,
+		),
+	)
+	return nil
+}
+
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-meterdefinition-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=meterdefinitions,verbs=create;update;delete,versions=v1alpha1,name=vmeterdefinitionownership.kb.io,admissionReviewVersions=v1
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-monitoredresourcetype-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=monitoredresourcetypes,verbs=create;update;delete,versions=v1alpha1,name=vmonitoredresourcetypeownership.kb.io,admissionReviewVersions=v1
+// +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-servicepricing-ownership,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=servicepricings,verbs=create;update;delete,versions=v1alpha1,name=vservicepricingownership.kb.io,admissionReviewVersions=v1
 
 // ownershipWebhook rejects mutations to resources managed by the services
 // operator unless the requester IS the services operator service account.
@@ -82,7 +103,8 @@ func (w *ownershipWebhook[T]) ValidateDelete(ctx context.Context, obj T) (admiss
 // validateOwnership rejects the request when the object is managed by the
 // services operator but the caller is not the services operator service account.
 func (w *ownershipWebhook[T]) validateOwnership(ctx context.Context, obj T) (admission.Warnings, error) {
-	if obj.GetLabels()[ManagedByLabel] != ServicesOperatorValue {
+	managedBy := obj.GetLabels()[ManagedByLabel]
+	if managedBy != ServicesOperatorValue && managedBy != ServicesOperatorValueCurrent {
 		// Not managed by services operator; no ownership restriction.
 		return nil, nil
 	}
@@ -106,6 +128,6 @@ func (w *ownershipWebhook[T]) validateOwnership(ctx context.Context, obj T) (adm
 
 	return nil, fmt.Errorf(
 		"resource is managed by the services operator (label %s=%s); only %s may mutate it, got %s",
-		ManagedByLabel, ServicesOperatorValue, w.servicesOperatorSA, caller,
+		ManagedByLabel, managedBy, w.servicesOperatorSA, caller,
 	)
 }

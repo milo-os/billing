@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-billing-entitlement-viewer
+  annotations:
+    kubernetes.io/display-name: Billing Entitlement Viewer
+    kubernetes.io/description: "View access to all billing entitlement resources"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/billingentitlements.list
+    - billing.miloapis.com/billingentitlements.get
+    - billing.miloapis.com/billingentitlements.watch

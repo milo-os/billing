@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingEntitlement
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingentitlement-sample
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  offerRef:
+    name: standard-compute

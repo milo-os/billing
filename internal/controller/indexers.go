@@ -27,6 +27,13 @@ const (
 	// MeterDefinitionMeterNameField is the field index for looking up
 	// MeterDefinitions by their canonical meter name.
 	MeterDefinitionMeterNameField = "spec.meterName"
+
+	// BillingEntitlementOfferRefField indexes BillingEntitlements by offer name.
+	BillingEntitlementOfferRefField = ".spec.offerRef.name"
+
+	// BillingEntitlementBillingAccountRefField indexes BillingEntitlements by
+	// billing account name.
+	BillingEntitlementBillingAccountRefField = ".spec.billingAccountRef.name"
 )
 
 // AddIndexers adds field indexers to the manager for efficient lookups.
@@ -62,6 +69,30 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			invoice := obj.(*billingv1alpha1.Invoice)
 			return []string{invoice.Spec.BillingAccountRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingEntitlement{},
+		BillingEntitlementOfferRefField,
+		func(obj client.Object) []string {
+			be := obj.(*billingv1alpha1.BillingEntitlement)
+			return []string{be.Spec.OfferRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingEntitlement{},
+		BillingEntitlementBillingAccountRefField,
+		func(obj client.Object) []string {
+			be := obj.(*billingv1alpha1.BillingEntitlement)
+			return []string{be.Spec.BillingAccountRef.Name}
 		},
 	); err != nil {
 		return err

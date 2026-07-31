@@ -1,0 +1,98 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: billingentitlement-lifecycle
+spec:
+  description: |
+    Tests the BillingEntitlement lifecycle including:
+    - Creating a BillingAccount, GA Offer, and BillingEntitlement
+    - Entitlement becomes Ready with OfferAssigned
+    - Webhook rejects a second entitlement for the same billing account
+
+  steps:
+    - name: ensure-milo-system
+      description: Ensure milo-system exists for ServicePricing defaults.
+      try:
+        - script:
+            content: |
+              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: create-prerequisites
+      description: Create ServicePricing, Draft Offer, and BillingAccount.
+      try:
+        - create:
+            file: 01-create-servicepricing.yaml
+        - create:
+            file: 01-create-offer.yaml
+        - create:
+            file: 01-create-account.yaml
+
+    - name: publish-offer
+      description: Publish the Offer so it can be assigned via BillingEntitlement.
+      try:
+        - script:
+            content: |
+              kubectl patch offer e2e-be-standard-compute --type=merge --patch '{"spec":{"launchStage":"GA"}}'
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-be-standard-compute
+              spec:
+                launchStage: GA
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: OfferReady
+                  - type: Published
+                    status: "True"
+                    reason: OfferPublished
+
+    - name: create-entitlement
+      description: Create a BillingEntitlement binding the account to the GA Offer.
+      try:
+        - create:
+            file: 01-create-entitlement.yaml
+        - assert:
+            timeout: 60s
+            file: assertions/assert-ready.yaml
+
+    - name: reject-duplicate-entitlement
+      description: Verify a second BillingEntitlement for the same account is rejected.
+      try:
+        - create:
+            file: 02-create-duplicate-entitlement.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'already has billing entitlement')): true
+
+    - name: cleanup
+      description: Delete entitlement, offer, account, and ServicePricing.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingEntitlement
+              name: e2e-be-entitlement
+              namespace: default
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              name: e2e-be-standard-compute
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: e2e-be-account
+              namespace: default
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: ServicePricing
+              name: e2e-be-cpu-allocated
+              namespace: milo-system

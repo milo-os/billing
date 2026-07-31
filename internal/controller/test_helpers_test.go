@@ -98,7 +98,22 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 		return ctrl.Result{}, err
 	}
 
-	return ctrl.Result{}, r.client.Status().Update(ctx, &account)
+	desiredStatus := account.Status.DeepCopy()
+
+	// Refetch before status write so concurrent watches (PaymentMethod,
+	// Binding, Invoice) do not lose to stale ResourceVersions.
+	var latest billingv1alpha1.BillingAccount
+	if err := r.client.Get(ctx, req.NamespacedName, &latest); err != nil {
+		if apierrors.IsNotFound(err) {
+			return ctrl.Result{}, nil
+		}
+		return ctrl.Result{}, err
+	}
+	latest.Status = *desiredStatus
+	if err := r.client.Status().Update(ctx, &latest); err != nil {
+		return ctrl.Result{}, err
+	}
+	return ctrl.Result{}, nil
 }
 
 // testPaymentMethodReconciler is a test adapter that mirrors the

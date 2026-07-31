@@ -98,6 +98,26 @@ webhooks:
     service:
       name: billing-webhook
       namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-billingentitlement
+  failurePolicy: Fail
+  name: vbillingentitlement.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - billingentitlements
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-invoice
   failurePolicy: Fail
   name: vinvoice.kb.io
@@ -202,6 +222,26 @@ webhooks:
     service:
       name: billing-webhook
       namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-offer
+  failurePolicy: Fail
+  name: voffer.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - offers
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
       path: /validate-billing-miloapis-com-v1alpha1-paymentmethod
   failurePolicy: Fail
   name: vpaymentmethod.kb.io
@@ -236,4 +276,45 @@ webhooks:
     - UPDATE
     resources:
     - paymentmethodclasses
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-servicepricing
+  failurePolicy: Fail
+  name: vservicepricing.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - servicepricings
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-servicepricing-ownership
+  failurePolicy: Fail
+  name: vservicepricingownership.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    - DELETE
+    resources:
+    - servicepricings
   sideEffects: None
