@@ -100,6 +100,10 @@ underlying metering and rating implementation.
   callers already present to the Milo control plane, not a new shared secret.
 - Give `cloud-portal` and `staff-portal` a migration path off direct Amberflo
   access, ending with `AMBERFLO_API_KEY` / `amberfloApiKey` removed from both.
+- Ship `datumctl usage` in the same rollout wave as the endpoint — not a
+  deferred follow-up. The CLI is the first genuinely programmatic caller and
+  the clearest test that the API is provider-agnostic and self-serve-shaped,
+  not just a portal-shaped internal shim.
 
 ### Non-Goals
 
@@ -107,8 +111,10 @@ underlying metering and rating implementation.
   not present in this workspace; this document defines the interface contract
   it must satisfy, but the implementation is a companion change tracked
   separately.
-- **Implementing `datumctl usage`.** Tracked as a companion follow-up in
-  `datum-cloud/datumctl`.
+- **Writing the `datumctl usage` Go code itself.** Lives in
+  `datum-cloud/datumctl` ([companion issue][datumctl-usage-issue]), but is
+  scoped to ship alongside this endpoint, not after it — see
+  [Migration Path](#migration-path).
 - **Implementing the `cloud-portal` / `staff-portal` migration PRs.** Tracked
   as companion follow-ups in those repos.
 - **Platform-side usage aggregation or storage.** Already flagged as deferred
@@ -360,14 +366,18 @@ Milo IAM owners — see [Future Work](#future-work).
 ### Migration Path
 
 1. `billing usage-api` ships and is deployed alongside the gateway.
-2. `cloud-portal`'s `usage.server.ts` / `org-usage.server.ts` are rewritten to
+2. In the same wave, `datumctl` gains a `usage` subcommand calling the new
+   endpoint. It is the first caller to depend on nothing but the public API —
+   no session cookie, no portal BFF — and the cleanest way to validate the
+   endpoint's auth and response shape are self-serve-ready before the portals
+   migrate.
+3. `cloud-portal`'s `usage.server.ts` / `org-usage.server.ts` are rewritten to
    call the new endpoint instead of Amberflo's `/usage`; `AMBERFLO_API_KEY`
    and `amberfloApiKey` are removed from its environment once verified.
-3. `staff-portal`'s usage view follows the same migration.
-4. `datumctl` gains a `usage` subcommand calling the same endpoint.
+4. `staff-portal`'s usage view follows the same migration.
 
 Steps 2–4 are companion changes in their respective repos, not part of this
-enhancement's implementation.
+enhancement's implementation, but 2 ships alongside 1 rather than after it.
 
 ## Implementation History
 
@@ -429,6 +439,7 @@ keeps the credential off every caller's machine.
 - [Usage Metering runbook][runbook]
 - [Emitting Usage guide][emitting-usage]
 - [FinOps FOCUS v1.3][focus]
+- [`datumctl usage` companion issue][datumctl-usage-issue]
 
 [cloudflare-post]: https://blog.cloudflare.com/billable-usage-api/
 [usage-pipeline]: ./usage-pipeline.md
@@ -436,4 +447,5 @@ keeps the credential off every caller's machine.
 [runbook]: ../runbooks/usage-metering.md
 [runbook-lag]: ../runbooks/usage-metering.md#4-provider-lag
 [emitting-usage]: ../emitting-usage.md
+[datumctl-usage-issue]: https://github.com/datum-cloud/datumctl/issues/266
 [focus]: https://focus.finops.org
