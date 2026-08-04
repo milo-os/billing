@@ -284,15 +284,6 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				if err = billingwebhooks.SetupBillingEntitlementWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating BillingEntitlement webhook: %w", err)
 				}
-				if err = billingwebhooks.SetupMeterDefinitionOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
-					return fmt.Errorf("creating MeterDefinitionOwnership webhook: %w", err)
-				}
-				if err = billingwebhooks.SetupMonitoredResourceTypeOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
-					return fmt.Errorf("creating MonitoredResourceTypeOwnership webhook: %w", err)
-				}
-				if err = billingwebhooks.SetupServicePricingOwnershipWebhookWithManager(mgr, "system:serviceaccount:services-system:services-operator"); err != nil {
-					return fmt.Errorf("creating ServicePricingOwnership webhook: %w", err)
-				}
 			}
 
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
