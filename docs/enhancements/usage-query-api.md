@@ -20,6 +20,8 @@ latest-milestone: "v0"
 - [Design Details](#design-details)
   - [API Surface](#api-surface)
   - [Response Schema](#response-schema)
+    - [Field Inventory: What Every Current Portal Field Maps To](#field-inventory-what-every-current-portal-field-maps-to)
+    - [Provider Portability Guarantee](#provider-portability-guarantee)
   - [Server Architecture](#server-architecture)
   - [Provider Query Interface](#provider-query-interface)
   - [Authentication](#authentication)
@@ -90,6 +92,12 @@ underlying metering and rating implementation.
 - Ship a new, authenticated `GET` endpoint on the billing service, scoped by
   billing account, that returns normalized usage rows — no caller needs to
   know Amberflo exists.
+- **Field-complete relative to what the portals show today.** Every field
+  `cloud-portal`/`staff-portal` currently surface from Amberflo has a home in
+  the normalized schema (see [Field Inventory](#field-inventory-what-every-current-portal-field-maps-to))
+  so the migration is not a regression, and no provider-specific identifier
+  (Amberflo's `meterApiName`/`customerId`) leaks into the public response —
+  see [Provider Portability Guarantee](#provider-portability-guarantee).
 - Keep the billing service itself provider-agnostic: it never holds an
   Amberflo credential. It calls a new **internal** query interface that
   `amberflo-provider` implements, symmetric with how the write path already
@@ -266,6 +274,7 @@ Query parameters:
 | `to` | No | End of the time range (RFC 3339). Defaults to now. |
 | `project` | No | Scope to a single project bound to this billing account. |
 | `meter` | No | Scope to a single `MeterDefinition.spec.meterName`. Repeatable. |
+| `groupBy` | No | A dimension key declared on the meter (e.g. `region`). When set, rows fan out one per distinct value, replacing today's separate `fetchMeterBreakdown` round-trip. |
 
 Modeled on Cloudflare's `GET
 /accounts/$ACCOUNT_ID/billable-usage?from=...&to=...` — a single resource
@@ -281,12 +290,17 @@ Field names borrow from FOCUS, matching the precedent already set by
   "result": [
     {
       "meterName": "compute.miloapis.com/instance/cpu-seconds",
-      "serviceName": "Compute",
       "displayName": "CPU Seconds",
+      "description": "Total vCPU-seconds consumed by an instance.",
+      "serviceId": "compute.miloapis.com",
+      "serviceName": "Compute",
       "chargePeriodStart": "2026-08-01T00:00:00Z",
       "chargePeriodEnd": "2026-08-02T00:00:00Z",
       "consumedQuantity": 86400,
+      "unit": "s",
+      "aggregation": "Sum",
       "consumedUnit": "s",
+      "pricingUnit": "h",
       "dimensions": { "region": "us-east-1" },
       "projectId": "p-abc",
       "contractedCost": null,
@@ -296,19 +310,74 @@ Field names borrow from FOCUS, matching the precedent already set by
 }
 ```
 
-- `meterName` / `displayName` — from the `MeterDefinition` catalog, not
-  Amberflo's `meterApiName` (`metadata.uid`). Callers never see the provider's
-  internal ID.
-- `serviceName` — derived from the meter name's reverse-DNS prefix, the same
-  derivation `cloud-portal` does today (`serviceDomainFromMeterName` /
+- `meterName` / `displayName` / `description` — from the `MeterDefinition`
+  catalog, not Amberflo's `meterApiName` (`metadata.uid`). Callers never see
+  the provider's internal ID.
+- `serviceId` / `serviceName` — the meter name's reverse-DNS prefix and its
+  humanized title (`compute.miloapis.com` → `Compute`), the same derivation
+  `cloud-portal` does today (`serviceDomainFromMeterName` /
   `humanizeServiceGroup` in `usage.server.ts`), moved server-side so every
-  caller gets the same value.
+  caller gets the same value instead of each frontend re-deriving it.
 - `chargePeriodStart` / `chargePeriodEnd` — one row per charge period
   (daily, matching Amberflo's current granularity and Cloudflare's stated v0
-  granularity for most products).
-  `contractedCost` / `billingCurrency` — reserved, `null` until pricing ships.
+  granularity for most products). A caller reconstructs a time series for a
+  meter by sorting its rows by `chargePeriodStart`.
+- `unit` / `aggregation` — `MeterDefinition.spec.measurement.unit` (UCUM) and
+  `.aggregation` (`Sum`, `Max`, …). This is the field the portals currently
+  display as "unit" — it is catalog data, not an Amberflo response field, so
+  it is already provider-agnostic today.
+- `consumedUnit` / `pricingUnit` — `MeterDefinition.spec.billing`'s FOCUS
+  fields, included for exports/alignment even where they match `unit` 1:1.
+- `contractedCost` / `billingCurrency` — reserved, `null` until pricing ships.
+- `dimensions` — the group's dimension key/value map for this row (Amberflo's
+  `group.groupInfo`, normalized). Querying with a `groupBy` dimension fans a
+  meter out into one row set per distinct value, mirroring today's
+  `fetchMeterBreakdown` — a caller reconstructs a breakdown by grouping
+  returned rows on `dimensions[<key>]`.
 - `projectId` — present only when the query is scoped to a project or the
-  underlying meter carries the platform's `project_name` dimension.
+  underlying meter carries the platform's `project_name` system dimension
+  (`MeterDefinition.status.systemDimensions`).
+
+#### Field Inventory: What Every Current Portal Field Maps To
+
+Audited against `cloud-portal`'s and `staff-portal`'s `MeterSeries` /
+`UsageFetchResult` types (identical shape in both) to confirm nothing
+currently shown to a user is lost in the migration:
+
+| Portal field today | Sourced from | Normalized field |
+|---|---|---|
+| `meterApiName` | Amberflo (`metadata.uid`) | **Dropped by design** — provider-specific. Replaced by `meterName`, which is stable across providers. |
+| `meterName` | `MeterDefinition.spec.meterName` | `meterName` |
+| `label` | portal-computed | `displayName` |
+| `values[].{timestamp,value}` | Amberflo `/usage` response | one row per `{chargePeriodStart, consumedQuantity}` |
+| `description` | `MeterDefinition.spec.description` | `description` |
+| `unit` | `MeterDefinition.spec.measurement.unit` | `unit` |
+| `aggregation` | `MeterDefinition.spec.measurement.aggregation` | `aggregation` |
+| `dimensions` (declared keys) | `MeterDefinition.spec.measurement.dimensions` | not repeated per row — already provider-agnostic catalog data, available from the existing `MeterDefinition` list |
+| `groupId` / `groupTitle` | portal-computed from `meterName` | `serviceId` / `serviceName` |
+| `limit` / `used` | `AllowanceBucket` (quota system) | **Out of scope**, unchanged — see [Non-Goals](#non-goals). Not usage data, and not provider-affected. |
+| `breakdowns[].series[].{groupValue,values}` | Amberflo `/usage` `group.groupInfo` | rows with `dimensions[<key>] == groupValue`, grouped client-side |
+| `UsageGroup{id,title,meterApiNames}` | portal-computed | unchanged — derivable from `serviceId`/`serviceName` across returned rows, or from the `MeterDefinition` list directly |
+| `status` (`unconfigured`, `no-billing-account`, …) | portal-computed | **Out of scope** — an HTTP error/status code from this endpoint (e.g. `404` for no billing account) replaces the ad hoc enum; portals map it to their own UI state |
+| `billingCycles` / `selectedBillingCycle` | `BillingAccount.spec.paymentTerms` | unchanged — already a provider-agnostic CRD read, not usage data |
+
+The only fields genuinely sourced from Amberflo today are the raw
+`{timestamp, value}` points and the dimension `groupInfo` map — everything
+else already comes from Datum's own `MeterDefinition` catalog or portal-side
+computation. Those two are exactly what `chargePeriodStart/End` +
+`consumedQuantity` + `dimensions` normalize, which is the whole surface a
+provider swap could otherwise break.
+
+#### Provider Portability Guarantee
+
+No field in this response may be a provider-specific identifier or shape.
+Concretely: `meterApiName` and `customerId` (Amberflo's internal IDs) never
+appear in the public response — only `meterName` (Datum's own catalog key)
+and `billingAccountId` (already the request's path parameter) do. If
+Amberflo is replaced, `amberflo-provider`'s successor implements the same
+[Provider Query Interface](#provider-query-interface) and every field in this
+schema keeps meaning exactly what it means today — a caller cannot detect the
+swap from the response shape.
 
 ### Server Architecture
 
