@@ -9,7 +9,12 @@ package v1alpha1
 //
 // PricingRate is a single rate entry. Exactly one of Flat or Tiered must
 // be set. An optional Match filters the rate by dimension value; the last
-// unmatched entry is the default catch-all.
+// unmatched entry is the default catch-all in Milo.
+//
+// Note: the Amberflo provider cannot materialize mixed match + unmatched
+// catch-all rates today (DimensionMatrixNode has no default bucket). When
+// targeting that backend, price every dimension value explicitly — use a
+// sentinel match value the meter emits (e.g. "other") for fallbacks.
 type PricingRateApplyConfiguration struct {
 	// Match optionally restricts this rate to a single dimension value.
 	Match *DimensionMatchApplyConfiguration `json:"match,omitempty"`
