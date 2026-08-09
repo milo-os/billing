@@ -15,6 +15,10 @@ spec:
   # never created and any downstream GrantCreationPolicy that targets
   # that resourceType stays stuck InProgress.
   phase: Published
+  # Do NOT set spec.charges or spec.defaultOffer in this Flux-managed
+  # manifest. staff-portal owns those fields via merge-patch
+  # (fieldManager datum-staff-portal). Including them here would let
+  # Flux reclaim ownership and wipe portal edits on reconcile.
   # Quota-only metric used by the BillingAccount-per-Organization
   # ceiling below. No billing.consumerDestinations entry: we are not
   # charging customers for the count of their BillingAccounts; the
