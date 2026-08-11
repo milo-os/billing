@@ -185,8 +185,12 @@ func isDraftToGATransition(oldOffer, newOffer *billingv1alpha1.Offer) bool {
 	return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
 }
 
-// isControllerSnapshotFill reports GA→GA with empty→non-empty servicePricings
+// IsControllerSnapshotFill reports GA→GA with empty→non-empty servicePricings
 // and no other spec changes.
+func IsControllerSnapshotFill(oldOffer, newOffer *billingv1alpha1.Offer) bool {
+	return isControllerSnapshotFill(oldOffer, newOffer)
+}
+
 func isControllerSnapshotFill(oldOffer, newOffer *billingv1alpha1.Offer) bool {
 	if oldOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA ||
 		newOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA {
