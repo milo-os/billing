@@ -46,6 +46,9 @@ spec:
           - --leader-elect-namespace=kube-system
           - --health-probe-bind-address=:8081
           - --server-config=/config/config.yaml
+          - --leader-elect-lease-duration=30s
+          - --leader-elect-renew-deadline=20s
+          - --leader-elect-retry-period=5s
         image: ghcr.io/milo-os/billing:dev
         name: manager
         ports:
@@ -89,7 +92,7 @@ spec:
           mountPath: /etc/nats-certs
           readOnly: true
       serviceAccountName: billing-controller-manager
-      terminationGracePeriodSeconds: 10
+      terminationGracePeriodSeconds: 60
       volumes:
       - name: config
         configMap:

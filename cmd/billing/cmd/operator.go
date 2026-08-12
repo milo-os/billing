@@ -54,10 +54,13 @@ func init() {
 
 func newOperatorCommand(info BuildInfo) *cobra.Command {
 	var (
-		enableLeaderElection    bool
-		leaderElectionNamespace string
-		probeAddr               string
-		serverConfigFile        string
+		enableLeaderElection        bool
+		leaderElectionNamespace     string
+		probeAddr                   string
+		serverConfigFile            string
+		leaderElectionLeaseDuration time.Duration
+		leaderElectionRenewDeadline time.Duration
+		leaderElectionRetryPeriod   time.Duration
 	)
 
 	opts := zap.Options{
@@ -134,6 +137,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				LeaderElection:          enableLeaderElection,
 				LeaderElectionID:        "billing.miloapis.com",
 				LeaderElectionNamespace: leaderElectionNamespace,
+				LeaseDuration:           &leaderElectionLeaseDuration,
+				RenewDeadline:           &leaderElectionRenewDeadline,
+				RetryPeriod:             &leaderElectionRetryPeriod,
 			})
 			if err != nil {
 				return fmt.Errorf("starting manager: %w", err)
@@ -307,6 +313,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			"Enabling this will ensure there is only one active controller manager.")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-elect-namespace", "", "The namespace to use for leader election.")
 	cmd.Flags().StringVar(&serverConfigFile, "server-config", "", "Path to the server config file.")
+	cmd.Flags().DurationVar(&leaderElectionLeaseDuration, "leader-elect-lease-duration", 15*time.Second, "The duration that non-leader candidates will wait after observing a leadership renewal before attempting to acquire leadership of a led but renewed leader slot.")
+	cmd.Flags().DurationVar(&leaderElectionRenewDeadline, "leader-elect-renew-deadline", 10*time.Second, "The interval between attempts by the acting master to renew a leadership slot before it steps down.")
+	cmd.Flags().DurationVar(&leaderElectionRetryPeriod, "leader-elect-retry-period", 2*time.Second, "The duration the clients should wait between attempts to acquire or renew a leadership.")
 
 	// zap.Options.BindFlags accepts *flag.FlagSet (stdlib). Bridge via pflag's
 	// AddGoFlagSet so the zap flags are surfaced on the cobra command.
