@@ -15,9 +15,13 @@ import (
 // OfferUpdateOptions carries admission context for Offer update validation.
 type OfferUpdateOptions struct {
 	// AllowSnapshotWrite permits the one-time empty→populated servicePricings
-	// fill. Only the billing operator service account should set this.
+	// fill. Set when the caller holds billing.miloapis.com/offers.writeSnapshot
+	// (verified via SubjectAccessReview in the Offer webhook).
 	AllowSnapshotWrite bool
 }
+
+// OfferSnapshotWriteVerb is the IAM verb for populating spec.servicePricings on publish.
+const OfferSnapshotWriteVerb = "writeSnapshot"
 
 // ValidateOfferCreate validates an Offer on creation.
 // servicePricings must be empty: the Offer reconciler owns the snapshot.

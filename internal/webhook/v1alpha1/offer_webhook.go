@@ -4,11 +4,15 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/validation"
@@ -16,29 +20,9 @@ import (
 
 var offerLog = logf.Log.WithName("offer-webhook")
 
-const (
-	// BillingControllerServiceAccount is the in-cluster identity when the
-	// operator uses the default kubeconfig (local dev, e2e).
-	BillingControllerServiceAccount = "system:serviceaccount:billing-system:billing-controller-manager"
-	// BillingMiloControlUser is the Milo client cert CN used when the operator
-	// reconciles against the Milo apiserver (staging/prod milo-integration).
-	BillingMiloControlUser = "system:control@billing.miloapis.com"
-)
-
-// DefaultOfferSnapshotWriters returns identities allowed to write the one-time
-// servicePricings snapshot on publish.
-func DefaultOfferSnapshotWriters() []string {
-	return []string{BillingControllerServiceAccount, BillingMiloControlUser}
-}
-
 // SetupOfferWebhookWithManager registers the Offer webhook with the manager.
-// snapshotWriters lists admission usernames allowed to write the one-time
-// servicePricings snapshot (see DefaultOfferSnapshotWriters).
-func SetupOfferWebhookWithManager(mgr ctrl.Manager, snapshotWriters ...string) error {
-	if len(snapshotWriters) == 0 {
-		snapshotWriters = DefaultOfferSnapshotWriters()
-	}
-	webhook := &offerWebhook{snapshotWriters: snapshotWriters}
+func SetupOfferWebhookWithManager(mgr ctrl.Manager) error {
+	webhook := &offerWebhook{Client: mgr.GetClient()}
 
 	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.Offer{}).
 		WithValidator(webhook).
@@ -48,19 +32,47 @@ func SetupOfferWebhookWithManager(mgr ctrl.Manager, snapshotWriters ...string) e
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-offer,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=offers,verbs=create;update,versions=v1alpha1,name=voffer.kb.io,admissionReviewVersions=v1
 
 type offerWebhook struct {
-	snapshotWriters []string
-}
-
-func (r *offerWebhook) allowsSnapshotWrite(username string) bool {
-	for _, allowed := range r.snapshotWriters {
-		if username == allowed {
-			return true
-		}
-	}
-	return false
+	client.Client
 }
 
 var _ admission.Validator[*billingv1alpha1.Offer] = &offerWebhook{}
+
+// callerCanWriteSnapshot reports whether the admission caller holds
+// billing.miloapis.com/offers.writeSnapshot. The controller's identity is
+// determined by IAM authorization, not by comparing usernames in the webhook.
+func (r *offerWebhook) callerCanWriteSnapshot(ctx context.Context, user authenticationv1.UserInfo, offerName string) (bool, error) {
+	sar := &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Verb:     validation.OfferSnapshotWriteVerb,
+				Group:    billingv1alpha1.GroupVersion.Group,
+				Resource: "offers",
+				Name:     offerName,
+			},
+			User:   user.Username,
+			Groups: user.Groups,
+			UID:    user.UID,
+			Extra:  convertAuthExtra(user.Extra),
+		},
+	}
+	if err := r.Create(ctx, sar); err != nil {
+		offerLog.Error(err, "failed to evaluate SubjectAccessReview for Offer snapshot write",
+			"offer", offerName, "user", user.Username)
+		return false, fmt.Errorf("couldn't verify permissions to write Offer pricing snapshot: %w", err)
+	}
+	return sar.Status.Allowed, nil
+}
+
+func convertAuthExtra(in map[string]authenticationv1.ExtraValue) map[string]authorizationv1.ExtraValue {
+	if len(in) == 0 {
+		return nil
+	}
+	out := make(map[string]authorizationv1.ExtraValue, len(in))
+	for k, v := range in {
+		out[k] = authorizationv1.ExtraValue(v)
+	}
+	return out
+}
 
 // ValidateCreate implements admission.Validator.
 func (r *offerWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.Offer) (admission.Warnings, error) {
@@ -82,16 +94,23 @@ func (r *offerWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billi
 	offerLog.Info("validating update", "name", newObj.GetName())
 
 	opts := validation.OfferUpdateOptions{}
-	if req, err := admission.RequestFromContext(ctx); err != nil {
-		offerLog.Error(err, "failed to retrieve admission request; denying snapshot writes")
-	} else if r.allowsSnapshotWrite(req.UserInfo.Username) {
-		opts.AllowSnapshotWrite = true
-	} else if validation.IsControllerSnapshotFill(oldObj, newObj) {
-		offerLog.Info(
-			"denying servicePricings snapshot write from unexpected user",
-			"username", req.UserInfo.Username,
-			"allowed", r.snapshotWriters,
-		)
+	if validation.IsControllerSnapshotFill(oldObj, newObj) {
+		req, err := admission.RequestFromContext(ctx)
+		if err != nil {
+			offerLog.Error(err, "failed to retrieve admission request; denying snapshot writes")
+		} else {
+			allowed, sarErr := r.callerCanWriteSnapshot(ctx, req.UserInfo, newObj.GetName())
+			switch {
+			case sarErr != nil:
+				offerLog.Error(sarErr, "denying servicePricings snapshot write; authorization check failed",
+					"offer", newObj.GetName(), "user", req.UserInfo.Username)
+			case allowed:
+				opts.AllowSnapshotWrite = true
+			default:
+				offerLog.Info("denying servicePricings snapshot write; caller lacks offers.writeSnapshot",
+					"offer", newObj.GetName(), "user", req.UserInfo.Username)
+			}
+		}
 	}
 
 	if errs := validation.ValidateOfferUpdate(oldObj, newObj, opts); len(errs) > 0 {
