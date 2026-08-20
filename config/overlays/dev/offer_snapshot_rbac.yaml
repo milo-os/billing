@@ -1,0 +1,26 @@
+# KinD e2e has no Milo IAM authorizer, so SubjectAccessReview for the custom
+# offers.writeSnapshot verb must be satisfied via native RBAC instead.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: billing-offer-snapshot-writer
+rules:
+  - apiGroups:
+      - billing.miloapis.com
+    resources:
+      - offers
+    verbs:
+      - writeSnapshot
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: billing-offer-snapshot-writer
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: billing-offer-snapshot-writer
+subjects:
+  - kind: ServiceAccount
+    name: billing-controller-manager
+    namespace: billing-system
