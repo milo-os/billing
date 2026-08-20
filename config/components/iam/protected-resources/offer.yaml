@@ -16,3 +16,4 @@ spec:
     - patch
     - delete
     - watch
+    - writeSnapshot

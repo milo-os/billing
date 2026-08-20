@@ -15,9 +15,13 @@ import (
 // OfferUpdateOptions carries admission context for Offer update validation.
 type OfferUpdateOptions struct {
 	// AllowSnapshotWrite permits the one-time empty→populated servicePricings
-	// fill. Only the billing operator service account should set this.
+	// fill. Set when the caller holds billing.miloapis.com/offers.writeSnapshot
+	// (verified via SubjectAccessReview in the Offer webhook).
 	AllowSnapshotWrite bool
 }
+
+// OfferSnapshotWriteVerb is the IAM verb for populating spec.servicePricings on publish.
+const OfferSnapshotWriteVerb = "writeSnapshot"
 
 // ValidateOfferCreate validates an Offer on creation.
 // servicePricings must be empty: the Offer reconciler owns the snapshot.
@@ -185,8 +189,12 @@ func isDraftToGATransition(oldOffer, newOffer *billingv1alpha1.Offer) bool {
 	return apiequality.Semantic.DeepEqual(oldSpec, newSpec)
 }
 
-// isControllerSnapshotFill reports GA→GA with empty→non-empty servicePricings
+// IsControllerSnapshotFill reports GA→GA with empty→non-empty servicePricings
 // and no other spec changes.
+func IsControllerSnapshotFill(oldOffer, newOffer *billingv1alpha1.Offer) bool {
+	return isControllerSnapshotFill(oldOffer, newOffer)
+}
+
 func isControllerSnapshotFill(oldOffer, newOffer *billingv1alpha1.Offer) bool {
 	if oldOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA ||
 		newOffer.Spec.LaunchStage != billingv1alpha1.OfferLaunchStageGA {

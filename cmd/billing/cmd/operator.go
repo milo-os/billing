@@ -278,7 +278,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				if err = billingwebhooks.SetupServicePricingWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating ServicePricing webhook: %w", err)
 				}
-				if err = billingwebhooks.SetupOfferWebhookWithManager(mgr, "system:serviceaccount:billing-system:billing-controller-manager"); err != nil {
+				if err = billingwebhooks.SetupOfferWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating Offer webhook: %w", err)
 				}
 				if err = billingwebhooks.SetupBillingEntitlementWebhookWithManager(mgr); err != nil {

@@ -13,6 +13,7 @@ resources:
   - monitored-resource-type-admin.yaml
   - monitored-resource-type-viewer.yaml
   - offer-admin.yaml
+  - offer-operator.yaml
   - offer-viewer.yaml
   - payment-method-class-admin.yaml
   - payment-method-class-viewer.yaml

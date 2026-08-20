@@ -1,0 +1,11 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-offer-operator
+  annotations:
+    kubernetes.io/display-name: Offer Operator
+    kubernetes.io/description: "Allows the billing controller to write the one-time servicePricings snapshot when an Offer is published."
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/offers.writeSnapshot

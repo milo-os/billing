@@ -10,6 +10,7 @@ resources:
   - ../../base/certmanager
   - ../../base/gateway
   - gateway_metrics_auth_role_binding.yaml
+  - offer_snapshot_rbac.yaml
 
 components:
   - ../../components/namespace
