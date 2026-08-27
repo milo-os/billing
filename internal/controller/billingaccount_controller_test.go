@@ -96,6 +96,9 @@ var _ = Describe("BillingAccount Controller", func() {
 
 			// Create a binding - the binding controller will set it to Active,
 			// which triggers the account controller to update linkedProjectsCount
+			project := newTestProject("project-count")
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-count-binding",
@@ -103,7 +106,7 @@ var _ = Describe("BillingAccount Controller", func() {
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "test-count-acct"},
-					ProjectRef:        billingv1alpha1.ProjectRef{Name: "project-count"},
+					ProjectRef:        billingv1alpha1.ProjectRef{Name: project.Name},
 				},
 			}
 			Expect(k8sClient.Create(ctx, binding)).To(Succeed())

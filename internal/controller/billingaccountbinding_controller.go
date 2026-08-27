@@ -12,10 +12,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
 const (
@@ -31,6 +33,7 @@ type BillingAccountBindingReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings/finalizers,verbs=update
+// +kubebuilder:rbac:groups=resourcemanager.miloapis.com,resources=projects,verbs=get;list;watch
 
 func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -48,6 +51,25 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req rec
 		return ctrl.Result{}, nil
 	}
 	if binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
+		return ctrl.Result{}, nil
+	}
+
+	// The project this binding refers to may already be gone, or terminating.
+	// Either way there's nothing left to bind, so drop the binding rather than
+	// let it sit around pointing at nothing.
+	var project resourcemanagerv1alpha1.Project
+	err := r.client.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, fmt.Errorf("failed to fetch project for binding: %w", err)
+	}
+	if apierrors.IsNotFound(err) || !project.DeletionTimestamp.IsZero() {
+		if err := r.client.Delete(ctx, &binding); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, fmt.Errorf("failed to delete binding for deleted project: %w", err)
+		}
+		logger.Info("deleted binding for a project that no longer exists",
+			"project", binding.Spec.ProjectRef.Name,
+			"account", binding.Spec.BillingAccountRef.Name,
+		)
 		return ctrl.Result{}, nil
 	}
 
@@ -171,5 +193,35 @@ func (r *BillingAccountBindingReconciler) SetupWithManager(mgr ctrl.Manager) err
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccountbinding").
 		For(&billingv1alpha1.BillingAccountBinding{}).
+		Watches(
+			&resourcemanagerv1alpha1.Project{},
+			handler.EnqueueRequestsFromMapFunc(r.bindingRequestsForProject),
+		).
 		Complete(r)
+}
+
+// bindingRequestsForProject maps a Project event back to the bindings that
+// reference it, so a project being deleted (or starting to terminate)
+// re-triggers them.
+func (r *BillingAccountBindingReconciler) bindingRequestsForProject(ctx context.Context, obj client.Object) []reconcile.Request {
+	project, ok := obj.(*resourcemanagerv1alpha1.Project)
+	if !ok {
+		return nil
+	}
+
+	var bindingList billingv1alpha1.BillingAccountBindingList
+	if err := r.client.List(ctx, &bindingList,
+		client.MatchingFields{BindingProjectRefField: project.Name},
+	); err != nil {
+		log.FromContext(ctx).Error(err, "failed to list bindings for project watch", "project", project.Name)
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(bindingList.Items))
+	for i := range bindingList.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&bindingList.Items[i]),
+		})
+	}
+	return requests
 }

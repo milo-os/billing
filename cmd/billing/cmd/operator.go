@@ -31,6 +31,7 @@ import (
 	"go.miloapis.com/billing/internal/controller"
 	"go.miloapis.com/billing/internal/controller/consumer"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
 var (
@@ -50,6 +51,7 @@ func init() {
 	utilruntime.Must(config.AddToScheme(scheme))
 	utilruntime.Must(config.RegisterDefaults(scheme))
 	utilruntime.Must(billingv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(resourcemanagerv1alpha1.AddToScheme(scheme))
 }
 
 func newOperatorCommand(info BuildInfo) *cobra.Command {

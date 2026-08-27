@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
 // testBillingAccountReconciler is a test adapter for envtest that exercises
@@ -236,6 +237,21 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, nil
 	}
 
+	// Mirrors BillingAccountBindingReconciler.Reconcile's project check. Keep
+	// the two in sync: this adapter doesn't call the production reconciler,
+	// so drift here means a passing test that doesn't prove anything.
+	var project resourcemanagerv1alpha1.Project
+	err := r.client.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
+	if err != nil && !apierrors.IsNotFound(err) {
+		return ctrl.Result{}, err
+	}
+	if apierrors.IsNotFound(err) || !project.DeletionTimestamp.IsZero() {
+		if err := r.client.Delete(ctx, &binding); err != nil && !apierrors.IsNotFound(err) {
+			return ctrl.Result{}, err
+		}
+		return ctrl.Result{}, nil
+	}
+
 	// Set billing responsibility
 	if binding.Status.BillingResponsibility == nil {
 		binding.Status.BillingResponsibility = &billingv1alpha1.BillingResponsibility{}
@@ -309,6 +325,29 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 	})
 
 	return ctrl.Result{}, r.client.Status().Update(ctx, &binding)
+}
+
+// requestsForProject mirrors BillingAccountBindingReconciler.bindingRequestsForProject.
+func (r *testBillingAccountBindingReconciler) requestsForProject(ctx context.Context, obj client.Object) []reconcile.Request {
+	project, ok := obj.(*resourcemanagerv1alpha1.Project)
+	if !ok {
+		return nil
+	}
+
+	var bindingList billingv1alpha1.BillingAccountBindingList
+	if err := r.client.List(ctx, &bindingList,
+		client.MatchingFields{BindingProjectRefField: project.Name},
+	); err != nil {
+		return nil
+	}
+
+	requests := make([]reconcile.Request, 0, len(bindingList.Items))
+	for i := range bindingList.Items {
+		requests = append(requests, reconcile.Request{
+			NamespacedName: client.ObjectKeyFromObject(&bindingList.Items[i]),
+		})
+	}
+	return requests
 }
 
 // reconcileAccountFromBinding returns an event handler that enqueues the
