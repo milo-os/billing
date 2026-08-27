@@ -221,7 +221,8 @@ func (r *testBillingAccountReconciler) countActiveBindings(ctx context.Context, 
 
 // testBillingAccountBindingReconciler is a test adapter for envtest.
 type testBillingAccountBindingReconciler struct {
-	client client.Client
+	client        client.Client
+	projectReader client.Reader
 }
 
 func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
@@ -233,7 +234,7 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 		return ctrl.Result{}, err
 	}
 
-	if !binding.DeletionTimestamp.IsZero() || binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
+	if !binding.DeletionTimestamp.IsZero() {
 		return ctrl.Result{}, nil
 	}
 
@@ -241,7 +242,7 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 	// the two in sync: this adapter doesn't call the production reconciler,
 	// so drift here means a passing test that doesn't prove anything.
 	var project resourcemanagerv1alpha1.Project
-	err := r.client.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
+	err := r.projectReader.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return ctrl.Result{}, err
 	}
@@ -249,6 +250,10 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 		if err := r.client.Delete(ctx, &binding); err != nil && !apierrors.IsNotFound(err) {
 			return ctrl.Result{}, err
 		}
+		return ctrl.Result{}, nil
+	}
+
+	if binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
 		return ctrl.Result{}, nil
 	}
 

@@ -11,9 +11,12 @@ import (
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -28,6 +31,13 @@ const (
 // BillingAccountBindingReconciler reconciles a BillingAccountBinding object.
 type BillingAccountBindingReconciler struct {
 	client client.Client
+
+	// projectReader reads Project directly from the API server rather than
+	// the manager's cache. A binding for a project created moments earlier
+	// can otherwise race the cache's informer: reading Project through the
+	// cache can return NotFound before the ADD event lands, which would
+	// delete a binding that is actually fine.
+	projectReader client.Reader
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch;create;update;patch;delete
@@ -46,19 +56,20 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req rec
 		return ctrl.Result{}, err
 	}
 
-	// Skip if being deleted or already superseded
+	// Skip if being deleted
 	if !binding.DeletionTimestamp.IsZero() {
-		return ctrl.Result{}, nil
-	}
-	if binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
 		return ctrl.Result{}, nil
 	}
 
 	// The project this binding refers to may already be gone, or terminating.
 	// Either way there's nothing left to bind, so drop the binding rather than
-	// let it sit around pointing at nothing.
+	// let it sit around pointing at nothing. This check runs even for an
+	// already-Superseded binding: superseded bindings for a deleted project
+	// are exactly as stale as active ones and would otherwise never be
+	// cleaned up. Read Project directly rather than through the cache; see
+	// the projectReader field doc for why.
 	var project resourcemanagerv1alpha1.Project
-	err := r.client.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
+	err := r.projectReader.Get(ctx, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
 	if err != nil && !apierrors.IsNotFound(err) {
 		return ctrl.Result{}, fmt.Errorf("failed to fetch project for binding: %w", err)
 	}
@@ -70,6 +81,12 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req rec
 			"project", binding.Spec.ProjectRef.Name,
 			"account", binding.Spec.BillingAccountRef.Name,
 		)
+		return ctrl.Result{}, nil
+	}
+
+	// Skip the rest for an already-superseded binding: its project exists,
+	// so there's nothing stale to clean up, and it shouldn't be reactivated.
+	if binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
 		return ctrl.Result{}, nil
 	}
 
@@ -186,9 +203,23 @@ func (r *BillingAccountBindingReconciler) supersedeOlderBindings(
 	return nil
 }
 
+// projectTerminatingOrDeleted matches a Project Update where deletion just
+// started, or a Delete. Anything else (e.g. a status condition flipping) has
+// no bearing on whether a binding should be cleaned up, so there's no reason
+// to reconcile every binding on that project on every such event.
+var projectTerminatingOrDeleted = predicate.Funcs{
+	CreateFunc: func(event.CreateEvent) bool { return false },
+	DeleteFunc: func(event.DeleteEvent) bool { return true },
+	UpdateFunc: func(e event.UpdateEvent) bool {
+		return !e.ObjectNew.GetDeletionTimestamp().IsZero()
+	},
+	GenericFunc: func(event.GenericEvent) bool { return false },
+}
+
 // SetupWithManager sets up the controller with the Manager.
 func (r *BillingAccountBindingReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
+	r.projectReader = mgr.GetAPIReader()
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccountbinding").
@@ -196,6 +227,7 @@ func (r *BillingAccountBindingReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(
 			&resourcemanagerv1alpha1.Project{},
 			handler.EnqueueRequestsFromMapFunc(r.bindingRequestsForProject),
+			builder.WithPredicates(projectTerminatingOrDeleted),
 		).
 		Complete(r)
 }

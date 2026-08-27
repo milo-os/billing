@@ -11,6 +11,7 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -131,12 +132,16 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	// Register BillingAccountBinding controller
-	bindingReconciler := &testBillingAccountBindingReconciler{client: mgr.GetClient()}
+	bindingReconciler := &testBillingAccountBindingReconciler{
+		client:        mgr.GetClient(),
+		projectReader: mgr.GetAPIReader(),
+	}
 	err = ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccountbinding-test").
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		Watches(&resourcemanagerv1alpha1.Project{},
 			handler.EnqueueRequestsFromMapFunc(bindingReconciler.requestsForProject),
+			builder.WithPredicates(projectTerminatingOrDeleted),
 		).
 		Complete(bindingReconciler)
 	Expect(err).NotTo(HaveOccurred())
