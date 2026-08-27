@@ -227,6 +227,7 @@ tasks:
         echo "🏗️  Stage 1: Deploying Base Dependencies (NATS & Vector)"
         echo "----------------------------------------------------------------------"
         task test-infra:kubectl -- apply -k config/dependencies/nats
+        task test-infra:kubectl -- apply -k config/dependencies/resourcemanager
         task test-infra:kubectl -- apply -f config/components/namespace/namespace.yaml
         task test-infra:kubectl -- apply -k config/components/billing-usage-collector
 
@@ -246,6 +247,10 @@ tasks:
         echo "➤ Cert-Manager CRDs..."
         until task test-infra:kubectl -- get crd certificates.cert-manager.io issuers.cert-manager.io >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
         task test-infra:kubectl -- wait --for=condition=established crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s
+
+        echo "➤ Project CRD (resourcemanager.miloapis.com)..."
+        until task test-infra:kubectl -- get crd projects.resourcemanager.miloapis.com >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
+        task test-infra:kubectl -- wait --for=condition=established crd/projects.resourcemanager.miloapis.com --timeout=120s
 
         echo ""
         echo "----------------------------------------------------------------------"
