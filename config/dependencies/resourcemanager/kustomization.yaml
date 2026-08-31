@@ -2,4 +2,7 @@ apiVersion: kustomize.config.k8s.io/v1beta1
 kind: Kustomization
 
 resources:
-  - resourcemanager.miloapis.com_projects.yaml
+  # Sourced directly from milo-os/milo so this can't drift from the real
+  # Project CRD. Keep the ref in sync with the go.miloapis.com/milo version
+  # pinned in go.mod (see Taskfile.yaml's MILO_REPO_REF).
+  - https://raw.githubusercontent.com/milo-os/milo/refs/tags/v0.31.0/config/crd/bases/resourcemanager/resourcemanager.miloapis.com_projects.yaml
