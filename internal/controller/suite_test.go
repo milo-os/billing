@@ -11,12 +11,15 @@ import (
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/envtest"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	. "github.com/onsi/ginkgo/v2"
@@ -44,7 +47,10 @@ var _ = BeforeSuite(func() {
 
 	By("bootstrapping test environment")
 	testEnv = &envtest.Environment{
-		CRDDirectoryPaths:     []string{filepath.Join("..", "..", "config", "base", "crd", "bases")},
+		CRDDirectoryPaths: []string{
+			filepath.Join("..", "..", "config", "base", "crd", "bases"),
+			filepath.Join("testdata", "crd"),
+		},
 		ErrorIfCRDPathMissing: true,
 	}
 
@@ -54,6 +60,9 @@ var _ = BeforeSuite(func() {
 	Expect(cfg).NotTo(BeNil())
 
 	err = billingv1alpha1.AddToScheme(scheme.Scheme)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = resourcemanagerv1alpha1.AddToScheme(scheme.Scheme)
 	Expect(err).NotTo(HaveOccurred())
 
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
@@ -123,10 +132,18 @@ var _ = BeforeSuite(func() {
 	Expect(err).NotTo(HaveOccurred())
 
 	// Register BillingAccountBinding controller
+	bindingReconciler := &testBillingAccountBindingReconciler{
+		client:        mgr.GetClient(),
+		projectReader: mgr.GetAPIReader(),
+	}
 	err = ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccountbinding-test").
 		For(&billingv1alpha1.BillingAccountBinding{}).
-		Complete(&testBillingAccountBindingReconciler{client: mgr.GetClient()})
+		Watches(&resourcemanagerv1alpha1.Project{},
+			handler.EnqueueRequestsFromMapFunc(bindingReconciler.requestsForProject),
+			builder.WithPredicates(projectTerminatingOrDeleted),
+		).
+		Complete(bindingReconciler)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Register PaymentMethod controller (test adapter)

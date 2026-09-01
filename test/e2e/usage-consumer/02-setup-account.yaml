@@ -5,3 +5,12 @@ metadata:
   namespace: default
 spec:
   currencyCode: USD
+---
+apiVersion: resourcemanager.miloapis.com/v1alpha1
+kind: Project
+metadata:
+  name: p-e2e-consumer
+spec:
+  ownerRef:
+    kind: Organization
+    name: test-org

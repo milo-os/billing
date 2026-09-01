@@ -20,6 +20,12 @@ jobs:
       - name: Install setup-envtest
         run: go install sigs.k8s.io/controller-runtime/tools/setup-envtest@release-0.23
 
+      - name: Fetch external CRDs
+        run: |
+          mkdir -p internal/controller/testdata/crd
+          curl -sfL "https://raw.githubusercontent.com/milo-os/milo/refs/tags/v0.31.0/config/crd/bases/resourcemanager/resourcemanager.miloapis.com_projects.yaml" \
+            -o internal/controller/testdata/crd/resourcemanager.miloapis.com_projects.yaml
+
       - name: Running Tests
         run: |
           KUBEBUILDER_ASSETS="$(setup-envtest use 1.31.0 -p path)" go test -timeout 5m ./...

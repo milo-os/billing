@@ -22,6 +22,9 @@ cover.out
 # Test infrastructure
 .test-infra/
 
+# Fetched external CRDs (see `task fetch-external-crds`)
+/internal/controller/testdata/crd/resourcemanager.miloapis.com_projects.yaml
+
 # Task remote cache
 .task/
 
