@@ -136,14 +136,22 @@ func NewBatchIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectP
 	}
 }
 
-func dropIfUnbound(ctx context.Context, attr Attributor, metrics Metrics, project string) bool {
+// dropIfUnbound reports whether an event was dropped for lacking an active
+// billing account binding, recording metrics and logging at Info (not V(1))
+// since attribution drops are a low-volume, operationally significant signal:
+// a spike here means real usage is silently not being billed, and a producer
+// shipping a wrong/new project id would otherwise be invisible.
+func dropIfUnbound(ctx context.Context, attr Attributor, metrics Metrics, project, eventID, eventType, subject string) bool {
 	if attr == nil || !attr.IsUnbound(project) {
 		return false
 	}
 	metrics.RecordDropped(ctx, project, DropReasonAttributionFailure)
-	log.V(1).Info("dropping unbound usage event",
+	log.Info("dropping unbound usage event",
 		"project", project,
 		"reason", DropReasonAttributionFailure,
+		"eventID", eventID,
+		"eventType", eventType,
+		"subject", subject,
 	)
 	return true
 }

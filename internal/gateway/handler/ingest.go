@@ -29,9 +29,19 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	result := validate.ValidateEvent(json.RawMessage(body))
 	if !result.Valid {
-		project := projectFrom("")
+		// result.Subject is only populated once validation reached the point
+		// of confirming it's present -- use it when we have it so the reason
+		// metric/log isn't always labeled "unknown" for late-stage rejections
+		// (e.g. a bad datacontenttype on an otherwise well-formed event).
+		project := projectFrom(result.Subject)
 		h.metrics.RecordRejected(r.Context(), project, string(result.Reason))
-		log.V(1).Info("event rejected", "reason", result.Reason, "detail", result.Detail)
+		log.Info("event rejected",
+			"reason", result.Reason,
+			"detail", result.Detail,
+			"eventID", result.ID,
+			"eventType", result.Type,
+			"subject", result.Subject,
+		)
 		writeJSON(w, http.StatusBadRequest, errorResponse{
 			Code:    string(result.Reason),
 			Message: result.Detail,
@@ -40,7 +50,7 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	project := projectFrom(cloudEventSubjectFromBody(body))
-	if dropIfUnbound(r.Context(), h.attributor, h.metrics, project) {
+	if dropIfUnbound(r.Context(), h.attributor, h.metrics, project, result.ID, result.Type, result.Subject) {
 		writeJSON(w, http.StatusOK, ingestResponse{Accepted: 0})
 		return
 	}
