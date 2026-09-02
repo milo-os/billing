@@ -39,6 +39,10 @@ const (
 type EventResult struct {
 	// ID is the CloudEvent id field (empty string if id is absent/malformed).
 	ID string
+	// Type is the CloudEvent type field, once it's known to be present
+	Type string
+	// Subject is the CloudEvent subject field, once it's known to be present
+	Subject string
 	// Reason is set when the event is rejected.
 	Reason RejectionReason
 	// Detail is a human-readable description of the failure.
@@ -104,11 +108,20 @@ func ValidateEvent(raw json.RawMessage) EventResult {
 		{"subject", ce.Subject},
 	} {
 		if field.value == nil || *field.value == "" {
-			return EventResult{
+			result := EventResult{
 				ID:     *ce.ID,
 				Reason: ReasonMissingRequiredField,
 				Detail: fmt.Sprintf("required attribute '%s' is absent", field.name),
 			}
+			// Include type/subject when they themselves are present, useful
+			// context for debugging a rejection caused by some other field.
+			if ce.Type != nil {
+				result.Type = *ce.Type
+			}
+			if ce.Subject != nil {
+				result.Subject = *ce.Subject
+			}
+			return result
 		}
 	}
 
@@ -116,6 +129,7 @@ func ValidateEvent(raw json.RawMessage) EventResult {
 	if !strings.HasPrefix(*ce.Subject, "projects/") || len(*ce.Subject) <= len("projects/") {
 		return EventResult{
 			ID:     *ce.ID,
+			Type:   *ce.Type,
 			Reason: ReasonMissingRequiredField,
 			Detail: fmt.Sprintf("subject %q does not match required format projects/{id}", *ce.Subject),
 		}
@@ -128,47 +142,59 @@ func ValidateEvent(raw json.RawMessage) EventResult {
 			got = *ce.DataContentType
 		}
 		return EventResult{
-			ID:     *ce.ID,
-			Reason: ReasonInvalidDataContentType,
-			Detail: fmt.Sprintf("datacontenttype must be 'application/json', got %q", got),
+			ID:      *ce.ID,
+			Type:    *ce.Type,
+			Subject: *ce.Subject,
+			Reason:  ReasonInvalidDataContentType,
+			Detail:  fmt.Sprintf("datacontenttype must be 'application/json', got %q", got),
 		}
 	}
 
 	// 5. data.value must be present and parseable as INT64.
 	if ce.Data == nil {
 		return EventResult{
-			ID:     *ce.ID,
-			Reason: ReasonInvalidValueType,
-			Detail: "data field is absent",
+			ID:      *ce.ID,
+			Type:    *ce.Type,
+			Subject: *ce.Subject,
+			Reason:  ReasonInvalidValueType,
+			Detail:  "data field is absent",
 		}
 	}
 	var data eventData
 	if err := json.Unmarshal(*ce.Data, &data); err != nil {
 		return EventResult{
-			ID:     *ce.ID,
-			Reason: ReasonInvalidValueType,
-			Detail: fmt.Sprintf("data field is not valid JSON: %v", err),
+			ID:      *ce.ID,
+			Type:    *ce.Type,
+			Subject: *ce.Subject,
+			Reason:  ReasonInvalidValueType,
+			Detail:  fmt.Sprintf("data field is not valid JSON: %v", err),
 		}
 	}
 	if data.Value == nil || *data.Value == "" {
 		return EventResult{
-			ID:     *ce.ID,
-			Reason: ReasonInvalidValueType,
-			Detail: "data.value is absent",
+			ID:      *ce.ID,
+			Type:    *ce.Type,
+			Subject: *ce.Subject,
+			Reason:  ReasonInvalidValueType,
+			Detail:  "data.value is absent",
 		}
 	}
 	// Validate INT64 string: must be parseable as a signed 64-bit integer.
 	var parsed int64
 	if _, err := fmt.Sscanf(*data.Value, "%d", &parsed); err != nil {
 		return EventResult{
-			ID:     *ce.ID,
-			Reason: ReasonInvalidValueType,
-			Detail: fmt.Sprintf("data.value %q is not a valid INT64 string: %v", *data.Value, err),
+			ID:      *ce.ID,
+			Type:    *ce.Type,
+			Subject: *ce.Subject,
+			Reason:  ReasonInvalidValueType,
+			Detail:  fmt.Sprintf("data.value %q is not a valid INT64 string: %v", *data.Value, err),
 		}
 	}
 
 	return EventResult{
-		ID:    *ce.ID,
-		Valid: true,
+		ID:      *ce.ID,
+		Type:    *ce.Type,
+		Subject: *ce.Subject,
+		Valid:   true,
 	}
 }
