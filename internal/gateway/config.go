@@ -17,6 +17,11 @@ type Config struct {
 	NATSUrl string
 	// NATSSubjectPrefix is the NATS subject prefix (default "billing.usage").
 	NATSSubjectPrefix string
+	// KubeconfigPath is the path to a kubeconfig for the Milo API server.
+	// When set, the gateway drops events for projects with no Active
+	// BillingAccountBinding before publishing to NATS. When empty, every
+	// structurally valid event is published (local/e2e).
+	KubeconfigPath string
 	// TLSCertFile is the path to the TLS certificate file (required for HTTPS).
 	TLSCertFile string
 	// TLSKeyFile is the path to the TLS private key file (required for HTTPS).

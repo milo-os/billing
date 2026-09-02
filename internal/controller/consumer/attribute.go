@@ -31,3 +31,10 @@ func attribute(project string, bc *BillingAccountBindingCache, ac *BillingAccoun
 
 	return AttributionResult{OK: true, BillingAccountRef: binding.Spec.BillingAccountRef.Name}
 }
+
+// Bound reports whether the project currently has a Ready billing account
+// via an Active BillingAccountBinding. Used by the ingestion gateway to
+// drop unbillable traffic before it is written to NATS.
+func Bound(project string, bc *BillingAccountBindingCache, ac *BillingAccountCache) bool {
+	return attribute(project, bc, ac).OK
+}

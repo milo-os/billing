@@ -478,8 +478,10 @@ never exposed outside the central platform — all edge-to-central transport is
 HTTPS to the Gateway.
 
 The Gateway determines the target project from the `subject` field of the
-incoming CloudEvent. It has no dependency on project API servers or project-local
-state.
+incoming CloudEvent. When `--kubeconfig-path` is set, it also watches
+`BillingAccountBinding` and `BillingAccount` on Milo so it can drop
+unbillable traffic before NATS. It has no dependency on project-local
+API servers.
 
 #### API Surface
 
@@ -509,12 +511,11 @@ log is full or write latency exceeds thresholds.
 
 #### Validation
 
-The Gateway enforces **structural validity only**: `id` must be a valid
-[ULID][ulid]; `data.value` must parse as INT64; all required CloudEvents
-attributes must be present; `datacontenttype` must be `"application/json"`.
-
-Business rule validation (meter existence, dimension conformance) is deferred to
-the central Billing Controllers. Because the SDK returns success on in-memory
+The Gateway enforces **structural validity**, then **drops events for
+projects that have no Active BillingAccountBinding** (or whose bound account
+is not Ready) so unbillable edge traffic never enters NATS. Remaining
+business-rule validation (meter existence, dimension conformance) is deferred
+to the central Billing Controllers. Because the SDK returns success on in-memory
 buffer write, the original caller has already received success before the Gateway
 sees the event — a synchronous Gateway rejection is unreachable by the caller.
 Quarantining business rule failures centrally preserves the event and makes

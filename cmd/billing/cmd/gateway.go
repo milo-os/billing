@@ -24,6 +24,7 @@ func newGatewayCommand() *cobra.Command {
 		natsCAFile        string
 		natsCertFile      string
 		natsKeyFile       string
+		kubeconfigPath    string
 	)
 
 	opts := zap.Options{
@@ -47,6 +48,7 @@ func newGatewayCommand() *cobra.Command {
 				NATSCAFile:        natsCAFile,
 				NATSCertFile:      natsCertFile,
 				NATSKeyFile:       natsKeyFile,
+				KubeconfigPath:    kubeconfigPath,
 			})
 		},
 	}
@@ -61,6 +63,7 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&natsCAFile, "nats-ca-file", "", "Path to NATS CA certificate file.")
 	cmd.Flags().StringVar(&natsCertFile, "nats-cert-file", "", "Path to NATS client certificate file.")
 	cmd.Flags().StringVar(&natsKeyFile, "nats-key-file", "", "Path to NATS client private key file.")
+	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig-path", "", "Path to Milo kubeconfig. When set, drop usage for projects with no billing account before NATS.")
 	_ = cmd.MarkFlagRequired("nats-url")
 
 	zapFlags := flag.NewFlagSet("zap", flag.ContinueOnError)

@@ -64,6 +64,20 @@ func TestAttribute_ActiveBinding_Matches(t *testing.T) {
 	}
 }
 
+func TestBound_MatchesAttribute(t *testing.T) {
+	binding := activeBinding("binding-1", "my-project", "acct-1")
+	account := readyAccount("acct-1")
+	bc := newTestBindingCache(binding)
+	ac := newTestAccountCache(account)
+
+	if !Bound("my-project", bc, ac) {
+		t.Error("expected Bound=true for active binding and ready account")
+	}
+	if Bound("other-project", bc, ac) {
+		t.Error("expected Bound=false when no active binding exists")
+	}
+}
+
 func TestAttribute_NoActiveBinding_Fails(t *testing.T) {
 	bc := newTestBindingCache() // empty
 	ac := newTestAccountCache()

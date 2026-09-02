@@ -44,7 +44,26 @@ type errorResponse struct {
 type Metrics interface {
 	RecordAccepted(ctx context.Context, project string)
 	RecordRejected(ctx context.Context, project, reason string)
+	RecordDropped(ctx context.Context, project, reason string)
 }
+
+// Attributor reports whether a project currently has a billable account.
+// A nil Attributor publishes every structurally valid event (dev/e2e).
+type Attributor interface {
+	Bound(project string) bool
+}
+
+// BoundFunc adapts a function to Attributor.
+type BoundFunc func(project string) bool
+
+// Bound implements Attributor.
+func (f BoundFunc) Bound(project string) bool { return f(project) }
+
+// DropReasonAttributionFailure is recorded when a structurally valid event
+// is dropped because the project has no Active BillingAccountBinding (or
+// the bound account is not Ready). Matches the usage-consumer reason so
+// dashboards can join gateway drops with consumer rejections.
+const DropReasonAttributionFailure = "attribution_failure"
 
 // writeJSON writes v as JSON with the given status code.
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -84,14 +103,16 @@ type IngestHandler struct {
 	publisher     gwnats.Publisher
 	metrics       Metrics
 	subjectPrefix string
+	attributor    Attributor
 }
 
-// NewIngestHandler creates a new IngestHandler.
-func NewIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectPrefix string) *IngestHandler {
+// NewIngestHandler creates a new IngestHandler. attributor may be nil.
+func NewIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectPrefix string, attributor Attributor) *IngestHandler {
 	return &IngestHandler{
 		publisher:     publisher,
 		metrics:       metrics,
 		subjectPrefix: subjectPrefix,
+		attributor:    attributor,
 	}
 }
 
@@ -101,14 +122,28 @@ type BatchIngestHandler struct {
 	metrics       Metrics
 	subjectPrefix string
 	maxBatchSize  int
+	attributor    Attributor
 }
 
-// NewBatchIngestHandler creates a new BatchIngestHandler.
-func NewBatchIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectPrefix string) *BatchIngestHandler {
+// NewBatchIngestHandler creates a new BatchIngestHandler. attributor may be nil.
+func NewBatchIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectPrefix string, attributor Attributor) *BatchIngestHandler {
 	return &BatchIngestHandler{
 		publisher:     publisher,
 		metrics:       metrics,
 		subjectPrefix: subjectPrefix,
 		maxBatchSize:  100,
+		attributor:    attributor,
 	}
+}
+
+func dropUnbound(ctx context.Context, attr Attributor, metrics Metrics, project string) bool {
+	if attr == nil || attr.Bound(project) {
+		return false
+	}
+	metrics.RecordDropped(ctx, project, DropReasonAttributionFailure)
+	log.V(1).Info("dropping unbound usage event",
+		"project", project,
+		"reason", DropReasonAttributionFailure,
+	)
+	return true
 }

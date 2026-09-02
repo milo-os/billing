@@ -33,6 +33,7 @@ func Run(ctx context.Context, cfg Config) error {
 		"metricsAddr", cfg.MetricsAddr,
 		"natsURL", cfg.NATSUrl,
 		"natsSubjectPrefix", cfg.NATSSubjectPrefix,
+		"kubeconfigPath", cfg.KubeconfigPath,
 	)
 
 	// 1. Build NATSPublisher (fatal on error).
@@ -69,6 +70,17 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("registering metrics: %w", err)
 	}
 	serverLog.Info("metrics ready")
+
+	var attributor handler.Attributor
+	if cfg.KubeconfigPath != "" {
+		serverLog.Info("starting milo attributor", "kubeconfigPath", cfg.KubeconfigPath)
+		attributor, err = startMiloAttributor(ctx, cfg.KubeconfigPath)
+		if err != nil {
+			return fmt.Errorf("starting milo attributor: %w", err)
+		}
+	} else {
+		serverLog.Info("kubeconfigPath unset; publishing usage for all projects")
+	}
 
 	// 3. Build the controller-runtime manager for health probes and metrics.
 	// The manager owns /healthz, /readyz, and /metrics — the gateway does not
@@ -111,9 +123,9 @@ func Run(ctx context.Context, cfg Config) error {
 	// gateway; no auth middleware is applied here.
 	ingestMux := http.NewServeMux()
 	ingestMux.Handle("POST /v1/usage/events",
-		handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
+		handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix, attributor))
 	ingestMux.Handle("POST /v1/usage/events:batchIngest",
-		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
+		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix, attributor))
 
 	// 6. Optionally load TLS for the ingest server.
 	var ingestServer *http.Server

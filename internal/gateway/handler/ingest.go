@@ -17,8 +17,9 @@ const maxBodySize = 1 << 20 // 1 MiB
 // Steps:
 //  1. Read body (max 1 MiB)
 //  2. Validate structural correctness
-//  3. Publish to NATS JetStream
-//  4. Return 200 {"accepted": 1} on success
+//  3. Drop if the project has no billable account (Attributor)
+//  4. Publish to NATS JetStream
+//  5. Return 200 {"accepted": 1} on success, or {"accepted": 0} when dropped
 func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
@@ -38,6 +39,12 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	project := projectFrom(cloudEventSubjectFromBody(body))
+	if dropUnbound(r.Context(), h.attributor, h.metrics, project) {
+		writeJSON(w, http.StatusOK, ingestResponse{Accepted: 0})
+		return
+	}
+
 	subject := subjectFor(h.subjectPrefix, cloudEventSubjectFromBody(body))
 	if err := h.publish(r.Context(), subject, body, result.ID); err != nil {
 		log.Error(err, "publish failed", "subject", subject)
@@ -45,7 +52,6 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project := projectFrom(cloudEventSubjectFromBody(body))
 	h.metrics.RecordAccepted(r.Context(), project)
 	log.V(1).Info("event accepted", "project", project, "subject", subject)
 	writeJSON(w, http.StatusOK, ingestResponse{Accepted: 1})
