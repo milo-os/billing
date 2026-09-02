@@ -71,20 +71,11 @@ func Run(ctx context.Context, cfg Config) error {
 	}
 	serverLog.Info("metrics ready")
 
-	var attributor handler.Attributor
-	if cfg.KubeconfigPath != "" {
-		serverLog.Info("starting milo attributor", "kubeconfigPath", cfg.KubeconfigPath)
-		attributor, err = startMiloAttributor(ctx, cfg.KubeconfigPath)
-		if err != nil {
-			return fmt.Errorf("starting milo attributor: %w", err)
-		}
-	} else {
-		serverLog.Info("kubeconfigPath unset; publishing usage for all projects")
-	}
-
 	// 3. Build the controller-runtime manager for health probes and metrics.
-	// The manager owns /healthz, /readyz, and /metrics — the gateway does not
+	// The manager owns /healthz, /readyz, and /metrics. The gateway does not
 	// run controllers or a cache, so we disable leader election.
+	// Healthz must listen before the Milo cache wait: liveness hits :8081
+	// after 5s, and a cluster-wide LIST can exceed that window.
 	restCfg, err := ctrl.GetConfig()
 	if err != nil {
 		serverLog.Error(err, "failed to load kubeconfig")
@@ -119,7 +110,34 @@ func Run(ctx context.Context, cfg Config) error {
 		return fmt.Errorf("registering nats readyz check: %w", err)
 	}
 
-	// 5. Build ingest mux. Authentication is handled by the upstream Envoy
+	mgrCtx, cancelMgr := context.WithCancel(ctx)
+	defer cancelMgr()
+
+	errCh := make(chan error, 3)
+
+	go func() {
+		serverLog.Info("starting manager (health/metrics)")
+		if err := mgr.Start(mgrCtx); err != nil {
+			serverLog.Error(err, "manager stopped unexpectedly")
+			errCh <- fmt.Errorf("manager: %w", err)
+		}
+	}()
+
+	// 5. Drop unbillable traffic only after healthz is already serving.
+	// Ingest ListenAndServe stays after this wait so Vector cannot
+	// land events on a fail-closed empty index.
+	var attributor handler.Attributor
+	if cfg.KubeconfigPath != "" {
+		serverLog.Info("starting milo attributor", "kubeconfigPath", cfg.KubeconfigPath)
+		attributor, err = startMiloAttributor(ctx, cfg.KubeconfigPath, errCh)
+		if err != nil {
+			return fmt.Errorf("starting milo attributor: %w", err)
+		}
+	} else {
+		serverLog.Info("kubeconfigPath unset; publishing usage for all projects")
+	}
+
+	// 6. Build ingest mux. Authentication is handled by the upstream Envoy
 	// gateway; no auth middleware is applied here.
 	ingestMux := http.NewServeMux()
 	ingestMux.Handle("POST /v1/usage/events",
@@ -127,7 +145,7 @@ func Run(ctx context.Context, cfg Config) error {
 	ingestMux.Handle("POST /v1/usage/events:batchIngest",
 		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix, attributor))
 
-	// 6. Optionally load TLS for the ingest server.
+	// 7. Optionally load TLS for the ingest server.
 	var ingestServer *http.Server
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
 		serverLog.Info("loading TLS certificate", "certFile", cfg.TLSCertFile)
@@ -155,22 +173,8 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
-	// 7. Start the manager and ingest server concurrently.
-	// The manager owns health/metrics; the ingest server handles usage events.
-	// Both are shut down when ctx is cancelled or either returns an error.
-	mgrCtx, cancelMgr := context.WithCancel(ctx)
-	defer cancelMgr()
-
-	errCh := make(chan error, 2)
-
-	go func() {
-		serverLog.Info("starting manager (health/metrics)")
-		if err := mgr.Start(mgrCtx); err != nil {
-			serverLog.Error(err, "manager stopped unexpectedly")
-			errCh <- fmt.Errorf("manager: %w", err)
-		}
-	}()
-
+	// 8. Start the ingest server. The manager is already running so
+	// liveness succeeds during the Milo wait above.
 	go func() {
 		if ingestServer.TLSConfig != nil {
 			serverLog.Info("starting ingest server (TLS)", "addr", cfg.Addr)
@@ -195,6 +199,8 @@ func Run(ctx context.Context, cfg Config) error {
 		serverLog.Info("gateway stopped")
 		return nil
 	case err := <-errCh:
+		_ = ingestServer.Shutdown(context.Background())
+		cancelMgr()
 		return err
 	}
 }

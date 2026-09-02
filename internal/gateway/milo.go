@@ -7,6 +7,7 @@ import (
 	"fmt"
 
 	"k8s.io/apimachinery/pkg/runtime"
+	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/tools/clientcmd"
 	runtimecache "sigs.k8s.io/controller-runtime/pkg/cache"
 
@@ -26,9 +27,14 @@ func (a miloAttributor) Bound(project string) bool {
 
 // startMiloAttributor watches BillingAccountBinding and BillingAccount on
 // Milo and returns an Attributor used to drop unbillable traffic. kubeconfigPath
-// must point at the Milo API server. The cache is started against ctx and
-// must finish syncing before the ingest server accepts traffic.
-func startMiloAttributor(ctx context.Context, kubeconfigPath string) (handler.Attributor, error) {
+// must point at the Milo API server.
+//
+// The informer cache is started against ctx. WaitForCacheSync is not enough
+// on its own: that is store sync, not handler sync, so the secondary indexes
+// can still be empty. We also wait on the AddEventHandler registrations.
+// If the cache later stops with an error, fatal receives it so Run can exit
+// and kubelet restarts a fresh index.
+func startMiloAttributor(ctx context.Context, kubeconfigPath string, fatal chan<- error) (handler.Attributor, error) {
 	restCfg, err := clientcmd.BuildConfigFromFlags("", kubeconfigPath)
 	if err != nil {
 		return nil, fmt.Errorf("loading milo kubeconfig from %q: %w", kubeconfigPath, err)
@@ -55,11 +61,30 @@ func startMiloAttributor(ctx context.Context, kubeconfigPath string) (handler.At
 
 	go func() {
 		if err := c.Start(ctx); err != nil {
+			if ctx.Err() != nil {
+				return
+			}
 			serverLog.Error(err, "milo cache stopped")
+			select {
+			case fatal <- fmt.Errorf("milo cache: %w", err):
+			case <-ctx.Done():
+			}
 		}
 	}()
 	if !c.WaitForCacheSync(ctx) {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("waiting for milo cache sync: %w", err)
+		}
 		return nil, fmt.Errorf("waiting for milo cache sync")
+	}
+	// Store HasSynced does not mean the binding/account indexes have seen
+	// the initial LIST. Bound() is fail-closed, so ingest must not start
+	// until the handlers have applied that list.
+	if !cache.WaitForNamedCacheSync("milo-attributor", ctx.Done(), bindings.HasSynced, accounts.HasSynced) {
+		if err := ctx.Err(); err != nil {
+			return nil, fmt.Errorf("waiting for milo handler sync: %w", err)
+		}
+		return nil, fmt.Errorf("waiting for milo handler sync")
 	}
 	serverLog.Info("milo billing account cache synced")
 	return miloAttributor{bindings: bindings, accounts: accounts}, nil

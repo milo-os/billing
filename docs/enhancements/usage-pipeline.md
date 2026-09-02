@@ -490,8 +490,10 @@ API servers.
 | `/v1/usage/events` | `POST` | Submit a single CloudEvents usage event |
 | `/v1/usage/events:batchIngest` | `POST` | Submit a batch of CloudEvents (JSON array, up to 100 events) |
 
-**Success:** `200 OK` with `{"accepted": <count>}`, returned only after all
-events are durably committed to the log.
+**Success:** `200 OK` with `{"accepted": <count>}`. Published events return
+this only after a durable JetStream commit. Events for projects with no
+billable account are dropped before NATS and still return 200 with a lower
+`accepted` count (`0` for a fully unbound request) so Vector does not retry.
 
 **Partial rejection:** `207 Multi-Status` with per-event results for structural
 failures:

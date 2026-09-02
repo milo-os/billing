@@ -76,12 +76,12 @@ func (m *gatewayMetrics) RecordRejected(ctx context.Context, project, reason str
 	)
 }
 
-// RecordDropped increments billing_ingestion_dropped_total for the given
-// project and drop reason. The producer receives 2xx so Vector does not retry.
-func (m *gatewayMetrics) RecordDropped(ctx context.Context, project, reason string) {
+// RecordDropped increments billing_ingestion_dropped_total by reason.
+// Project is accepted for handler/log correlation but is not a metric
+// label: unbound traffic is the high-cardinality set that flooded NATS.
+func (m *gatewayMetrics) RecordDropped(ctx context.Context, _ string, reason string) {
 	m.droppedTotal.Add(ctx, 1,
 		metric.WithAttributes(
-			attribute.String("project", project),
 			attribute.String("reason", reason),
 		),
 	)

@@ -20,6 +20,7 @@ import (
 type BillingAccountCache struct {
 	mu         sync.RWMutex
 	readyByKey map[string]*billingv1alpha1.BillingAccount
+	handlerReg toolscache.ResourceEventHandlerRegistration
 }
 
 // NewBillingAccountCache registers event handlers on the BillingAccount
@@ -34,7 +35,7 @@ func NewBillingAccountCache(ctx context.Context, c runtimecache.Cache) (*Billing
 		return nil, fmt.Errorf("getting BillingAccount informer: %w", err)
 	}
 
-	if _, err := informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
+	reg, err := informer.AddEventHandler(toolscache.ResourceEventHandlerFuncs{
 		AddFunc: func(obj any) {
 			if a, ok := obj.(*billingv1alpha1.BillingAccount); ok {
 				ac.upsert(a)
@@ -53,11 +54,20 @@ func NewBillingAccountCache(ctx context.Context, c runtimecache.Cache) (*Billing
 				ac.delete(a)
 			}
 		},
-	}); err != nil {
+	})
+	if err != nil {
 		return nil, fmt.Errorf("adding BillingAccount event handler: %w", err)
 	}
+	ac.handlerReg = reg
 
 	return ac, nil
+}
+
+// HasSynced reports whether the event handler has applied the informer's
+// initial LIST. Informer store HasSynced is not enough: the secondary
+// readyByKey index can still be empty after that returns.
+func (a *BillingAccountCache) HasSynced() bool {
+	return a.handlerReg != nil && a.handlerReg.HasSynced()
 }
 
 func (a *BillingAccountCache) upsert(account *billingv1alpha1.BillingAccount) {

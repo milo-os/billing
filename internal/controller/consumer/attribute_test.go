@@ -78,6 +78,16 @@ func TestBound_MatchesAttribute(t *testing.T) {
 	}
 }
 
+func TestBound_NonReadyAccount(t *testing.T) {
+	binding := activeBinding("binding-1", "my-project", "acct-1")
+	bc := newTestBindingCache(binding)
+	ac := newTestAccountCache()
+
+	if Bound("my-project", bc, ac) {
+		t.Error("expected Bound=false when the bound account is not Ready")
+	}
+}
+
 func TestAttribute_NoActiveBinding_Fails(t *testing.T) {
 	bc := newTestBindingCache() // empty
 	ac := newTestAccountCache()
