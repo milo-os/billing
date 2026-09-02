@@ -31,3 +31,15 @@ func attribute(project string, bc *BillingAccountBindingCache, ac *BillingAccoun
 
 	return AttributionResult{OK: true, BillingAccountRef: binding.Spec.BillingAccountRef.Name}
 }
+
+// IsBound reports whether the project currently has a Ready billing account
+// via an Active BillingAccountBinding.
+func IsBound(project string, bc *BillingAccountBindingCache, ac *BillingAccountCache) bool {
+	return attribute(project, bc, ac).OK
+}
+
+// IsUnbound is the inverse of IsBound. Used by the ingestion gateway in
+// dropIfUnbound so the check reads as "if this project has no billable account".
+func IsUnbound(project string, bc *BillingAccountBindingCache, ac *BillingAccountCache) bool {
+	return !IsBound(project, bc, ac)
+}

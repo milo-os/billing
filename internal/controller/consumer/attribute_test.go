@@ -64,6 +64,33 @@ func TestAttribute_ActiveBinding_Matches(t *testing.T) {
 	}
 }
 
+func TestIsBound_MatchesAttribute(t *testing.T) {
+	binding := activeBinding("binding-1", "my-project", "acct-1")
+	account := readyAccount("acct-1")
+	bc := newTestBindingCache(binding)
+	ac := newTestAccountCache(account)
+
+	if !IsBound("my-project", bc, ac) {
+		t.Error("expected IsBound=true for active binding and ready account")
+	}
+	if IsUnbound("my-project", bc, ac) {
+		t.Error("expected IsUnbound=false for active binding and ready account")
+	}
+	if !IsUnbound("other-project", bc, ac) {
+		t.Error("expected IsUnbound=true when no active binding exists")
+	}
+}
+
+func TestIsUnbound_NonReadyAccount(t *testing.T) {
+	binding := activeBinding("binding-1", "my-project", "acct-1")
+	bc := newTestBindingCache(binding)
+	ac := newTestAccountCache()
+
+	if !IsUnbound("my-project", bc, ac) {
+		t.Error("expected IsUnbound=true when the bound account is not Ready")
+	}
+}
+
 func TestAttribute_NoActiveBinding_Fails(t *testing.T) {
 	bc := newTestBindingCache() // empty
 	ac := newTestAccountCache()

@@ -478,8 +478,11 @@ never exposed outside the central platform — all edge-to-central transport is
 HTTPS to the Gateway.
 
 The Gateway determines the target project from the `subject` field of the
-incoming CloudEvent. It has no dependency on project API servers or project-local
-state.
+incoming CloudEvent. `--enable-gateway-attribution-check` is a temporary
+safeguard: when set (with `--kubeconfig-path`), the gateway watches
+`BillingAccountBinding` and `BillingAccount` on Milo and drops unbillable
+traffic before NATS. When unset, it does no Milo watches. It has no
+dependency on project-local API servers.
 
 #### API Surface
 
@@ -488,8 +491,10 @@ state.
 | `/v1/usage/events` | `POST` | Submit a single CloudEvents usage event |
 | `/v1/usage/events:batchIngest` | `POST` | Submit a batch of CloudEvents (JSON array, up to 100 events) |
 
-**Success:** `200 OK` with `{"accepted": <count>}`, returned only after all
-events are durably committed to the log.
+**Success:** `200 OK` with `{"accepted": <count>}`. Published events return
+this only after a durable JetStream commit. Events for projects with no
+billable account are dropped before NATS and still return 200 with a lower
+`accepted` count (`0` for a fully unbound request) so Vector does not retry.
 
 **Partial rejection:** `207 Multi-Status` with per-event results for structural
 failures:
@@ -509,12 +514,12 @@ log is full or write latency exceeds thresholds.
 
 #### Validation
 
-The Gateway enforces **structural validity only**: `id` must be a valid
-[ULID][ulid]; `data.value` must parse as INT64; all required CloudEvents
-attributes must be present; `datacontenttype` must be `"application/json"`.
-
-Business rule validation (meter existence, dimension conformance) is deferred to
-the central Billing Controllers. Because the SDK returns success on in-memory
+The Gateway enforces **structural validity**, then (when
+`--enable-gateway-attribution-check` is set) **drops events for
+projects that have no Active BillingAccountBinding** (or whose bound account
+is not Ready) so unbillable edge traffic never enters NATS. Remaining
+business-rule validation (meter existence, dimension conformance) is deferred
+to the central Billing Controllers. Because the SDK returns success on in-memory
 buffer write, the original caller has already received success before the Gateway
 sees the event — a synchronous Gateway rejection is unreachable by the caller.
 Quarantining business rule failures centrally preserves the event and makes

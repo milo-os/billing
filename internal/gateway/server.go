@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	prometheusexporter "go.opentelemetry.io/otel/exporters/prometheus"
@@ -33,6 +34,8 @@ func Run(ctx context.Context, cfg Config) error {
 		"metricsAddr", cfg.MetricsAddr,
 		"natsURL", cfg.NATSUrl,
 		"natsSubjectPrefix", cfg.NATSSubjectPrefix,
+		"enableGatewayAttributionCheck", cfg.EnableGatewayAttributionCheck,
+		"kubeconfigPath", cfg.KubeconfigPath,
 	)
 
 	// 1. Build NATSPublisher (fatal on error).
@@ -71,8 +74,10 @@ func Run(ctx context.Context, cfg Config) error {
 	serverLog.Info("metrics ready")
 
 	// 3. Build the controller-runtime manager for health probes and metrics.
-	// The manager owns /healthz, /readyz, and /metrics — the gateway does not
+	// The manager owns /healthz, /readyz, and /metrics. The gateway does not
 	// run controllers or a cache, so we disable leader election.
+	// Healthz must listen before the Milo cache wait: liveness hits :8081
+	// after 5s, and a cluster-wide LIST can exceed that window.
 	restCfg, err := ctrl.GetConfig()
 	if err != nil {
 		serverLog.Error(err, "failed to load kubeconfig")
@@ -97,7 +102,14 @@ func Run(ctx context.Context, cfg Config) error {
 	if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
 		return fmt.Errorf("registering healthz check: %w", err)
 	}
-	// The gateway is only ready when the NATS upstream is connected.
+	// The gateway is only ready when NATS is connected and, if the
+	// temporary attribution check is on, the Milo cache has finished
+	// its initial LIST. Healthz stays a ping so liveness does not trip
+	// during that LIST.
+	var attributionReady atomic.Bool
+	if !cfg.EnableGatewayAttributionCheck {
+		attributionReady.Store(true)
+	}
 	if err := mgr.AddReadyzCheck("nats", func(_ *http.Request) error {
 		if !publisher.Healthy() {
 			return errors.New("NATS connection is not healthy")
@@ -106,16 +118,55 @@ func Run(ctx context.Context, cfg Config) error {
 	}); err != nil {
 		return fmt.Errorf("registering nats readyz check: %w", err)
 	}
+	if err := mgr.AddReadyzCheck("attribution", func(_ *http.Request) error {
+		if !attributionReady.Load() {
+			return errors.New("milo attribution cache is not synced")
+		}
+		return nil
+	}); err != nil {
+		return fmt.Errorf("registering attribution readyz check: %w", err)
+	}
 
-	// 5. Build ingest mux. Authentication is handled by the upstream Envoy
+	mgrCtx, cancelMgr := context.WithCancel(ctx)
+	defer cancelMgr()
+
+	errCh := make(chan error, 3)
+
+	go func() {
+		serverLog.Info("starting manager (health/metrics)")
+		if err := mgr.Start(mgrCtx); err != nil {
+			serverLog.Error(err, "manager stopped unexpectedly")
+			errCh <- fmt.Errorf("manager: %w", err)
+		}
+	}()
+
+	// 5. Drop unbillable traffic only after healthz is already serving.
+	// Ingest ListenAndServe stays after this wait so Vector cannot
+	// land events on a fail-closed empty index. Readyz stays false
+	// until the LIST finishes so the pod is not in Service endpoints.
+	var attributor handler.Attributor
+	if cfg.EnableGatewayAttributionCheck {
+		if cfg.KubeconfigPath == "" {
+			return fmt.Errorf("enabling gateway attribution check: kubeconfig-path is required")
+		}
+		serverLog.Info("starting milo attributor", "kubeconfigPath", cfg.KubeconfigPath)
+		attributor, err = startMiloAttributor(ctx, cfg.KubeconfigPath, errCh)
+		if err != nil {
+			return fmt.Errorf("starting milo attributor: %w", err)
+		}
+	} else {
+		serverLog.Info("gateway attribution check disabled; publishing usage for all projects")
+	}
+
+	// 6. Build ingest mux. Authentication is handled by the upstream Envoy
 	// gateway; no auth middleware is applied here.
 	ingestMux := http.NewServeMux()
 	ingestMux.Handle("POST /v1/usage/events",
-		handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
+		handler.NewIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix, attributor))
 	ingestMux.Handle("POST /v1/usage/events:batchIngest",
-		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix))
+		handler.NewBatchIngestHandler(publisher, metrics, cfg.NATSSubjectPrefix, attributor))
 
-	// 6. Optionally load TLS for the ingest server.
+	// 7. Optionally load TLS for the ingest server.
 	var ingestServer *http.Server
 	if cfg.TLSCertFile != "" && cfg.TLSKeyFile != "" {
 		serverLog.Info("loading TLS certificate", "certFile", cfg.TLSCertFile)
@@ -143,22 +194,11 @@ func Run(ctx context.Context, cfg Config) error {
 		}
 	}
 
-	// 7. Start the manager and ingest server concurrently.
-	// The manager owns health/metrics; the ingest server handles usage events.
-	// Both are shut down when ctx is cancelled or either returns an error.
-	mgrCtx, cancelMgr := context.WithCancel(ctx)
-	defer cancelMgr()
-
-	errCh := make(chan error, 2)
-
-	go func() {
-		serverLog.Info("starting manager (health/metrics)")
-		if err := mgr.Start(mgrCtx); err != nil {
-			serverLog.Error(err, "manager stopped unexpectedly")
-			errCh <- fmt.Errorf("manager: %w", err)
-		}
-	}()
-
+	// 8. Start the ingest server. Mark attribution ready first so the
+	// pod joins Service endpoints only once ingest is about to listen.
+	if cfg.EnableGatewayAttributionCheck {
+		attributionReady.Store(true)
+	}
 	go func() {
 		if ingestServer.TLSConfig != nil {
 			serverLog.Info("starting ingest server (TLS)", "addr", cfg.Addr)
@@ -183,6 +223,8 @@ func Run(ctx context.Context, cfg Config) error {
 		serverLog.Info("gateway stopped")
 		return nil
 	case err := <-errCh:
+		_ = ingestServer.Shutdown(context.Background())
+		cancelMgr()
 		return err
 	}
 }

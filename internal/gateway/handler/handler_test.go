@@ -43,6 +43,7 @@ var _ gwnats.HealthChecker = (*fakePublisher)(nil)
 type fakeMetrics struct {
 	accepted []string
 	rejected [][]string
+	dropped  [][]string
 }
 
 func (m *fakeMetrics) RecordAccepted(_ context.Context, project string) {
@@ -50,6 +51,9 @@ func (m *fakeMetrics) RecordAccepted(_ context.Context, project string) {
 }
 func (m *fakeMetrics) RecordRejected(_ context.Context, project, reason string) {
 	m.rejected = append(m.rejected, []string{project, reason})
+}
+func (m *fakeMetrics) RecordDropped(_ context.Context, project, reason string) {
+	m.dropped = append(m.dropped, []string{project, reason})
 }
 
 // --- helpers ---
@@ -97,7 +101,7 @@ func responseBody(t *testing.T, rec *httptest.ResponseRecorder) []byte {
 func TestIngestHandler_validEvent_200(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage")
+	h := handler.NewIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(nil)))
@@ -119,7 +123,7 @@ func TestIngestHandler_validEvent_200(t *testing.T) {
 func TestIngestHandler_invalidULID_400(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage")
+	h := handler.NewIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(map[string]any{"id": "not-a-ulid"})))
@@ -135,7 +139,7 @@ func TestIngestHandler_invalidULID_400(t *testing.T) {
 func TestIngestHandler_missingRequiredField_400(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage")
+	h := handler.NewIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(map[string]any{"subject": nil})))
@@ -148,7 +152,7 @@ func TestIngestHandler_missingRequiredField_400(t *testing.T) {
 func TestIngestHandler_natsTimeout_429(t *testing.T) {
 	pub := &fakePublisher{healthy: true, err: context.DeadlineExceeded}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage")
+	h := handler.NewIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(nil)))
@@ -164,7 +168,7 @@ func TestIngestHandler_natsTimeout_429(t *testing.T) {
 func TestIngestHandler_natsDisconnect_503(t *testing.T) {
 	pub := &fakePublisher{healthy: false, err: errors.New("nats: connection closed")}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage")
+	h := handler.NewIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(nil)))
@@ -179,7 +183,7 @@ func TestIngestHandler_natsDisconnect_503(t *testing.T) {
 func TestBatchIngestHandler_allValid_200(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewBatchIngestHandler(pub, m, "billing.usage")
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", nil)
 
 	batch := []json.RawMessage{validEventJSON(nil), validEventJSON(nil)}
 	body, _ := json.Marshal(batch)
@@ -198,7 +202,7 @@ func TestBatchIngestHandler_allValid_200(t *testing.T) {
 func TestBatchIngestHandler_partialReject_207(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewBatchIngestHandler(pub, m, "billing.usage")
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", nil)
 
 	batch := []json.RawMessage{
 		validEventJSON(nil),
@@ -234,7 +238,7 @@ func TestBatchIngestHandler_partialReject_207(t *testing.T) {
 func TestBatchIngestHandler_exceedsMax_400(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewBatchIngestHandler(pub, m, "billing.usage")
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", nil)
 
 	batch := make([]json.RawMessage, 101)
 	for i := range batch {
@@ -253,12 +257,77 @@ func TestBatchIngestHandler_exceedsMax_400(t *testing.T) {
 func TestBatchIngestHandler_notArray_400(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewBatchIngestHandler(pub, m, "billing.usage")
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", nil)
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeBatchRequest(validEventJSON(nil)))
 
 	if rec.Code != http.StatusBadRequest {
 		t.Errorf("expected 400, got %d", rec.Code)
+	}
+}
+
+func TestIngestHandler_unboundProject_dropsWithoutPublish(t *testing.T) {
+	pub := &fakePublisher{healthy: true}
+	m := &fakeMetrics{}
+	h := handler.NewIngestHandler(pub, m, "billing.usage", handler.UnboundFunc(func(string) bool { return true }))
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(nil)))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d; body: %s", rec.Code, responseBody(t, rec))
+	}
+	if len(pub.calls) != 0 {
+		t.Errorf("expected no publish for unbound project, got %d", len(pub.calls))
+	}
+	if len(m.dropped) != 1 || m.dropped[0][0] != "p-abc123" || m.dropped[0][1] != handler.DropReasonAttributionFailure {
+		t.Errorf("unexpected dropped metrics: %v", m.dropped)
+	}
+	if len(m.accepted) != 0 {
+		t.Errorf("unbound drop must not count as accepted: %v", m.accepted)
+	}
+
+	var resp struct {
+		Accepted int `json:"accepted"`
+	}
+	if err := json.Unmarshal(responseBody(t, rec), &resp); err != nil {
+		t.Fatalf("decoding response: %v", err)
+	}
+	if resp.Accepted != 0 {
+		t.Errorf("expected accepted=0, got %d", resp.Accepted)
+	}
+}
+
+func TestBatchIngestHandler_unboundProject_skipsPublish(t *testing.T) {
+	pub := &fakePublisher{healthy: true}
+	m := &fakeMetrics{}
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", handler.UnboundFunc(func(project string) bool {
+		return project != "p-abc123"
+	}))
+
+	batch := []json.RawMessage{
+		validEventJSON(nil),
+		validEventJSON(map[string]any{
+			"id":      "01HQ3YYZV3FDZM0B1NV1KPGWEQ",
+			"subject": "projects/unbound-proj",
+		}),
+	}
+	body, _ := json.Marshal(batch)
+
+	rec := httptest.NewRecorder()
+	h.ServeHTTP(rec, makeBatchRequest(body))
+
+	if rec.Code != http.StatusOK {
+		t.Errorf("expected 200, got %d; body: %s", rec.Code, responseBody(t, rec))
+	}
+	if len(pub.calls) != 1 {
+		t.Errorf("expected 1 publish (bound event only), got %d", len(pub.calls))
+	}
+	if len(m.dropped) != 1 || m.dropped[0][0] != "unbound-proj" {
+		t.Errorf("unexpected dropped metrics: %v", m.dropped)
+	}
+	if len(m.accepted) != 1 || m.accepted[0] != "p-abc123" {
+		t.Errorf("unexpected accepted metrics: %v", m.accepted)
 	}
 }
