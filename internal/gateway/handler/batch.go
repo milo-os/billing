@@ -53,7 +53,7 @@ func (h *BatchIngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		}
 
 		project := projectFrom(cloudEventSubjectFromRaw(raw))
-		if dropUnbound(r.Context(), h.attributor, h.metrics, project) {
+		if dropIfUnbound(r.Context(), h.attributor, h.metrics, project) {
 			continue
 		}
 

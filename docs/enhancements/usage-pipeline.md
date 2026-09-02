@@ -478,10 +478,11 @@ never exposed outside the central platform — all edge-to-central transport is
 HTTPS to the Gateway.
 
 The Gateway determines the target project from the `subject` field of the
-incoming CloudEvent. When `--kubeconfig-path` is set, it also watches
-`BillingAccountBinding` and `BillingAccount` on Milo so it can drop
-unbillable traffic before NATS. It has no dependency on project-local
-API servers.
+incoming CloudEvent. `--enable-gateway-attribution-check` is a temporary
+safeguard: when set (with `--kubeconfig-path`), the gateway watches
+`BillingAccountBinding` and `BillingAccount` on Milo and drops unbillable
+traffic before NATS. When unset, it does no Milo watches. It has no
+dependency on project-local API servers.
 
 #### API Surface
 
@@ -513,7 +514,8 @@ log is full or write latency exceeds thresholds.
 
 #### Validation
 
-The Gateway enforces **structural validity**, then **drops events for
+The Gateway enforces **structural validity**, then (when
+`--enable-gateway-attribution-check` is set) **drops events for
 projects that have no Active BillingAccountBinding** (or whose bound account
 is not Ready) so unbillable edge traffic never enters NATS. Remaining
 business-rule validation (meter existence, dimension conformance) is deferred

@@ -17,10 +17,14 @@ type Config struct {
 	NATSUrl string
 	// NATSSubjectPrefix is the NATS subject prefix (default "billing.usage").
 	NATSSubjectPrefix string
+	// EnableGatewayAttributionCheck is a temporary safeguard: when true the
+	// gateway watches Milo and drops usage for projects with no billable
+	// account before NATS. When false the gateway does no Milo watches and
+	// publishes every structurally valid event. KubeconfigPath is required
+	// when this is true.
+	EnableGatewayAttributionCheck bool
 	// KubeconfigPath is the path to a kubeconfig for the Milo API server.
-	// When set, the gateway drops events for projects with no Active
-	// BillingAccountBinding before publishing to NATS. When empty, every
-	// structurally valid event is published (local/e2e).
+	// Used only when EnableGatewayAttributionCheck is true.
 	KubeconfigPath string
 	// TLSCertFile is the path to the TLS certificate file (required for HTTPS).
 	TLSCertFile string

@@ -14,17 +14,18 @@ import (
 
 func newGatewayCommand() *cobra.Command {
 	var (
-		addr              string
-		natsURL           string
-		natsSubjectPrefix string
-		healthProbeAddr   string
-		metricsAddr       string
-		tlsCertFile       string
-		tlsKeyFile        string
-		natsCAFile        string
-		natsCertFile      string
-		natsKeyFile       string
-		kubeconfigPath    string
+		addr                          string
+		natsURL                       string
+		natsSubjectPrefix             string
+		healthProbeAddr               string
+		metricsAddr                   string
+		tlsCertFile                   string
+		tlsKeyFile                    string
+		natsCAFile                    string
+		natsCertFile                  string
+		natsKeyFile                   string
+		kubeconfigPath                string
+		enableGatewayAttributionCheck bool
 	)
 
 	opts := zap.Options{
@@ -38,17 +39,18 @@ func newGatewayCommand() *cobra.Command {
 			ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 			return gateway.Run(cmd.Context(), gateway.Config{
-				Addr:              addr,
-				NATSUrl:           natsURL,
-				NATSSubjectPrefix: natsSubjectPrefix,
-				HealthProbeAddr:   healthProbeAddr,
-				MetricsAddr:       metricsAddr,
-				TLSCertFile:       tlsCertFile,
-				TLSKeyFile:        tlsKeyFile,
-				NATSCAFile:        natsCAFile,
-				NATSCertFile:      natsCertFile,
-				NATSKeyFile:       natsKeyFile,
-				KubeconfigPath:    kubeconfigPath,
+				Addr:                          addr,
+				NATSUrl:                       natsURL,
+				NATSSubjectPrefix:             natsSubjectPrefix,
+				HealthProbeAddr:               healthProbeAddr,
+				MetricsAddr:                   metricsAddr,
+				TLSCertFile:                   tlsCertFile,
+				TLSKeyFile:                    tlsKeyFile,
+				NATSCAFile:                    natsCAFile,
+				NATSCertFile:                  natsCertFile,
+				NATSKeyFile:                   natsKeyFile,
+				EnableGatewayAttributionCheck: enableGatewayAttributionCheck,
+				KubeconfigPath:                kubeconfigPath,
 			})
 		},
 	}
@@ -63,7 +65,8 @@ func newGatewayCommand() *cobra.Command {
 	cmd.Flags().StringVar(&natsCAFile, "nats-ca-file", "", "Path to NATS CA certificate file.")
 	cmd.Flags().StringVar(&natsCertFile, "nats-cert-file", "", "Path to NATS client certificate file.")
 	cmd.Flags().StringVar(&natsKeyFile, "nats-key-file", "", "Path to NATS client private key file.")
-	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig-path", "", "Path to Milo kubeconfig. When set, drop usage for projects with no billing account before NATS.")
+	cmd.Flags().StringVar(&kubeconfigPath, "kubeconfig-path", "", "Path to Milo kubeconfig. Required when --enable-gateway-attribution-check is set.")
+	cmd.Flags().BoolVar(&enableGatewayAttributionCheck, "enable-gateway-attribution-check", false, "Temporary. Drop usage for projects with no billable account before NATS. Requires --kubeconfig-path. Off by default so the gateway does no Milo watches.")
 	_ = cmd.MarkFlagRequired("nats-url")
 
 	zapFlags := flag.NewFlagSet("zap", flag.ContinueOnError)

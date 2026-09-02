@@ -1,9 +1,10 @@
 apiVersion: kustomize.config.k8s.io/v1alpha1
 kind: Component
 
-# Wires the usage ingestion gateway to the Milo API server so it can drop
-# events for projects with no Active BillingAccountBinding before they are
-# written to NATS.
+# Temporary safeguard: drop usage for projects with no Active
+# BillingAccountBinding before NATS, while project bindings stabilize.
+# Remove --enable-gateway-attribution-check to turn this off without
+# starting Milo watches. Keep the component (mounts) or drop it entirely.
 #
 # Mounts:
 #   - datum-control-plane-trust-bundle (trust-manager)
@@ -18,6 +19,9 @@ patches:
       kind: Deployment
       name: billing-gateway
     patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --enable-gateway-attribution-check
       - op: add
         path: /spec/template/spec/containers/0/args/-
         value: --kubeconfig-path=/etc/kubernetes/project-discovery/auth/discovery-kubeconfig.yaml

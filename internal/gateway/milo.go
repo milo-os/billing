@@ -21,8 +21,8 @@ type miloAttributor struct {
 	accounts *consumer.BillingAccountCache
 }
 
-func (a miloAttributor) Bound(project string) bool {
-	return consumer.Bound(project, a.bindings, a.accounts)
+func (a miloAttributor) IsUnbound(project string) bool {
+	return consumer.IsUnbound(project, a.bindings, a.accounts)
 }
 
 // startMiloAttributor watches BillingAccountBinding and BillingAccount on
@@ -78,7 +78,7 @@ func startMiloAttributor(ctx context.Context, kubeconfigPath string, fatal chan<
 		return nil, fmt.Errorf("waiting for milo cache sync")
 	}
 	// Store HasSynced does not mean the binding/account indexes have seen
-	// the initial LIST. Bound() is fail-closed, so ingest must not start
+	// the initial LIST. IsUnbound is fail-closed, so ingest must not start
 	// until the handlers have applied that list.
 	if !cache.WaitForNamedCacheSync("milo-attributor", ctx.Done(), bindings.HasSynced, accounts.HasSynced) {
 		if err := ctx.Err(); err != nil {

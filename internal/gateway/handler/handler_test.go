@@ -270,7 +270,7 @@ func TestBatchIngestHandler_notArray_400(t *testing.T) {
 func TestIngestHandler_unboundProject_dropsWithoutPublish(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewIngestHandler(pub, m, "billing.usage", handler.BoundFunc(func(string) bool { return false }))
+	h := handler.NewIngestHandler(pub, m, "billing.usage", handler.UnboundFunc(func(string) bool { return true }))
 
 	rec := httptest.NewRecorder()
 	h.ServeHTTP(rec, makeIngestRequest(validEventJSON(nil)))
@@ -302,8 +302,8 @@ func TestIngestHandler_unboundProject_dropsWithoutPublish(t *testing.T) {
 func TestBatchIngestHandler_unboundProject_skipsPublish(t *testing.T) {
 	pub := &fakePublisher{healthy: true}
 	m := &fakeMetrics{}
-	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", handler.BoundFunc(func(project string) bool {
-		return project == "p-abc123"
+	h := handler.NewBatchIngestHandler(pub, m, "billing.usage", handler.UnboundFunc(func(project string) bool {
+		return project != "p-abc123"
 	}))
 
 	batch := []json.RawMessage{

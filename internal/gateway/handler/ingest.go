@@ -40,7 +40,7 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	project := projectFrom(cloudEventSubjectFromBody(body))
-	if dropUnbound(r.Context(), h.attributor, h.metrics, project) {
+	if dropIfUnbound(r.Context(), h.attributor, h.metrics, project) {
 		writeJSON(w, http.StatusOK, ingestResponse{Accepted: 0})
 		return
 	}

@@ -47,17 +47,17 @@ type Metrics interface {
 	RecordDropped(ctx context.Context, project, reason string)
 }
 
-// Attributor reports whether a project currently has a billable account.
+// Attributor reports whether a project currently has no billable account.
 // A nil Attributor publishes every structurally valid event (dev/e2e).
 type Attributor interface {
-	Bound(project string) bool
+	IsUnbound(project string) bool
 }
 
-// BoundFunc adapts a function to Attributor.
-type BoundFunc func(project string) bool
+// UnboundFunc adapts a function to Attributor.
+type UnboundFunc func(project string) bool
 
-// Bound implements Attributor.
-func (f BoundFunc) Bound(project string) bool { return f(project) }
+// IsUnbound implements Attributor.
+func (f UnboundFunc) IsUnbound(project string) bool { return f(project) }
 
 // DropReasonAttributionFailure is recorded when a structurally valid event
 // is dropped because the project has no Active BillingAccountBinding (or
@@ -136,8 +136,8 @@ func NewBatchIngestHandler(publisher gwnats.Publisher, metrics Metrics, subjectP
 	}
 }
 
-func dropUnbound(ctx context.Context, attr Attributor, metrics Metrics, project string) bool {
-	if attr == nil || attr.Bound(project) {
+func dropIfUnbound(ctx context.Context, attr Attributor, metrics Metrics, project string) bool {
+	if attr == nil || !attr.IsUnbound(project) {
 		return false
 	}
 	metrics.RecordDropped(ctx, project, DropReasonAttributionFailure)
