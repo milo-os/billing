@@ -11,6 +11,8 @@ vars:
   APPLYCONFIGURATION_GEN_VERSION: "v0.35.0"
   GOLANGCI_LINT_VERSION: "v2.1.5"
   CHAINSAW_VERSION: "v0.2.15"
+  # Keep in sync with the go.miloapis.com/milo version pinned in go.mod.
+  MILO_REPO_REF: "v0.31.0"
 
 includes:
   # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
@@ -100,9 +102,21 @@ tasks:
 
   test:
     desc: Run Go tests
+    deps:
+      - fetch-external-crds
     cmds:
       - go test -timeout 5m ./... -count=1
     silent: false
+
+  fetch-external-crds:
+    desc: Fetch external CRDs (Project) from milo-os/milo for envtest
+    cmds:
+      - |
+        set -e
+        mkdir -p internal/controller/testdata/crd
+        curl -sfL "https://raw.githubusercontent.com/milo-os/milo/refs/tags/{{.MILO_REPO_REF}}/config/crd/bases/resourcemanager/resourcemanager.miloapis.com_projects.yaml" \
+          -o internal/controller/testdata/crd/resourcemanager.miloapis.com_projects.yaml
+    silent: true
 
   lint:
     desc: Run golangci-lint
@@ -227,6 +241,7 @@ tasks:
         echo "🏗️  Stage 1: Deploying Base Dependencies (NATS & Vector)"
         echo "----------------------------------------------------------------------"
         task test-infra:kubectl -- apply -k config/dependencies/nats
+        task test-infra:kubectl -- apply -k config/dependencies/resourcemanager
         task test-infra:kubectl -- apply -f config/components/namespace/namespace.yaml
         task test-infra:kubectl -- apply -k config/components/billing-usage-collector
 
@@ -246,6 +261,10 @@ tasks:
         echo "➤ Cert-Manager CRDs..."
         until task test-infra:kubectl -- get crd certificates.cert-manager.io issuers.cert-manager.io >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
         task test-infra:kubectl -- wait --for=condition=established crd/certificates.cert-manager.io crd/issuers.cert-manager.io --timeout=120s
+
+        echo "➤ Project CRD (resourcemanager.miloapis.com)..."
+        until task test-infra:kubectl -- get crd projects.resourcemanager.miloapis.com >/dev/null 2>&1; do echo "  - CRD not found yet, retrying..."; sleep 5; done
+        task test-infra:kubectl -- wait --for=condition=established crd/projects.resourcemanager.miloapis.com --timeout=120s
 
         echo ""
         echo "----------------------------------------------------------------------"

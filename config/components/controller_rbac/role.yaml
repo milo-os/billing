@@ -72,3 +72,11 @@ rules:
   - create
   - get
   - update
+- apiGroups:
+  - resourcemanager.miloapis.com
+  resources:
+  - projects
+  verbs:
+  - get
+  - list
+  - watch

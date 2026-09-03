@@ -1,0 +1,68 @@
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+# Temporary safeguard: drop usage for projects with no Active
+# BillingAccountBinding before NATS, while project bindings stabilize.
+# Remove --enable-gateway-attribution-check to turn this off without
+# starting Milo watches. Keep the component (mounts) or drop it entirely.
+#
+# Mounts:
+#   - datum-control-plane-trust-bundle (trust-manager)
+#   - CSI client cert issued by datum-control-plane (system:masters)
+#   - billing-discovery-kubeconfig ConfigMap
+#
+# The billing-system namespace must have
+# `infra.datum.net/inject-datum-control-plane-trust-bundle: ""`.
+
+patches:
+  - target:
+      kind: Deployment
+      name: billing-gateway
+    patch: |-
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --enable-gateway-attribution-check
+      - op: add
+        path: /spec/template/spec/containers/0/args/-
+        value: --kubeconfig-path=/etc/kubernetes/project-discovery/auth/discovery-kubeconfig.yaml
+  - target:
+      kind: Deployment
+      name: billing-gateway
+    patch: |-
+      apiVersion: apps/v1
+      kind: Deployment
+      metadata:
+        name: billing-gateway
+      spec:
+        template:
+          spec:
+            containers:
+              - name: gateway
+                volumeMounts:
+                  - mountPath: /etc/kubernetes/pki/trust
+                    name: trust-bundle
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/projects/pki/client
+                    name: client-cert
+                    readOnly: true
+                  - mountPath: /etc/kubernetes/project-discovery/auth
+                    name: discovery-kubeconfig
+                    readOnly: true
+            volumes:
+              - name: trust-bundle
+                configMap:
+                  name: datum-control-plane-trust-bundle
+              - name: discovery-kubeconfig
+                configMap:
+                  name: billing-discovery-kubeconfig
+              - name: client-cert
+                csi:
+                  driver: csi.cert-manager.io
+                  readOnly: true
+                  volumeAttributes:
+                    csi.cert-manager.io/common-name: system:control@billing.miloapis.com
+                    csi.cert-manager.io/fs-group: "65532"
+                    csi.cert-manager.io/issuer-kind: ClusterIssuer
+                    csi.cert-manager.io/issuer-name: datum-control-plane
+                    csi.cert-manager.io/key-usages: client auth
+                    csi.cert-manager.io/organizations: system:masters

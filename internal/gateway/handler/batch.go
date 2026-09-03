@@ -42,13 +42,30 @@ func (h *BatchIngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for _, raw := range rawEvents {
 		result := validate.ValidateEvent(raw)
 		if !result.Valid {
-			project := projectFrom(cloudEventSubjectFromRaw(raw))
+			// result.Subject is only populated once validation reached the
+			// point of confirming it's present -- use it when we have it so
+			// the metric/log isn't always labeled "unknown" for late-stage
+			// rejections (e.g. a bad datacontenttype on an otherwise
+			// well-formed event).
+			project := projectFrom(result.Subject)
 			h.metrics.RecordRejected(r.Context(), project, string(result.Reason))
+			log.Info("event rejected",
+				"reason", result.Reason,
+				"detail", result.Detail,
+				"eventID", result.ID,
+				"eventType", result.Type,
+				"subject", result.Subject,
+			)
 			rejected = append(rejected, rejectedEvent{
 				ID:     result.ID,
 				Reason: string(result.Reason),
 				Detail: result.Detail,
 			})
+			continue
+		}
+
+		project := projectFrom(cloudEventSubjectFromRaw(raw))
+		if dropIfUnbound(r.Context(), h.attributor, h.metrics, project, result.ID, result.Type, result.Subject) {
 			continue
 		}
 
@@ -58,7 +75,6 @@ func (h *BatchIngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			writePublishError(w, err)
 			return
 		}
-		project := projectFrom(cloudEventSubjectFromRaw(raw))
 		h.metrics.RecordAccepted(r.Context(), project)
 		accepted++
 	}

@@ -13,3 +13,12 @@ metadata:
   namespace: default
 spec:
   currencyCode: USD
+---
+apiVersion: resourcemanager.miloapis.com/v1alpha1
+kind: Project
+metadata:
+  name: test-project-alpha
+spec:
+  ownerRef:
+    kind: Organization
+    name: test-org

@@ -48,6 +48,15 @@ metadata:
 spec:
   currencyCode: USD
 ---
+apiVersion: resourcemanager.miloapis.com/v1alpha1
+kind: Project
+metadata:
+  name: p-e2e-usage-pipeline
+spec:
+  ownerRef:
+    kind: Organization
+    name: test-org
+---
 apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccountBinding
 metadata:

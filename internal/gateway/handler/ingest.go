@@ -17,8 +17,9 @@ const maxBodySize = 1 << 20 // 1 MiB
 // Steps:
 //  1. Read body (max 1 MiB)
 //  2. Validate structural correctness
-//  3. Publish to NATS JetStream
-//  4. Return 200 {"accepted": 1} on success
+//  3. Drop if the project has no billable account (Attributor)
+//  4. Publish to NATS JetStream
+//  5. Return 200 {"accepted": 1} on success, or {"accepted": 0} when dropped
 func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	body, err := io.ReadAll(io.LimitReader(r.Body, maxBodySize))
 	if err != nil {
@@ -28,13 +29,29 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	result := validate.ValidateEvent(json.RawMessage(body))
 	if !result.Valid {
-		project := projectFrom("")
+		// result.Subject is only populated once validation reached the point
+		// of confirming it's present -- use it when we have it so the reason
+		// metric/log isn't always labeled "unknown" for late-stage rejections
+		// (e.g. a bad datacontenttype on an otherwise well-formed event).
+		project := projectFrom(result.Subject)
 		h.metrics.RecordRejected(r.Context(), project, string(result.Reason))
-		log.V(1).Info("event rejected", "reason", result.Reason, "detail", result.Detail)
+		log.Info("event rejected",
+			"reason", result.Reason,
+			"detail", result.Detail,
+			"eventID", result.ID,
+			"eventType", result.Type,
+			"subject", result.Subject,
+		)
 		writeJSON(w, http.StatusBadRequest, errorResponse{
 			Code:    string(result.Reason),
 			Message: result.Detail,
 		})
+		return
+	}
+
+	project := projectFrom(cloudEventSubjectFromBody(body))
+	if dropIfUnbound(r.Context(), h.attributor, h.metrics, project, result.ID, result.Type, result.Subject) {
+		writeJSON(w, http.StatusOK, ingestResponse{Accepted: 0})
 		return
 	}
 
@@ -45,7 +62,6 @@ func (h *IngestHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	project := projectFrom(cloudEventSubjectFromBody(body))
 	h.metrics.RecordAccepted(r.Context(), project)
 	log.V(1).Info("event accepted", "project", project, "subject", subject)
 	writeJSON(w, http.StatusOK, ingestResponse{Accepted: 1})

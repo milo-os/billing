@@ -14,6 +14,7 @@ import (
 type gatewayMetrics struct {
 	eventsTotal     metric.Int64Counter
 	rejectionsTotal metric.Int64Counter
+	droppedTotal    metric.Int64Counter
 }
 
 // newGatewayMetrics registers the Gateway OTel counters against mp.
@@ -38,9 +39,19 @@ func newGatewayMetrics(mp metric.MeterProvider) (*gatewayMetrics, error) {
 		return nil, fmt.Errorf("creating billing_ingestion_rejections_total counter: %w", err)
 	}
 
+	droppedTotal, err := meter.Int64Counter(
+		"billing_ingestion_dropped_total",
+		metric.WithDescription("Total usage events dropped before NATS because the project has no billable account."),
+		metric.WithUnit("{event}"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("creating billing_ingestion_dropped_total counter: %w", err)
+	}
+
 	return &gatewayMetrics{
 		eventsTotal:     eventsTotal,
 		rejectionsTotal: rejectionsTotal,
+		droppedTotal:    droppedTotal,
 	}, nil
 }
 
@@ -60,6 +71,17 @@ func (m *gatewayMetrics) RecordRejected(ctx context.Context, project, reason str
 	m.rejectionsTotal.Add(ctx, 1,
 		metric.WithAttributes(
 			attribute.String("project", project),
+			attribute.String("reason", reason),
+		),
+	)
+}
+
+// RecordDropped increments billing_ingestion_dropped_total by reason.
+// Project is accepted for handler/log correlation but is not a metric
+// label: unbound traffic is the high-cardinality set that flooded NATS.
+func (m *gatewayMetrics) RecordDropped(ctx context.Context, _ string, reason string) {
+	m.droppedTotal.Add(ctx, 1,
+		metric.WithAttributes(
 			attribute.String("reason", reason),
 		),
 	)
