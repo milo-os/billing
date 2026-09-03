@@ -94,3 +94,53 @@ spec:
               indicate upstream usage data that fails validation. Inspect the
               quarantine reasons and recent consumer logs:
               kubectl logs -n billing-system deployment/billing-controller-manager
+
+        - alert: BillingConsumerNonIntegerUsageValue
+          expr: |
+            sum by (namespace, project) (
+              increase(billing_validation_rejections_total{
+                namespace="billing-system",
+                reason="invalid_value"
+              }[5m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Project {{ $labels.project }} is sending non-integer usage values"
+            description: |
+              The billing consumer quarantined at least one usage event for
+              project {{ $labels.project }} with reason "invalid_value" in the
+              last 5 minutes. A producer is sending data.value as a non-integer
+              string -- usage events must be INT64 by design, with no
+              rounding fallback, so every such event is being lost outright,
+              not just delayed. Find the offending event type in the
+              consumer's quarantine logs:
+              kubectl logs -n billing-system deployment/billing-controller-manager | grep invalid_value
+
+        - alert: BillingConsumerMalformedUsageData
+          expr: |
+            sum by (namespace, project) (
+              increase(billing_validation_rejections_total{
+                namespace="billing-system",
+                reason="malformed_data"
+              }[5m])
+            ) > 0
+          for: 0m
+          labels:
+            severity: critical
+            namespace: billing-system
+            service: billing-controller-manager
+          annotations:
+            summary: "Project {{ $labels.project }} is sending malformed usage event data"
+            description: |
+              The billing consumer quarantined at least one usage event for
+              project {{ $labels.project }} with reason "malformed_data" in
+              the last 5 minutes. A producer is sending an event data payload
+              that doesn't match the billing wire schema (e.g. dimensions is
+              not an object, or a dimension value isn't a string) -- these
+              events are being lost outright, not just delayed. Find the
+              offending event type in the consumer's quarantine logs:
+              kubectl logs -n billing-system deployment/billing-controller-manager | grep malformed_data

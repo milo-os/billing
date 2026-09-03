@@ -160,3 +160,67 @@ func TestValidate_NoDimensions_WithDeclaredDims_Passes(t *testing.T) {
 		t.Errorf("expected OK=true for event with no dimensions, got reason=%s", result.Reason)
 	}
 }
+
+func TestValidate_NonIntegerValue_QuarantinesInvalidValue(t *testing.T) {
+	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", nil)
+	mc := newTestMeterCache(md)
+
+	ce := newTestCE("compute.miloapis.com/instance/cpu-seconds")
+	_ = ce.SetData("application/json", map[string]any{"value": "133535.3"})
+
+	result := validate(ce, mc)
+	if result.OK {
+		t.Error("expected validation to fail for a non-integer data.value")
+	}
+	if result.Reason != ReasonInvalidValue {
+		t.Errorf("expected ReasonInvalidValue, got %s", result.Reason)
+	}
+}
+
+func TestValidate_IntegerValue_Passes(t *testing.T) {
+	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", nil)
+	mc := newTestMeterCache(md)
+
+	ce := newTestCE("compute.miloapis.com/instance/cpu-seconds")
+	_ = ce.SetData("application/json", map[string]any{"value": "133535"})
+
+	result := validate(ce, mc)
+	if !result.OK {
+		t.Errorf("expected OK=true for an integer data.value, got reason=%s", result.Reason)
+	}
+}
+
+// A dimensions decode failure fails the same way as a bad value (both make
+// ce.DataAs return an error), but must not be misclassified as
+// ReasonInvalidValue -- it's a different producer bug.
+func TestValidate_MalformedDimensionsShape_QuarantinesMalformedData(t *testing.T) {
+	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
+	mc := newTestMeterCache(md)
+
+	ce := newTestCE("compute.miloapis.com/instance/cpu-seconds")
+	_ = ce.SetData("application/json", map[string]any{"value": "1", "dimensions": []string{"a", "b"}})
+
+	result := validate(ce, mc)
+	if result.OK {
+		t.Error("expected validation to fail for a malformed dimensions shape")
+	}
+	if result.Reason != ReasonMalformedData {
+		t.Errorf("expected ReasonMalformedData, got %s", result.Reason)
+	}
+}
+
+func TestValidate_MalformedDimensionValueType_QuarantinesMalformedData(t *testing.T) {
+	md := publishedMD("cpu-seconds", "compute.miloapis.com/instance/cpu-seconds", []string{"region"})
+	mc := newTestMeterCache(md)
+
+	ce := newTestCE("compute.miloapis.com/instance/cpu-seconds")
+	_ = ce.SetData("application/json", map[string]any{"value": "1", "dimensions": map[string]any{"region": 123}})
+
+	result := validate(ce, mc)
+	if result.OK {
+		t.Error("expected validation to fail for a non-string dimension value")
+	}
+	if result.Reason != ReasonMalformedData {
+		t.Errorf("expected ReasonMalformedData, got %s", result.Reason)
+	}
+}
