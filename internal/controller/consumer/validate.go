@@ -4,6 +4,7 @@ package consumer
 
 import (
 	"fmt"
+	"strings"
 
 	cloudevents "github.com/cloudevents/sdk-go/v2"
 
@@ -25,6 +26,15 @@ const (
 	// ReasonAttributionFailure indicates no Active BillingAccountBinding exists
 	// for the project, or the matched account is not Ready.
 	ReasonAttributionFailure QuarantineReason = "attribution_failure"
+
+	// ReasonInvalidValue indicates data.value is absent or is not a valid
+	// INT64 string. Usage events must be integers by design -- see event.EventData.Value.
+	ReasonInvalidValue QuarantineReason = "invalid_value"
+
+	// ReasonMalformedData indicates event data doesn't match the billing wire
+	// schema for a reason other than an invalid value (e.g. dimensions is
+	// not an object, or a dimension value isn't a string).
+	ReasonMalformedData QuarantineReason = "malformed_data"
 )
 
 // ValidationResult carries the outcome of the validate step.
@@ -49,8 +59,12 @@ func validate(ce *cloudevents.Event, mc *MeterDefinitionCache) ValidationResult 
 	}
 
 	var data event.EventData
-	// DataAs returns nil when the event carries no data — treat as empty dimensions.
-	_ = ce.DataAs(&data)
+	if err := ce.DataAs(&data); err != nil {
+		if strings.Contains(err.Error(), "EventData.value") {
+			return ValidationResult{OK: false, Reason: ReasonInvalidValue, Detail: fmt.Sprintf("data.value is not a valid INT64 string: %v", err)}
+		}
+		return ValidationResult{OK: false, Reason: ReasonMalformedData, Detail: fmt.Sprintf("event data does not match the billing wire schema: %v", err)}
+	}
 
 	declaredDimensions := make(map[string]struct{}, len(md.Spec.Measurement.Dimensions))
 	for _, dim := range md.Spec.Measurement.Dimensions {
