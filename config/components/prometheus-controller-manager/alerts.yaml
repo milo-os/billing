@@ -24,7 +24,7 @@ spec:
             expected_no_match: "true"
             severity: critical
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Pod {{ $labels.pod }} is crash-looping"
             description: |
@@ -44,7 +44,7 @@ spec:
           labels:
             severity: critical
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Deployment {{ $labels.deployment }} has unavailable replicas"
             description: |
@@ -65,7 +65,7 @@ spec:
           labels:
             severity: warning
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Billing consumer is dropping malformed messages"
             description: |
@@ -86,7 +86,7 @@ spec:
           labels:
             severity: warning
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Billing consumer is quarantining usage events"
             description: |
@@ -108,7 +108,7 @@ spec:
           labels:
             severity: critical
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Project {{ $labels.project }} is sending non-integer usage values"
             description: |
@@ -133,7 +133,7 @@ spec:
           labels:
             severity: critical
             namespace: billing-system
-            service: billing-controller-manager
+            service: billing
           annotations:
             summary: "Project {{ $labels.project }} is sending malformed usage event data"
             description: |
