@@ -18,7 +18,6 @@ latest-milestone: "v0"
   - [Screens](#screens)
   - [Emails](#emails)
 - [The Staff Experience](#the-staff-experience)
-- [Joining Your Company's Organization](#joining-your-companys-organization)
 - [Policy and Guardrails](#policy-and-guardrails)
 - [How Other Platforms Do This](#how-other-platforms-do-this)
 - [Implementation Notes](#implementation-notes)
@@ -39,8 +38,7 @@ organization doesn't buy software that way:
 
 - enterprises and partners on a negotiated MSA or purchase order;
 - nonprofits and education customers on grant or PO funding;
-- developers who signed up before the card requirement existed;
-- developers whose company already uses Datum.
+- developers who signed up before the card requirement existed.
 
 This enhancement gives those customers a second way through the billing step:
 **"Apply for payment terms"**. The customer tells us how they want to pay and
@@ -57,10 +55,8 @@ Two kinds of payment terms are offered:
   nonprofits, education and other sponsored customers.
 
 The first path is **request and approve**. Letting customers skip the card
-without a review was ruled out on the issue, because card entry at signup is a
-key part of our fraud analysis ([comment][issue-1501-decision]). The fourth
-group, developers joining their company's existing organization, is split into
-its own milo enhancement.
+without a review isn't an option, because card entry at signup is a key part
+of our fraud analysis and prevention.
 
 ## Motivation
 
@@ -101,9 +97,8 @@ will spend more, pay on terms, and bring colleagues with them.
   Automatically stopping usage is future work.
 - **Bulk exemptions for older accounts.** Each locked-out customer applies
   individually.
-- **Joining a company's organization by email domain.** Covered here only to
-  show where it fits. See
-  [Joining Your Company's Organization](#joining-your-companys-organization).
+- **Joining a company's existing organization by email domain.** This is
+  covered by a separate enhancement.
 
 ## Who This Is For
 
@@ -138,11 +133,6 @@ until I add a card, and I can't or won't."
 > invoice terms, or decline with a reason. Members who aren't owners see that
 > an owner has applied, instead of a dead end.
 
-**(d) Developer at an existing customer.** "I signed up with my @company.com
-address. I should join my company's organization, not create a new one and add
-a card." Split out; see
-[Joining Your Company's Organization](#joining-your-companys-organization).
-
 **Sales or account manager.** "I've already signed this customer. I want to
 grant their terms so they don't have to apply."
 
@@ -163,7 +153,7 @@ The issue asked which path comes first ([comment][issue-1501-paths]):
   registration.
 
 **Decided: option B. Option A is ruled out.** Card entry at signup is a key
-part of our fraud analysis and prevention ([comment][issue-1501-decision]).
+part of our fraud analysis and prevention.
 Letting customers skip it by choice would remove that signal with nothing in
 its place. With option B, a person's review takes the card's place as the
 control.
@@ -444,35 +434,6 @@ invitation emails.
   accounts payable email and credit used. Exportable as CSV. This is the v0
   worklist finance invoices from by hand.
 
-## Joining Your Company's Organization
-
-Story (d) is a different problem: the developer shouldn't be in the billing
-step at all. The first issue comment covers it ([comment][issue-1501-invite]):
-invited users already skip the card step, because accepting an invitation
-puts them in an organization that already pays. What's missing is *detecting*
-a developer from an existing customer at signup and moving them from the "new
-user" flow into that "invite to organization" flow.
-
-The intended experience:
-
-1. The developer signs up with dev@acme.com and verifies their email.
-2. Instead of "create your organization", they see: "**Your company already
-   uses Datum.** Request to join *Acme Corp*, or create your own organization."
-3. An Acme owner gets an email and approves the request.
-4. The developer lands in Acme's organization with no billing step.
-
-Rules from the research:
-
-- Only **verified** email addresses match, and only domains the company has
-  proven it owns.
-- Organizations opt in to being discoverable, so we never reveal which
-  companies are customers.
-- Personal email domains never match.
-- The developer can always choose to create their own organization instead.
-
-This needs domain verification and join requests in milo, so it gets its own
-milo enhancement and can be built alongside the work here.
-
 ## Policy and Guardrails
 
 | Concern | How we handle it |
@@ -486,15 +447,14 @@ milo enhancement and can be built alongside the work here.
 
 ## How Other Platforms Do This
 
-| Platform | Who can pay by invoice | How it's granted | Joining your company |
-|---|---|---|---|
-| **AWS** | Unpublished | Support case or account manager. ACH unlocks after payment history | The organization's management account pays for member accounts |
-| **Google Cloud** | ≥ 1 year, ≥ $40k/yr spend | Application form | Verified domain, admin invites users |
-| **Azure** | ≥ 6 months as a customer, spend threshold | In-portal "request approval", credit check if needed. One-way switch | Entra tenant |
-| **Cloudflare, Vercel, GitHub Enterprise** | Contract | Sales | Identity provider. GitHub's verified domain gives no auto-join |
-| **Datadog** | Annual plans | "Request invoicing" on the plan page, reviewed by staff | – |
-| **Snowflake, Railway, Supabase** | Sales or prepay | Ticket or sales. No-card trials with a hard cap | – |
-| **Slack, Atlassian** | – | – | Approved domains: auto-join or request to join. Atlassian blocks personal email domains |
+| Platform | Who can pay by invoice | How it's granted |
+|---|---|---|
+| **AWS** | Unpublished | Support case or account manager. ACH unlocks after payment history |
+| **Google Cloud** | ≥ 1 year, ≥ $40k/yr spend | Application form |
+| **Azure** | ≥ 6 months as a customer, spend threshold | In-portal "request approval", credit check if needed. One-way switch |
+| **Cloudflare, Vercel, GitHub Enterprise** | Contract | Sales |
+| **Datadog** | Annual plans | "Request invoicing" on the plan page, reviewed by staff |
+| **Snowflake, Railway, Supabase** | Sales or prepay | Ticket or sales. No-card trials with a hard cap |
 
 What they have in common:
 
@@ -503,12 +463,9 @@ What they have in common:
    invoicing" are the closest to what we're proposing.
 2. **Every non-card account has a limit:** a credit limit, a deposit, or a
    history requirement.
-3. **Joining your company's account replaces a personal card.** AWS
-   Organizations, Heroku collaborators and Slack approved domains all work
-   this way.
-4. **Sponsored and nonprofit access expires,** usually after 12 months, and
+3. **Sponsored and nonprofit access expires,** usually after 12 months, and
    doesn't silently convert to paid.
-5. **Introduce card requirements gently.** Fly.io's sudden card requirement
+4. **Introduce card requirements gently.** Fly.io's sudden card requirement
    drew complaints. The better pattern keeps existing resources running and
    gives people a way forward.
 
@@ -534,7 +491,7 @@ The outline:
 | billing | New resources, the shared signal, reviewer permissions |
 | cloud-portal | Payment choice, application form, review/approved/declined screens, older-account and member screens, billing settings card, ending-soon banner |
 | staff-portal | Applications queue, approve/decline, grant and end terms, finance worklist |
-| milo | Onboarding reads the shared signal; application and terms emails. (Story d: domain join) |
+| milo | Onboarding reads the shared signal; application and terms emails |
 | infra | Reviewer role and staff alert channel |
 | OpenMeter pipeline | Later: automated invoices for invoice-terms accounts |
 
@@ -553,8 +510,6 @@ The outline:
    plus credit-limit alerts.
 4. **Phase 4: extras.** Sponsored plans and credits applied automatically, and
    a fraud-service check on each application.
-5. **Parallel: joining your company's organization** (story d), as its own milo
-   enhancement.
 
 ## Open Questions
 
@@ -562,12 +517,11 @@ The outline:
 
 | # | Question | Decision |
 |---|---|---|
-| 1 | Which first path: register without a card (option A), or request and approve (option B)? | Option B, as "Apply for payment terms" with staff review. Option A is ruled out because card entry at signup is a key part of fraud analysis and prevention ([comment][issue-1501-decision]) |
+| 1 | Which first path: register without a card (option A), or request and approve (option B)? | Option B, as "Apply for payment terms" with staff review. Option A is ruled out because card entry at signup is a key part of fraud analysis and prevention |
 | 2 | What does a customer get while their application is under review? | A holding page. They can't create projects until there's a decision |
 | 3 | How are older, locked-out accounts handled? | One application at a time through "Apply for payment terms". No bulk exemption |
 | 4 | Who raises invoices for invoice-terms customers? | Finance, by hand, in v0. Automated later through OpenMeter |
-| 5 | Is story (d) in scope? | Split into its own milo enhancement ([comment][issue-1501-paths]), handing off to the existing invite flow ([comment][issue-1501-invite]) |
-| 6 | Who sends the emails? | milo's existing email system |
+| 5 | Who sends the emails? | milo's existing email system |
 
 ### Still Open
 
@@ -594,12 +548,13 @@ The outline:
   platforms.
 - 2026-09-25: First review pass. Decided on the review holding page, manual v0
   invoicing, handling older accounts individually, and email ownership.
-- 2026-09-27: Aligned with the issue comments: option B ("Apply for payment
-  terms") decided and option A ruled out for fraud reasons; story (d) hands
-  off to the existing invite flow.
+- 2026-09-27: Recorded option B ("Apply for payment terms") as the first
+  path.
 - 2026-09-27: Refocused on the product and customer experience. Added screen
   copy, form fields, emails and mockups. API detail moved out to the
   technical design.
+- 2026-09-27: Removed joining a company's existing organization by email
+  domain, which moves to its own enhancement.
 
 ## Future Work
 
@@ -642,11 +597,7 @@ The outline:
   [Azure pay by invoice](https://learn.microsoft.com/en-us/azure/cost-management-billing/manage/pay-by-invoice),
   [Datadog billing](https://docs.datadoghq.com/account_management/billing/),
   [Fly.io card rollout thread](https://community.fly.io/t/suddenly-needing-to-add-a-credit-card-can-i-ensure-it-doesnt-get-charged/19245),
-  [Slack approved domains](https://slack.com/help/articles/115004856503),
-  [Atlassian approved domains](https://support.atlassian.com/user-management/docs/control-how-users-get-access-to-products/),
   [Stripe bank transfers on invoices](https://docs.stripe.com/invoicing/bank-transfer)
 
 [issue-1501]: https://github.com/datum-cloud/cloud-portal/issues/1501
-[issue-1501-invite]: https://github.com/datum-cloud/cloud-portal/issues/1501#issuecomment-5572502382
 [issue-1501-paths]: https://github.com/datum-cloud/cloud-portal/issues/1501#issuecomment-5737118432
-[issue-1501-decision]: https://github.com/datum-cloud/cloud-portal/issues/1501#issuecomment-5833846125
