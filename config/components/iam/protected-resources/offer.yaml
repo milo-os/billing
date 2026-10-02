@@ -17,3 +17,9 @@ spec:
     - delete
     - watch
     - writeSnapshot
+  subresources:
+    - name: status
+      permissions:
+        - get
+        - update
+        - patch
