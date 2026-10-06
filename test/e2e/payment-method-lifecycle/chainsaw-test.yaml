@@ -9,7 +9,7 @@ spec:
     2. Setting the defaultPaymentMethodRef on a BillingAccount initially shows DefaultPaymentMethodReady=False (Reason: NotConfigured).
     3. Simulating a provider controller by updating the PaymentMethod phase to Active transitions it to InstrumentReady=True.
     4. Linking the Active payment method as default on the BillingAccount is allowed by the validation webhook and projects DefaultPaymentMethodReady=True.
-    5. Updating the PaymentMethod phase to Failed (simulating provider confirmation/billing failure) transitions it to InstrumentReady=False and propagates to the BillingAccount as DefaultPaymentMethodReady=False (Reason: PaymentMethodDegraded).
+    5. Updating the PaymentMethod phase to Failed (simulating provider confirmation/billing failure) transitions it to InstrumentReady=False and propagates to the BillingAccount as DefaultPaymentMethodReady=False and PaymentReady=False (Reason: PaymentMethodDegraded).
   steps:
     - name: create-resources
       description: Create a BillingAccount and a PaymentMethod.
@@ -49,6 +49,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: reject-pending-payment-method-as-default
       description: |
@@ -106,6 +109,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "True"
+                    reason: PaymentMethodReady
 
     - name: set-pm-failed
       description: Simulates the provider controller setting the PaymentMethod to Failed.
@@ -146,6 +152,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: PaymentMethodDegraded
 
     - name: reject-deleting-default-payment-method
       description: Verify that deleting a default PaymentMethod is blocked by the validation webhook.
@@ -186,3 +195,6 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured

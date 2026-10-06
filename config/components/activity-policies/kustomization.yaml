@@ -13,4 +13,5 @@ kind: Component
 resources:
   - billingaccount-policy.yaml
   - billingaccountbinding-policy.yaml
+  - billingarrangement-policy.yaml
   - paymentmethod-policy.yaml

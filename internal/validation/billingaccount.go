@@ -25,7 +25,31 @@ func ValidateBillingAccountCreate(account *billingv1alpha1.BillingAccount) field
 	allErrs = append(allErrs, validateContactInfo(account.Spec.ContactInfo, field.NewPath("spec", "contactInfo"))...)
 	allErrs = append(allErrs, validateTaxIDs(account.Spec.TaxIDs, field.NewPath("spec", "taxIds"))...)
 
+	if !isStandardPaymentTerms(account.Spec.PaymentTerms) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "paymentTerms"),
+			paymentTermsForbiddenMessage,
+		))
+	}
+
 	return allErrs
+}
+
+// paymentTermsForbiddenMessage explains why spec.paymentTerms can't be
+// set or changed. Customers hold billingaccounts update permission (to
+// edit contact details), so the terms themselves must be locked here.
+const paymentTermsForbiddenMessage = "paymentTerms can't be changed; payment terms are granted by Datum staff through a BillingArrangement"
+
+// isStandardPaymentTerms reports whether terms are the standard ones.
+// Zero-valued fields count as standard because CRD defaulting fills them
+// in before the object is stored.
+func isStandardPaymentTerms(terms *billingv1alpha1.PaymentTerms) bool {
+	if terms == nil {
+		return true
+	}
+	return (terms.NetDays == 0 || terms.NetDays == billingv1alpha1.StandardPaymentTermsNetDays) &&
+		(terms.InvoiceFrequency == "" || terms.InvoiceFrequency == billingv1alpha1.StandardPaymentTermsInvoiceFrequency) &&
+		(terms.InvoiceDayOfMonth == 0 || terms.InvoiceDayOfMonth == billingv1alpha1.StandardPaymentTermsInvoiceDayOfMonth)
 }
 
 // ValidateBillingAccountUpdate validates a BillingAccount on update.
@@ -39,6 +63,18 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec", "currencyCode"),
 			"currencyCode is immutable once the account has been activated",
+		))
+	}
+
+	// Defence in depth alongside the CEL transition rule on the field.
+	// Compared semantically so a stored-but-unset value and its defaults
+	// aren't treated as a change.
+	if isStandardPaymentTerms(oldAccount.Spec.PaymentTerms) != isStandardPaymentTerms(newAccount.Spec.PaymentTerms) ||
+		(!isStandardPaymentTerms(oldAccount.Spec.PaymentTerms) &&
+			*oldAccount.Spec.PaymentTerms != *newAccount.Spec.PaymentTerms) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "paymentTerms"),
+			paymentTermsForbiddenMessage,
 		))
 	}
 

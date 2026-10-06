@@ -44,6 +44,7 @@ rules:
   resources:
   - billingaccountbindings/status
   - billingaccounts/status
+  - billingarrangements/status
   - billingentitlements/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
@@ -56,6 +57,7 @@ rules:
 - apiGroups:
   - billing.miloapis.com
   resources:
+  - billingarrangements
   - invoices
   - paymentmethodclasses
   - paymentmethods

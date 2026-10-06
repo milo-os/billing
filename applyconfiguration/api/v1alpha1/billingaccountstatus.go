@@ -25,6 +25,10 @@ type BillingAccountStatusApplyConfiguration struct {
 	// LatestInvoiceRef references the most recently created Invoice for
 	// this billing account. Cleared when no invoices exist.
 	LatestInvoiceRef *LatestInvoiceRefApplyConfiguration `json:"latestInvoiceRef,omitempty"`
+	// PaymentArrangement summarises the BillingArrangement currently in
+	// effect for this account, if any. Cleared when no arrangement is
+	// active.
+	PaymentArrangement *BillingAccountPaymentArrangementApplyConfiguration `json:"paymentArrangement,omitempty"`
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
@@ -69,6 +73,14 @@ func (b *BillingAccountStatusApplyConfiguration) WithLinkedProjectsCount(value i
 // If called multiple times, the LatestInvoiceRef field is set to the value of the last call.
 func (b *BillingAccountStatusApplyConfiguration) WithLatestInvoiceRef(value *LatestInvoiceRefApplyConfiguration) *BillingAccountStatusApplyConfiguration {
 	b.LatestInvoiceRef = value
+	return b
+}
+
+// WithPaymentArrangement sets the PaymentArrangement field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PaymentArrangement field is set to the value of the last call.
+func (b *BillingAccountStatusApplyConfiguration) WithPaymentArrangement(value *BillingAccountPaymentArrangementApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	b.PaymentArrangement = value
 	return b
 }
 

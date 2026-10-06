@@ -13,6 +13,11 @@ type BillingAccountSpecApplyConfiguration struct {
 	// This field is immutable once the account transitions past Provisioning phase.
 	CurrencyCode *string `json:"currencyCode,omitempty"`
 	// PaymentTerms defines the invoicing schedule for this billing account.
+	// It always holds the standard terms (net 30, invoiced monthly on the
+	// 1st): the admission webhook rejects anything else on create, and it
+	// can't be changed afterwards. Customers who need different terms get
+	// them from staff through a BillingArrangement, published on
+	// status.paymentArrangement.
 	PaymentTerms *PaymentTermsApplyConfiguration `json:"paymentTerms,omitempty"`
 	// ContactInfo describes the billing contact and the postal
 	// address invoices are issued to.

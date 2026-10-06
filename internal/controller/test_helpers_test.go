@@ -98,6 +98,11 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 	if err := prod.reconcileInvoicingCondition(ctx, &account); err != nil {
 		return ctrl.Result{}, err
 	}
+	now := time.Now()
+	nextBoundary, err := prod.reconcilePaymentReadyCondition(ctx, &account, now)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
 
 	desiredStatus := account.Status.DeepCopy()
 
@@ -114,7 +119,7 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 	if err := r.client.Status().Update(ctx, &latest); err != nil {
 		return ctrl.Result{}, err
 	}
-	return ctrl.Result{}, nil
+	return requeueAt(nextBoundary, now), nil
 }
 
 // testPaymentMethodReconciler is a test adapter that mirrors the
@@ -177,6 +182,25 @@ func reconcileAccountFromPaymentMethod(cl client.Client) handler.EventHandler {
 				NamespacedName: types.NamespacedName{
 					Name:      pm.Spec.BillingAccountRef.Name,
 					Namespace: pm.Namespace,
+				},
+			}}
+		},
+	)
+}
+
+// reconcileAccountFromArrangement enqueues the referenced BillingAccount
+// when a BillingArrangement changes.
+func reconcileAccountFromArrangement(cl client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(
+		func(ctx context.Context, obj client.Object) []reconcile.Request {
+			arr, ok := obj.(*billingv1alpha1.BillingArrangement)
+			if !ok {
+				return nil
+			}
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      arr.Spec.BillingAccountRef.Name,
+					Namespace: arr.Namespace,
 				},
 			}}
 		},

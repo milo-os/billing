@@ -28,6 +28,9 @@ spec:
     - jsonPath: .status.linkedProjectsCount
       name: Projects
       type: integer
+    - jsonPath: .status.conditions[?(@.type=="PaymentReady")].status
+      name: Payment Ready
+      type: string
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -173,8 +176,13 @@ spec:
                 type: object
               paymentTerms:
                 default: {}
-                description: PaymentTerms defines the invoicing schedule for this
-                  billing account.
+                description: |-
+                  PaymentTerms defines the invoicing schedule for this billing account.
+                  It always holds the standard terms (net 30, invoiced monthly on the
+                  1st): the admission webhook rejects anything else on create, and it
+                  can't be changed afterwards. Customers who need different terms get
+                  them from staff through a BillingArrangement, published on
+                  status.paymentArrangement.
                 properties:
                   invoiceDayOfMonth:
                     default: 1
@@ -201,6 +209,10 @@ spec:
                     minimum: 1
                     type: integer
                 type: object
+                x-kubernetes-validations:
+                - message: paymentTerms can't be changed; payment terms are granted
+                    by Datum staff through a BillingArrangement
+                  rule: self == oldSelf
               taxIds:
                 description: |-
                   TaxIDs are the tax registrations attached to this account. An
@@ -330,6 +342,71 @@ spec:
                   by the controller.
                 format: int64
                 type: integer
+              paymentArrangement:
+                description: |-
+                  PaymentArrangement summarises the BillingArrangement currently in
+                  effect for this account, if any. Cleared when no arrangement is
+                  active.
+                properties:
+                  endsAt:
+                    description: EndsAt is when the arrangement ends, if it has a
+                      fixed end.
+                    format: date-time
+                    type: string
+                  invoice:
+                    description: Invoice carries the invoice terms when type is Invoice.
+                    properties:
+                      accountsPayableEmail:
+                        description: |-
+                          AccountsPayableEmail receives invoices in addition to the billing
+                          contact. When unset, invoices go to the billing contact only.
+                        maxLength: 254
+                        type: string
+                      agreementReference:
+                        description: |-
+                          AgreementReference identifies a signed MSA or order form, when one
+                          exists. Without one, our standard terms of service apply.
+                        maxLength: 128
+                        type: string
+                      creditLimit:
+                        description: |-
+                          CreditLimit is the maximum spend per billing cycle, as a decimal
+                          string in the billing account's currency (e.g. "10000"). Staff are
+                          alerted as the account nears it; it is not a hard cap.
+                        pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                        type: string
+                      netDays:
+                        default: 30
+                        description: |-
+                          NetDays is the number of days after the invoice date that payment
+                          is due.
+                        format: int32
+                        maximum: 90
+                        minimum: 1
+                        type: integer
+                      purchaseOrderNumber:
+                        description: PurchaseOrderNumber is printed on invoices.
+                        maxLength: 64
+                        type: string
+                    required:
+                    - creditLimit
+                    type: object
+                  name:
+                    description: Name is the name of the active BillingArrangement.
+                    type: string
+                  startsAt:
+                    description: StartsAt is when the arrangement took effect.
+                    format: date-time
+                    type: string
+                  type:
+                    description: Type is how the account is billed.
+                    enum:
+                    - Invoice
+                    type: string
+                required:
+                - name
+                - type
+                type: object
               phase:
                 description: Phase represents the current lifecycle phase of the billing
                   account.

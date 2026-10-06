@@ -8,6 +8,7 @@
 resources:
   - billingaccount.yaml
   - billingaccountbinding.yaml
+  - billingarrangement.yaml
   - billingentitlement.yaml
   - meterdefinition.yaml
   - monitoredresourcetype.yaml

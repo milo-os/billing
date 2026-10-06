@@ -7,6 +7,7 @@ import (
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -71,6 +72,134 @@ var _ = Describe("BillingAccount Controller", func() {
 			reconciler := &BillingAccountReconciler{}
 			phase := reconciler.determinePhase(account)
 			Expect(phase).To(Equal(billingv1alpha1.BillingAccountPhaseArchived))
+		})
+	})
+
+	Context("Payment terms", func() {
+		It("should be payment ready while invoice terms are active and not after they end", func() {
+			account := &billingv1alpha1.BillingAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-arrangement",
+					Namespace: "default",
+				},
+				Spec: billingv1alpha1.BillingAccountSpec{
+					CurrencyCode: "USD",
+				},
+			}
+			Expect(k8sClient.Create(ctx, account)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var fetched billingv1alpha1.BillingAccount
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+				cond := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentReady)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal("NotConfigured"))
+			}, timeout, interval).Should(Succeed())
+
+			// Webhooks don't run in envtest, so set startsAt explicitly.
+			// The short window proves the reconcilers requeue themselves
+			// at endsAt rather than waiting for an unrelated event.
+			startsAt := metav1.NewTime(time.Now().Add(-time.Minute).Truncate(time.Second))
+			endsAt := metav1.NewTime(time.Now().Add(4 * time.Second).Truncate(time.Second))
+			arrangement := &billingv1alpha1.BillingArrangement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-arrangement-terms",
+					Namespace: "default",
+				},
+				Spec: billingv1alpha1.BillingArrangementSpec{
+					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: account.Name},
+					Type:              billingv1alpha1.BillingArrangementTypeInvoice,
+					Invoice: &billingv1alpha1.InvoiceArrangementTerms{
+						CreditLimit:          "10000",
+						AccountsPayableEmail: "ap@example.com",
+					},
+					StartsAt: &startsAt,
+					EndsAt:   &endsAt,
+					Reason:   "Signed MSA",
+				},
+			}
+			Expect(k8sClient.Create(ctx, arrangement)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var fetched billingv1alpha1.BillingAccount
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+				cond := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentReady)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionTrue))
+				g.Expect(cond.Reason).To(Equal("InvoiceTerms"))
+				g.Expect(fetched.Status.PaymentArrangement).NotTo(BeNil())
+				g.Expect(fetched.Status.PaymentArrangement.Name).To(Equal(arrangement.Name))
+				// CRD defaulting fills in the standard net days.
+				g.Expect(fetched.Status.PaymentArrangement.Invoice.NetDays).To(Equal(int32(30)))
+
+				var arr billingv1alpha1.BillingArrangement
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(arrangement), &arr)).To(Succeed())
+				g.Expect(arr.Status.Phase).To(Equal(billingv1alpha1.BillingArrangementPhaseActive))
+			}, timeout, interval).Should(Succeed())
+
+			Eventually(func(g Gomega) {
+				var fetched billingv1alpha1.BillingAccount
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+				cond := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentReady)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Status).To(Equal(metav1.ConditionFalse))
+				g.Expect(cond.Reason).To(Equal("ArrangementEnded"))
+				g.Expect(fetched.Status.PaymentArrangement).To(BeNil())
+
+				var arr billingv1alpha1.BillingArrangement
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(arrangement), &arr)).To(Succeed())
+				g.Expect(arr.Status.Phase).To(Equal(billingv1alpha1.BillingArrangementPhaseEnded))
+			}, 15*time.Second, interval).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, arrangement)).To(Succeed())
+			Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+		})
+
+		It("should not let anyone change the account's own payment terms", func() {
+			account := &billingv1alpha1.BillingAccount{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-locked-terms",
+					Namespace: "default",
+				},
+				Spec: billingv1alpha1.BillingAccountSpec{
+					CurrencyCode: "USD",
+				},
+			}
+			Expect(k8sClient.Create(ctx, account)).To(Succeed())
+
+			var fetched billingv1alpha1.BillingAccount
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			Expect(fetched.Spec.PaymentTerms).NotTo(BeNil())
+			Expect(fetched.Spec.PaymentTerms.NetDays).To(Equal(billingv1alpha1.StandardPaymentTermsNetDays))
+
+			patch := client.RawPatch(types.MergePatchType, []byte(`{"spec":{"paymentTerms":{"netDays":90}}}`))
+			err := k8sClient.Patch(ctx, &fetched, patch)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("payment terms are granted by Datum staff through a BillingArrangement"))
+
+			// Other spec edits, like the portal's contact info patch, still work.
+			patch = client.RawPatch(types.MergePatchType, []byte(`{"spec":{"contactInfo":{"email":"billing@example.com"}}}`))
+			Expect(k8sClient.Patch(ctx, &fetched, patch)).To(Succeed())
+
+			Expect(k8sClient.Delete(ctx, account)).To(Succeed())
+		})
+
+		It("should reject invoice arrangements without invoice terms", func() {
+			arrangement := &billingv1alpha1.BillingArrangement{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-arrangement-no-terms",
+					Namespace: "default",
+				},
+				Spec: billingv1alpha1.BillingArrangementSpec{
+					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "anything"},
+					Type:              billingv1alpha1.BillingArrangementTypeInvoice,
+					Reason:            "Signed MSA",
+				},
+			}
+			err := k8sClient.Create(ctx, arrangement)
+			Expect(err).To(HaveOccurred())
+			Expect(err.Error()).To(ContainSubstring("invoice is required when type is Invoice"))
 		})
 	})
 

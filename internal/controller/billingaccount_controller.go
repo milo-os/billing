@@ -13,10 +13,12 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -37,6 +39,7 @@ const (
 // BillingAccountReconciler reconciles a BillingAccount object.
 type BillingAccountReconciler struct {
 	client client.Client
+	now    func() time.Time
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -45,6 +48,7 @@ type BillingAccountReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccountbindings,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=paymentmethods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=invoices,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements,verbs=get;list;watch
 
 func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -122,6 +126,15 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return ctrl.Result{}, fmt.Errorf("reconciling invoicing condition: %w", err)
 	}
 
+	// Combine the payment method and any staff-granted arrangement into
+	// the single PaymentReady signal. Must run after the default payment
+	// method condition is projected.
+	now := nowFrom(r.now)
+	nextBoundary, err := r.reconcilePaymentReadyCondition(ctx, &account, now)
+	if err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling payment ready condition: %w", err)
+	}
+
 	if err := r.client.Status().Update(ctx, &account); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
@@ -131,7 +144,9 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		"linkedProjects", linkedCount,
 	)
 
-	return ctrl.Result{}, nil
+	// Requeue when an arrangement starts or ends so PaymentReady flips
+	// on time rather than on the next unrelated event.
+	return requeueAt(nextBoundary, now), nil
 }
 
 // determinePhase computes the target phase based on the account's current
@@ -255,6 +270,94 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 	}
 
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+}
+
+// reconcilePaymentReadyCondition publishes the active BillingArrangement
+// on status.paymentArrangement and sets PaymentReady from it and the
+// DefaultPaymentMethodReady condition. It returns the next time any of
+// the account's arrangements changes phase, or the zero time.
+//
+// Active terms take precedence over a card in the reason, since they
+// decide how the account is billed.
+func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+	now time.Time,
+) (time.Time, error) {
+	var arrList billingv1alpha1.BillingArrangementList
+	if err := r.client.List(ctx, &arrList,
+		client.InNamespace(account.Namespace),
+		client.MatchingFields{ArrangementBillingAccountRefField: account.Name},
+	); err != nil {
+		return time.Time{}, fmt.Errorf("listing billing arrangements: %w", err)
+	}
+
+	var next time.Time
+	for i := range arrList.Items {
+		b := nextArrangementBoundary(&arrList.Items[i], now)
+		if !b.IsZero() && (next.IsZero() || b.Before(next)) {
+			next = b
+		}
+	}
+
+	picked := pickArrangements(arrList.Items, account.UID, now)
+	active := picked.active
+	account.Status.PaymentArrangement = nil
+	if active != nil {
+		start := metav1.NewTime(arrangementStart(active))
+		account.Status.PaymentArrangement = &billingv1alpha1.BillingAccountPaymentArrangement{
+			Name:     active.Name,
+			Type:     active.Spec.Type,
+			StartsAt: &start,
+			EndsAt:   active.Spec.EndsAt.DeepCopy(),
+			Invoice:  active.Spec.Invoice.DeepCopy(),
+		}
+	}
+
+	cond := metav1.Condition{
+		Type:               billingv1alpha1.BillingAccountConditionPaymentReady,
+		ObservedGeneration: account.Generation,
+	}
+	pm := apimeta.FindStatusCondition(account.Status.Conditions, billingv1alpha1.BillingAccountConditionDefaultPaymentMethodReady)
+
+	switch {
+	case active != nil:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = "InvoiceTerms"
+		cond.Message = fmt.Sprintf("Billed by invoice under arrangement %q.", active.Name)
+	case pm != nil && pm.Status == metav1.ConditionTrue:
+		cond.Status = metav1.ConditionTrue
+		cond.Reason = "PaymentMethodReady"
+		cond.Message = "Default payment method is active."
+	case pm != nil && pm.Status == metav1.ConditionUnknown:
+		cond.Status = metav1.ConditionUnknown
+		cond.Reason = "Unknown"
+		cond.Message = pm.Message
+	case picked.nextScheduled != nil:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "ArrangementScheduled"
+		cond.Message = fmt.Sprintf("Payment terms under arrangement %q start at %s.",
+			picked.nextScheduled.Name, arrangementStart(picked.nextScheduled).UTC().Format(time.RFC3339))
+	case pm != nil && pm.Reason != "NotConfigured":
+		// A default payment method is configured but isn't usable (for
+		// example a declined card). Pass its reason through so the
+		// customer is told their card failed, not that nothing is set up.
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = pm.Reason
+		cond.Message = pm.Message
+	case picked.lastEnded != nil:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "ArrangementEnded"
+		cond.Message = fmt.Sprintf("Payment terms under arrangement %q ended at %s. Add a payment method to continue.",
+			picked.lastEnded.Name, picked.lastEnded.Spec.EndsAt.UTC().Format(time.RFC3339))
+	default:
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "NotConfigured"
+		cond.Message = "No active payment method or payment terms."
+	}
+
+	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+	return next, nil
 }
 
 // reconcileInvoicingCondition keeps latestInvoiceRef and the InvoicingReady
@@ -417,6 +520,26 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 					}}
 				},
 			),
+		).
+		// Arrangement phase is derived from spec and the clock, and this
+		// reconciler requeues itself at each boundary, so the arrangement
+		// controller's status writes don't need to trigger it.
+		Watches(&billingv1alpha1.BillingArrangement{},
+			handler.EnqueueRequestsFromMapFunc(
+				func(ctx context.Context, obj client.Object) []reconcile.Request {
+					arr, ok := obj.(*billingv1alpha1.BillingArrangement)
+					if !ok {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: client.ObjectKey{
+							Name:      arr.Spec.BillingAccountRef.Name,
+							Namespace: arr.Namespace,
+						},
+					}}
+				},
+			),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Watches(&billingv1alpha1.Invoice{},
 			handler.EnqueueRequestsFromMapFunc(

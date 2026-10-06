@@ -2,6 +2,7 @@
 resources:
 - billing_v1alpha1_billingaccount.yaml
 - billing_v1alpha1_billingaccountbinding.yaml
+- billing_v1alpha1_billingarrangement.yaml
 - billing_v1alpha1_billingentitlement.yaml
 - billing_v1alpha1_meterdefinition.yaml
 - billing_v1alpha1_invoice.yaml

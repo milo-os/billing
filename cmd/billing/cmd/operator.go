@@ -166,6 +166,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.BillingEntitlementReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating BillingEntitlement controller: %w", err)
 			}
+			if err = (&controller.BillingArrangementReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating BillingArrangement controller: %w", err)
+			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)
@@ -286,6 +289,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				}
 				if err = billingwebhooks.SetupOfferWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating Offer webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupBillingArrangementWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating BillingArrangement webhook: %w", err)
 				}
 				if err = billingwebhooks.SetupBillingEntitlementWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating BillingEntitlement webhook: %w", err)

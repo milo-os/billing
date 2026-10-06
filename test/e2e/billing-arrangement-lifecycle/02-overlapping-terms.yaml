@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangement
+metadata:
+  name: arrangement-lifecycle-overlap
+  namespace: default
+spec:
+  billingAccountRef:
+    name: arrangement-lifecycle-acct
+  type: Invoice
+  invoice:
+    creditLimit: "5000"
+  reason: E2E overlapping grant
