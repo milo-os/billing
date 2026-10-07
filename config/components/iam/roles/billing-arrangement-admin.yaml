@@ -1,0 +1,20 @@
+# Grants payment terms to billing accounts. Bound to staff only (see the
+# staff PolicyBindings in infra); deliberately not inherited by the
+# customer-facing Billing Admin role, because customers must never grant
+# themselves terms.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-billing-arrangement-admin
+  annotations:
+    kubernetes.io/display-name: Billing Arrangement Admin
+    kubernetes.io/description: "Grant, change and end payment terms on billing accounts"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-billing-arrangement-viewer
+  includedPermissions:
+    - billing.miloapis.com/billingarrangements.create
+    - billing.miloapis.com/billingarrangements.update
+    - billing.miloapis.com/billingarrangements.patch
+    - billing.miloapis.com/billingarrangements.delete

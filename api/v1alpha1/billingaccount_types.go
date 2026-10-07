@@ -30,6 +30,24 @@ const (
 // gate on this condition rather than on account phase.
 const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodReady"
 
+// BillingAccountConditionPaymentReady is set by the billing service
+// controller and reflects whether the account has a way to pay: an
+// active default payment method, or payment terms granted by staff
+// through an active BillingArrangement. Onboarding gates (milo, the
+// portal) read this condition rather than inspecting payment methods
+// or arrangements themselves.
+//
+// Reasons:
+//   - InvoiceTerms — an Invoice BillingArrangement is active (True)
+//   - PaymentMethodReady — the default payment method is active (True)
+//   - Unknown — the default payment method could not be read (Unknown)
+//   - ArrangementScheduled — no usable payment yet, but an arrangement is scheduled to start (False)
+//   - PaymentMethodNotFound, PaymentMethodDegraded — a default payment method is configured but unusable;
+//     passed through from DefaultPaymentMethodReady (False)
+//   - ArrangementEnded — the most recent arrangement has ended and no payment method is configured (False)
+//   - NotConfigured — neither a payment method nor an arrangement (False)
+const BillingAccountConditionPaymentReady = "PaymentReady"
+
 // BillingAccountConditionInvoicingReady is set by the billing service
 // controller and reflects whether the account's invoices are in a
 // healthy payment state. Downstream consumers gate on this condition
@@ -56,9 +74,15 @@ type BillingAccountSpec struct {
 	CurrencyCode string `json:"currencyCode"`
 
 	// PaymentTerms defines the invoicing schedule for this billing account.
+	// It always holds the standard terms (net 30, invoiced monthly on the
+	// 1st): the admission webhook rejects anything else on create, and it
+	// can't be changed afterwards. Customers who need different terms get
+	// them from staff through a BillingArrangement, published on
+	// status.paymentArrangement.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default={}
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="paymentTerms can't be changed; payment terms are granted by Datum staff through a BillingArrangement"
 	PaymentTerms *PaymentTerms `json:"paymentTerms,omitempty"`
 
 	// ContactInfo describes the billing contact and the postal
@@ -182,6 +206,14 @@ type LatestInvoiceRef struct {
 	Name string `json:"name"`
 }
 
+// Standard payment terms. BillingAccount.spec.paymentTerms is held to
+// these; anything else comes from a BillingArrangement.
+const (
+	StandardPaymentTermsNetDays           int32  = 30
+	StandardPaymentTermsInvoiceFrequency  string = "Monthly"
+	StandardPaymentTermsInvoiceDayOfMonth int32  = 1
+)
+
 // PaymentTerms defines the payment schedule for a billing account.
 type PaymentTerms struct {
 	// NetDays is the number of days after invoice date that payment is due.
@@ -293,10 +325,48 @@ type BillingAccountStatus struct {
 	// +kubebuilder:validation:Optional
 	LatestInvoiceRef *LatestInvoiceRef `json:"latestInvoiceRef,omitempty"`
 
+	// PaymentArrangement summarises the BillingArrangement currently in
+	// effect for this account, if any. Cleared when no arrangement is
+	// active.
+	//
+	// +kubebuilder:validation:Optional
+	PaymentArrangement *BillingAccountPaymentArrangement `json:"paymentArrangement,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed by the controller.
 	//
 	// +kubebuilder:validation:Optional
 	ObservedGeneration int64 `json:"observedGeneration,omitempty"`
+}
+
+// BillingAccountPaymentArrangement is the active BillingArrangement's
+// terms, published on the account so the portal, milo and finance read
+// them from one place. Internal fields (such as the reason terms were
+// granted) are deliberately not copied.
+type BillingAccountPaymentArrangement struct {
+	// Name is the name of the active BillingArrangement.
+	//
+	// +kubebuilder:validation:Required
+	Name string `json:"name"`
+
+	// Type is how the account is billed.
+	//
+	// +kubebuilder:validation:Required
+	Type BillingArrangementType `json:"type"`
+
+	// StartsAt is when the arrangement took effect.
+	//
+	// +kubebuilder:validation:Optional
+	StartsAt *metav1.Time `json:"startsAt,omitempty"`
+
+	// EndsAt is when the arrangement ends, if it has a fixed end.
+	//
+	// +kubebuilder:validation:Optional
+	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+
+	// Invoice carries the invoice terms when type is Invoice.
+	//
+	// +kubebuilder:validation:Optional
+	Invoice *InvoiceArrangementTerms `json:"invoice,omitempty"`
 }
 
 // BillingAccount is the Schema for the billingaccounts API. It represents a
@@ -309,6 +379,7 @@ type BillingAccountStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Currency",type=string,JSONPath=`.spec.currencyCode`
 // +kubebuilder:printcolumn:name="Projects",type=integer,JSONPath=`.status.linkedProjectsCount`
+// +kubebuilder:printcolumn:name="Payment Ready",type=string,JSONPath=`.status.conditions[?(@.type=="PaymentReady")].status`
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Organization"
 // +genclient

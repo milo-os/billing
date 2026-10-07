@@ -335,3 +335,58 @@ func TestValidateTaxIDs(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBillingAccountPaymentTermsLocked(t *testing.T) {
+	standard := &billingv1alpha1.PaymentTerms{NetDays: 30, InvoiceFrequency: "Monthly", InvoiceDayOfMonth: 1}
+	custom := &billingv1alpha1.PaymentTerms{NetDays: 45, InvoiceFrequency: "Quarterly", InvoiceDayOfMonth: 15}
+
+	account := func(terms *billingv1alpha1.PaymentTerms) *billingv1alpha1.BillingAccount {
+		return &billingv1alpha1.BillingAccount{
+			Spec: billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD", PaymentTerms: terms},
+		}
+	}
+
+	createTests := []struct {
+		name    string
+		terms   *billingv1alpha1.PaymentTerms
+		wantErr bool
+	}{
+		{name: "omitted", terms: nil},
+		{name: "empty object before defaulting", terms: &billingv1alpha1.PaymentTerms{}},
+		{name: "standard terms", terms: standard},
+		{name: "custom net days", terms: &billingv1alpha1.PaymentTerms{NetDays: 90}, wantErr: true},
+		{name: "custom schedule", terms: custom, wantErr: true},
+	}
+	for _, tt := range createTests {
+		t.Run("create/"+tt.name, func(t *testing.T) {
+			errs := ValidateBillingAccountCreate(account(tt.terms))
+			if gotErr := len(errs) > 0; gotErr != tt.wantErr {
+				t.Errorf("wantErr=%v, got %v", tt.wantErr, errs)
+			}
+		})
+	}
+
+	updateTests := []struct {
+		name     string
+		oldTerms *billingv1alpha1.PaymentTerms
+		newTerms *billingv1alpha1.PaymentTerms
+		wantErr  bool
+	}{
+		{name: "unchanged standard terms", oldTerms: standard, newTerms: standard},
+		{name: "unset and defaulted are the same", oldTerms: nil, newTerms: standard},
+		{name: "customer extends net days", oldTerms: standard, newTerms: &billingv1alpha1.PaymentTerms{NetDays: 90, InvoiceFrequency: "Monthly", InvoiceDayOfMonth: 1}, wantErr: true},
+		{name: "customer changes frequency", oldTerms: standard, newTerms: custom, wantErr: true},
+		{name: "existing custom terms left alone", oldTerms: custom, newTerms: custom},
+		{name: "existing custom terms changed", oldTerms: custom, newTerms: standard, wantErr: true},
+	}
+	for _, tt := range updateTests {
+		t.Run("update/"+tt.name, func(t *testing.T) {
+			oldAccount := account(tt.oldTerms)
+			oldAccount.Status.Phase = billingv1alpha1.BillingAccountPhaseReady
+			errs := ValidateBillingAccountUpdate(oldAccount, account(tt.newTerms))
+			if gotErr := len(errs) > 0; gotErr != tt.wantErr {
+				t.Errorf("wantErr=%v, got %v", tt.wantErr, errs)
+			}
+		})
+	}
+}

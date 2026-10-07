@@ -17,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/handler"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/log/zap"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
@@ -112,6 +113,17 @@ var _ = BeforeSuite(func() {
 	)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangement{},
+		ArrangementBillingAccountRefField,
+		func(obj client.Object) []string {
+			arr := obj.(*billingv1alpha1.BillingArrangement)
+			return []string{arr.Spec.BillingAccountRef.Name}
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Register BillingAccount controller. We use a thin test adapter rather
 	// than the production reconciler so that test-specific behavior (e.g.,
 	// refetching before status update to avoid stale conflicts) can be
@@ -127,6 +139,10 @@ var _ = BeforeSuite(func() {
 		).
 		Watches(&billingv1alpha1.Invoice{},
 			reconcileAccountFromInvoice(mgr.GetClient()),
+		).
+		Watches(&billingv1alpha1.BillingArrangement{},
+			reconcileAccountFromArrangement(mgr.GetClient()),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Complete(&testBillingAccountReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
@@ -151,6 +167,11 @@ var _ = BeforeSuite(func() {
 		Named("paymentmethod-test").
 		For(&billingv1alpha1.PaymentMethod{}).
 		Complete(&testPaymentMethodReconciler{client: mgr.GetClient()})
+	Expect(err).NotTo(HaveOccurred())
+
+	// The production BillingArrangement reconciler has no envtest-only
+	// behaviour to adapt, so register it directly.
+	err = (&BillingArrangementReconciler{}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Get the cached client from the manager (supports field indexers)

@@ -1,0 +1,16 @@
+# Read access to payment terms, including the internal reason they were
+# granted. Customers read their active terms from BillingAccount status
+# instead, so this role is for staff (e.g. finance).
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-billing-arrangement-viewer
+  annotations:
+    kubernetes.io/display-name: Billing Arrangement Viewer
+    kubernetes.io/description: "View payment terms granted to billing accounts"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/billingarrangements.list
+    - billing.miloapis.com/billingarrangements.get
+    - billing.miloapis.com/billingarrangements.watch

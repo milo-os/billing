@@ -31,6 +31,10 @@ const (
 	// BillingEntitlementOfferRefField indexes BillingEntitlements by offer name.
 	BillingEntitlementOfferRefField = ".spec.offerRef.name"
 
+	// ArrangementBillingAccountRefField indexes BillingArrangements by
+	// billing account name.
+	ArrangementBillingAccountRefField = ".spec.billingAccountRef.name"
+
 	// BillingEntitlementBillingAccountRefField indexes BillingEntitlements by
 	// billing account name.
 	BillingEntitlementBillingAccountRefField = ".spec.billingAccountRef.name"
@@ -69,6 +73,18 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			invoice := obj.(*billingv1alpha1.Invoice)
 			return []string{invoice.Spec.BillingAccountRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangement{},
+		ArrangementBillingAccountRefField,
+		func(obj client.Object) []string {
+			arr := obj.(*billingv1alpha1.BillingArrangement)
+			return []string{arr.Spec.BillingAccountRef.Name}
 		},
 	); err != nil {
 		return err

@@ -1,0 +1,17 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangement
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingarrangement-sample
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  type: Invoice
+  invoice:
+    netDays: 30
+    creditLimit: "10000"
+    accountsPayableEmail: ap@example.com
+    purchaseOrderNumber: PO-4471
+  reason: Signed MSA after sales call

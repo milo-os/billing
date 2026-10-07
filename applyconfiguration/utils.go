@@ -26,6 +26,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAccountBindingSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountBindingStatus"):
 		return &apiv1alpha1.BillingAccountBindingStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountPaymentArrangement"):
+		return &apiv1alpha1.BillingAccountPaymentArrangementApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountRef"):
 		return &apiv1alpha1.BillingAccountRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountSpec"):
@@ -34,6 +36,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAccountStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAddress"):
 		return &apiv1alpha1.BillingAddressApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangement"):
+		return &apiv1alpha1.BillingArrangementApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementSpec"):
+		return &apiv1alpha1.BillingArrangementSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementStatus"):
+		return &apiv1alpha1.BillingArrangementStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingContactInfo"):
 		return &apiv1alpha1.BillingContactInfoApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlement"):
@@ -54,6 +62,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.DimensionMatchApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Invoice"):
 		return &apiv1alpha1.InvoiceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceArrangementTerms"):
+		return &apiv1alpha1.InvoiceArrangementTermsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoicePeriod"):
 		return &apiv1alpha1.InvoicePeriodApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceSpec"):

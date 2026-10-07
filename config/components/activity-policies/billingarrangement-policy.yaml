@@ -1,0 +1,68 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for BillingArrangement resources.
+# A BillingArrangement records payment terms staff granted to a billing
+# account so it can be billed without a card. Every grant, change, end and
+# removal is a staff decision we need a record of, so each one gets a
+# summary that says what was decided, not just that something changed.
+#
+# Design principles:
+# - Name the billing account (linked) rather than the arrangement: that's
+#   what readers recognise, and it's the same in every entry for the account.
+# - State the terms from the stored object (audit.responseObject), which
+#   carries CRD defaults such as netDays even when the request omitted them.
+# - Never include spec.reason. It's internal, and the timeline can be read
+#   more widely than the arrangement itself.
+# - Dates render as "30 September 2027". The CEL environment has no string
+#   extensions, so they're built from timestamp getters (UTC).
+# - Tell ending terms apart from other edits. Staff end terms by patching
+#   only spec.endsAt, which is what the end rules match; any other write
+#   falls through to the update rules.
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-billingarrangement
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: BillingArrangement
+
+  auditRules:
+    # "Jo granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471, until 30 September 2027"
+    # A start after the request time (scheduled terms) adds "starting <date>".
+    - name: create-invoice
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.invoice) && has(audit.responseObject.spec.invoice.netDays) && has(audit.responseObject.spec.invoice.creditLimit) && has(audit.requestReceivedTimestamp) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} granted invoice terms to billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}: net {{ string(int(audit.responseObject.spec.invoice.netDays)) }}, credit limit {{ audit.responseObject.spec.invoice.creditLimit }}{{ has(audit.responseObject.spec.invoice.purchaseOrderNumber) ? ', PO ' + audit.responseObject.spec.invoice.purchaseOrderNumber : '' }}{{ has(audit.responseObject.spec.startsAt) && timestamp(audit.responseObject.spec.startsAt) > timestamp(audit.requestReceivedTimestamp) ? ', starting ' + string(timestamp(audit.responseObject.spec.startsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.startsAt).getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.startsAt).getFullYear()) : '' }}{{ has(audit.responseObject.spec.endsAt) ? ', until ' + string(timestamp(audit.responseObject.spec.endsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.endsAt).getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.endsAt).getFullYear()) : '' }}"
+
+    - name: create-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} granted payment terms {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    # "Jo ended invoice terms for billing account acme" when endsAt is at or
+    # before the request time, otherwise "Jo set invoice terms for billing
+    # account acme to end on 30 September 2027". Only merge patches that set
+    # nothing but spec.endsAt match, so other edits read as updates.
+    - name: end
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'patch' && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && size(audit.requestObject.spec) == 1 && has(audit.requestObject.spec.endsAt) && type(audit.requestObject.spec.endsAt) == string && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.requestReceivedTimestamp) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} {{ timestamp(audit.requestObject.spec.endsAt) <= timestamp(audit.requestReceivedTimestamp) ? 'ended' : 'set' }} invoice terms for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}{{ timestamp(audit.requestObject.spec.endsAt) <= timestamp(audit.requestReceivedTimestamp) ? '' : ' to end on ' + string(timestamp(audit.requestObject.spec.endsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.requestObject.spec.endsAt).getMonth()] + ' ' + string(timestamp(audit.requestObject.spec.endsAt).getFullYear()) }}"
+
+    # "Jo updated invoice terms for billing account acme: net 45, credit limit 20000, until 30 September 2027"
+    - name: update-invoice
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.invoice) && has(audit.responseObject.spec.invoice.netDays) && has(audit.responseObject.spec.invoice.creditLimit) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated invoice terms for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}: net {{ string(int(audit.responseObject.spec.invoice.netDays)) }}, credit limit {{ audit.responseObject.spec.invoice.creditLimit }}{{ has(audit.responseObject.spec.invoice.purchaseOrderNumber) ? ', PO ' + audit.responseObject.spec.invoice.purchaseOrderNumber : '' }}{{ has(audit.responseObject.spec.endsAt) ? ', until ' + string(timestamp(audit.responseObject.spec.endsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.endsAt).getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.endsAt).getFullYear()) : '' }}"
+
+    - name: update-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated payment terms {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    # Deleting removes the record entirely (ending terms is the normal
+    # path), so call it out against the billing account when we can.
+    - name: delete-invoice
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the payment terms record {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the payment terms record {{ audit.objectRef.name }}"

@@ -54,6 +54,12 @@ Two kinds of payment terms are offered:
 - **Sponsored access.** No payment is due for a fixed period. This is for
   nonprofits, education and other sponsored customers.
 
+  > **Update (2026-10-06):** following review on the issue, sponsored access
+  > will be a **credit** added to a normal billable account (like AWS
+  > startup credits), not a non-billable period. It's deferred until
+  > invoicing supports credits. Phase 1 ships invoice terms only. See
+  > [Decisions Made](#decisions-made).
+
 The first path is **request and approve**. Letting customers skip the card
 without a review isn't an option, because card entry at signup is a key part
 of our fraud analysis and prevention.
@@ -471,7 +477,6 @@ What they have in common:
 
 ## Implementation Notes
 
-A full technical design follows once the product direction here is agreed.
 The outline:
 
 - **Three new billing resources.** An *application* the customer creates, an
@@ -486,6 +491,50 @@ The outline:
   limit are published on the billing account. Finance reads them in v0; the
   OpenMeter invoicing pipeline reads them later.
 
+### Phase 1 in billing
+
+Phase 1 is implemented in this repository:
+
+- **`BillingArrangement`** (namespaced, in the organization's namespace)
+  records terms staff granted to a billing account: `type: Invoice`, net
+  days (default 30), a credit limit in the account's currency, an
+  accounts payable email, PO number and agreement reference, an optional
+  `startsAt`/`endsAt` window, and an internal `reason`. Arrangements for one
+  account can't overlap. Staff end terms early, or withdraw scheduled
+  terms, by setting `endsAt` to now, which keeps the record.
+  `billingAccountRef` and `type` are immutable. Each arrangement is owned
+  by its billing account, so it's removed when the account is deleted.
+- **`PaymentReady`** is the shared BillingAccount condition. It's `True`
+  with reason `InvoiceTerms` while an arrangement is active, or
+  `PaymentMethodReady` when the default payment method is active.
+  Otherwise it's `False`, with a reason the portal can explain:
+  `ArrangementScheduled` (terms start soon), the payment method's own
+  reason when a card is configured but unusable (for example
+  `PaymentMethodDegraded`), `ArrangementEnded`, or `NotConfigured`. The
+  reconciler requeues itself when an arrangement starts or ends.
+- **`status.paymentArrangement`** on the BillingAccount publishes the active
+  terms (without the internal reason), for the portal, finance and later
+  invoicing.
+- **The account's own terms are locked.** Customers can edit their billing
+  account (for contact details), which used to include
+  `spec.paymentTerms`. That field is now held to the standard terms (net
+  30, monthly on the 1st). A webhook rejects anything else on create, and a
+  CEL rule stops it changing afterwards. Different terms come only from an
+  arrangement.
+- **Permissions.** New `billing-arrangement-admin` and
+  `billing-arrangement-viewer` roles. Neither is part of the customer
+  Billing Admin or Billing Viewer roles, so customers can't read, grant or
+  change arrangements. Staff are bound to them from infra.
+
+Follow-ups in other repos:
+
+- **milo:** `OnboardingComplete` reads `PaymentReady` instead of
+  `DefaultPaymentMethodReady`.
+- **cloud-portal:** the setup gate reads `PaymentReady` instead of checking
+  PaymentMethod phases itself.
+- **infra:** staff PolicyBindings for the new roles.
+- **staff-portal:** grant, amend and end terms.
+
 | Repo | What changes |
 |---|---|
 | billing | New resources, the shared signal, reviewer permissions |
@@ -497,8 +546,8 @@ The outline:
 
 ## Delivery Plan
 
-1. **Phase 1: staff can grant terms.** Staff grant invoice terms or sponsored
-   access from the staff portal, the portal lets those customers through, and
+1. **Phase 1: staff can grant terms.** Staff grant invoice terms from the
+   staff portal, the portal lets those customers through, and
    finance invoices them by hand.
    *Outcome:* support can unblock sales-led enterprise customers and
    individual older accounts right away.
@@ -522,24 +571,18 @@ The outline:
 | 3 | How are older, locked-out accounts handled? | One application at a time through "Apply for payment terms". No bulk exemption |
 | 4 | Who raises invoices for invoice-terms customers? | Finance, by hand, in v0. Automated later through OpenMeter |
 | 5 | Who sends the emails? | milo's existing email system |
+| 6 | What review turnaround do we promise? | No fixed promise: the copy says "we'll get back to you soon". Each application is tracked in the platform for audit and also opens a Help Scout ticket for confirmation and follow-up. Keep the Help Scout integration thin, since we may change support systems |
+| 7 | What eligibility guidance do we show before someone applies? | For now, whether the organization uses a corporate domain rather than a personal email. Domain validation comes later. Applications must include the formal company name and billing contact details |
+| 8 | Default terms | No ad hoc negotiation. Terms reference our standard terms of service; paying by invoice is a convenience for customers who can't pay by card |
+| 9 | Standard terms without an MSA | Our standard terms of service |
+| 10 | Can an invoice-terms customer switch back to card themselves? | No. Switching back isn't self-service |
+| 11 | How does sponsored access work? | As a credit added to a normal billable account (like AWS startup credits), not a non-billable period, because non-billable accounts are risky. Deferred until invoicing supports credits |
 
 ### Still Open
 
-1. **What review turnaround do we promise?** The copy says "usually within one
-   business day". Who staffs the queue, and what about weekends?
-2. **What eligibility guidance do we show before someone applies?** For
-   example a minimum monthly spend or company age, like Google Cloud and
-   Azure. Showing it reduces applications we'll decline anyway.
-3. **Default terms.** Default and maximum net days, default credit limits by
-   spend band, and late-fee terms.
-4. **Standard terms without an MSA.** Which document does a customer accept
-   when there's no negotiated agreement?
-5. **Can an invoice-terms customer switch back to paying by card themselves?**
-   Azure makes the switch one-way.
-6. **How long does sponsored access last by default,** and can it be renewed
-   by applying again?
-7. **Should a fraud-service check run on each application in phase 2** rather
-   than phase 4, given how much weight the card carries in fraud review today?
+1. **Should a fraud-service check run on each application in phase 2**
+   rather than phase 4, given how much weight the card carries in fraud
+   review today?
 
 ## Implementation History
 
@@ -555,6 +598,10 @@ The outline:
   technical design.
 - 2026-09-27: Removed joining a company's existing organization by email
   domain, which moves to its own enhancement.
+- 2026-10-06: Recorded answers from the issue review: no fixed review
+  turnaround, standard terms only, no self-service switch back to card,
+  and sponsored access as credits. Phase 1 (`BillingArrangement`,
+  `PaymentReady`) implemented in billing, for invoice terms only.
 
 ## Future Work
 
@@ -567,6 +614,7 @@ The outline:
 - **Terms granted with a platform invitation,** so a customer signed by sales
   never sees the card step. Needs fraud-team sign-off for the same reason.
 - **Enforced credit limits** and a policy for overdue invoices.
+- **Sponsored access as credits,** once invoicing supports credits.
 - **Prepaid credit by bank transfer,** for customers who can't use a card and
   don't qualify for terms.
 

@@ -1,0 +1,167 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: billing-arrangement-lifecycle
+spec:
+  description: |
+    Tests staff-granted payment terms and their projection onto the BillingAccount:
+    1. Creating an Invoice BillingArrangement without startsAt is defaulted by the webhook (startsAt, and an
+       owner reference to the BillingAccount) and becomes Active.
+    2. The BillingAccount reports PaymentReady=True (Reason: InvoiceTerms) with no payment method, and publishes the terms on status.paymentArrangement.
+    3. A second arrangement whose window overlaps the first is rejected by the validation webhook.
+    4. Moving the billing account of an arrangement is rejected.
+    5. Ending the terms early by setting endsAt moves the arrangement to Ended and the account to PaymentReady=False (Reason: ArrangementEnded).
+    6. New terms starting after the old ones ended are accepted and make the account PaymentReady again.
+  steps:
+    - name: grant-terms
+      description: Create a BillingAccount with no payment method, and grant it invoice terms.
+      try:
+        - create:
+            file: 01-resources.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangement
+              metadata:
+                name: arrangement-lifecycle-terms
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingAccount
+                    name: arrangement-lifecycle-acct
+              spec:
+                (startsAt != null): true
+                invoice:
+                  netDays: 30
+              status:
+                phase: Active
+                conditions:
+                  - type: Active
+                    status: "True"
+                    reason: Active
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: arrangement-lifecycle-acct
+                namespace: default
+              status:
+                paymentArrangement:
+                  name: arrangement-lifecycle-terms
+                  type: Invoice
+                  invoice:
+                    netDays: 30
+                    creditLimit: "10000"
+                    accountsPayableEmail: ap@example.com
+                    purchaseOrderNumber: PO-4471
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "True"
+                    reason: InvoiceTerms
+
+    - name: reject-overlapping-terms
+      description: An open-ended arrangement can't be granted while another is active.
+      try:
+        - create:
+            file: 02-overlapping-terms.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'overlaps arrangement "arrangement-lifecycle-terms"')): true
+
+    - name: reject-moving-terms
+      description: billingAccountRef is immutable.
+      try:
+        - script:
+            content: |
+              kubectl patch billingarrangement arrangement-lifecycle-terms -n default --type=merge --patch '{"spec":{"billingAccountRef":{"name":"someone-else"}}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'billingAccountRef is immutable')): true
+
+    - name: end-terms-early
+      description: Staff end the terms by setting endsAt to now.
+      try:
+        - script:
+            content: |
+              sleep 2
+              kubectl patch billingarrangement arrangement-lifecycle-terms -n default --type=merge \
+                --patch "{\"spec\":{\"endsAt\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"}}"
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangement
+              metadata:
+                name: arrangement-lifecycle-terms
+                namespace: default
+              status:
+                phase: Ended
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: arrangement-lifecycle-acct
+                namespace: default
+              status:
+                (paymentArrangement == `null`): true
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: ArrangementEnded
+
+    - name: renew-terms
+      description: New terms that start after the old ones ended don't overlap.
+      try:
+        - create:
+            file: 03-renewed-terms.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: arrangement-lifecycle-acct
+                namespace: default
+              status:
+                paymentArrangement:
+                  name: arrangement-lifecycle-renewed
+                  invoice:
+                    netDays: 45
+                    creditLimit: "20000"
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "True"
+                    reason: InvoiceTerms

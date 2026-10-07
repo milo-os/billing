@@ -37,6 +37,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: create-open-invoice
       description: |
@@ -108,6 +111,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: Current
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: mark-invoice-past-due
       description: |
@@ -147,6 +153,9 @@ spec:
                   - type: InvoicingReady
                     status: "False"
                     reason: PastDue
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: mark-invoice-paid
       description: Paid restores InvoicingReady=Current.
@@ -181,6 +190,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: Current
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: newer-void-does-not-mask-past-due
       description: |
@@ -252,3 +264,6 @@ spec:
                   - type: InvoicingReady
                     status: "False"
                     reason: PastDue
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured

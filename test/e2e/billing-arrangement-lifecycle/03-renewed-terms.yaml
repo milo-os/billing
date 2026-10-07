@@ -1,0 +1,13 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangement
+metadata:
+  name: arrangement-lifecycle-renewed
+  namespace: default
+spec:
+  billingAccountRef:
+    name: arrangement-lifecycle-acct
+  type: Invoice
+  invoice:
+    netDays: 45
+    creditLimit: "20000"
+  reason: E2E renewal after terms ended

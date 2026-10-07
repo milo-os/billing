@@ -85,7 +85,10 @@ spec:
               fi
 
     - name: test-payment-terms-validation
-      description: Verify that configuring invalid payment terms is rejected, and valid ones are accepted.
+      description: |
+        Verify that invalid payment terms are rejected, and that valid but non-standard terms are rejected
+        too: customers can edit their billing account, so the terms are locked to the standard ones and
+        anything else is granted by staff through a BillingArrangement.
       try:
         - script:
             content: |
@@ -114,6 +117,9 @@ spec:
         - script:
             content: |
               kubectl patch billingaccount lifecycle-test-account -n default --type=merge --patch '{"spec":{"paymentTerms":{"netDays":45,"invoiceFrequency":"Quarterly","invoiceDayOfMonth":15}}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'payment terms are granted by Datum staff through a BillingArrangement')): true
         - assert:
             timeout: 30s
             resource:
@@ -124,9 +130,9 @@ spec:
                 namespace: default
               spec:
                 paymentTerms:
-                  netDays: 45
-                  invoiceFrequency: Quarterly
-                  invoiceDayOfMonth: 15
+                  netDays: 30
+                  invoiceFrequency: Monthly
+                  invoiceDayOfMonth: 1
 
     - name: test-tax-id-validation
       description: Verify that invalid tax ID formats or duplicates are rejected, and valid ones are accepted.
@@ -207,6 +213,9 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
 
     - name: transition-to-archived
       description: Verify that setting status phase to Archived updates the Ready condition to False.
@@ -235,3 +244,6 @@ spec:
                   - type: InvoicingReady
                     status: "True"
                     reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
