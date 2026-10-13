@@ -9,6 +9,8 @@ vars:
   CONTROLLER_TOOLS_VERSION: "v0.16.4"
   DEFAULTER_GEN_VERSION: "v0.35.0"
   APPLYCONFIGURATION_GEN_VERSION: "v0.35.0"
+  # Keep in sync with the k8s.io/kube-openapi version pinned in go.mod.
+  OPENAPI_GEN_VERSION: "v0.0.0-20250910181357-589584f1c912"
   GOLANGCI_LINT_VERSION: "v2.1.5"
   CHAINSAW_VERSION: "v0.2.15"
   # Keep in sync with the go.miloapis.com/milo version pinned in go.mod.
@@ -30,7 +32,7 @@ tasks:
 
   # Code generation
   generate:
-    desc: Run code generation (deepcopy, defaults, applyconfiguration)
+    desc: Run code generation (deepcopy, defaults, applyconfiguration, openapi)
     cmds:
       - |
         set -e
@@ -42,6 +44,18 @@ tasks:
           --output-pkg go.miloapis.com/billing/applyconfiguration \
           --go-header-file hack/boilerplate.go.txt \
           go.miloapis.com/billing/api/v1alpha1
+        # OpenAPI definitions for the usage.billing.miloapis.com types, which
+        # are served by an aggregated API server rather than as CRDs.
+        {{.TOOL_DIR}}/openapi-gen \
+          --go-header-file hack/boilerplate.go.txt \
+          --output-dir api/usage/openapi \
+          --output-pkg go.miloapis.com/billing/api/usage/openapi \
+          --output-file zz_generated.openapi.go \
+          --report-filename /dev/null \
+          go.miloapis.com/billing/api/usage/v1alpha1 \
+          k8s.io/apimachinery/pkg/apis/meta/v1 \
+          k8s.io/apimachinery/pkg/runtime \
+          k8s.io/apimachinery/pkg/version
         echo "Code generation complete!"
     deps:
       - install-tools
@@ -158,6 +172,14 @@ tasks:
         fi
         ln -sf {{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}} {{.TOOL_DIR}}/applyconfiguration-gen
 
+        # openapi-gen
+        if [ ! -f "{{.TOOL_DIR}}/openapi-gen-{{.OPENAPI_GEN_VERSION}}" ]; then
+          echo "Installing openapi-gen {{.OPENAPI_GEN_VERSION}}..."
+          GOBIN={{.TOOL_DIR}} go install k8s.io/kube-openapi/cmd/openapi-gen@{{.OPENAPI_GEN_VERSION}}
+          mv {{.TOOL_DIR}}/openapi-gen {{.TOOL_DIR}}/openapi-gen-{{.OPENAPI_GEN_VERSION}}
+        fi
+        ln -sf {{.TOOL_DIR}}/openapi-gen-{{.OPENAPI_GEN_VERSION}} {{.TOOL_DIR}}/openapi-gen
+
         # golangci-lint
         if [ ! -f "{{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}" ]; then
           echo "Installing golangci-lint {{.GOLANGCI_LINT_VERSION}}..."
@@ -178,6 +200,7 @@ tasks:
       - test -f {{.TOOL_DIR}}/controller-gen-{{.CONTROLLER_TOOLS_VERSION}}
       - test -f {{.TOOL_DIR}}/defaulter-gen-{{.DEFAULTER_GEN_VERSION}}
       - test -f {{.TOOL_DIR}}/applyconfiguration-gen-{{.APPLYCONFIGURATION_GEN_VERSION}}
+      - test -f {{.TOOL_DIR}}/openapi-gen-{{.OPENAPI_GEN_VERSION}}
       - test -f {{.TOOL_DIR}}/golangci-lint-{{.GOLANGCI_LINT_VERSION}}
       - test -f {{.TOOL_DIR}}/chainsaw-{{.CHAINSAW_VERSION}}
 

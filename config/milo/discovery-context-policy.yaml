@@ -1,0 +1,12 @@
+# UsageQuery is served by an aggregated API server, so Milo cannot read its
+# parent contexts from a CRD annotation. It can be used on the platform
+# (staff), in an organization, and in a project, but not in a user's context.
+apiVersion: discovery.miloapis.com/v1alpha1
+kind: DiscoveryContextPolicy
+metadata:
+  name: usage-billing-miloapis-com
+spec:
+  rules:
+    - group: usage.billing.miloapis.com
+      resources: ["usagequeries"]
+      contexts: ["Platform", "Organization", "Project"]
