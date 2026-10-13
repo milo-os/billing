@@ -799,3 +799,101 @@ var _ = Describe("BillingAccount CRD Validation", func() {
 		Expect(err).To(HaveOccurred())
 	})
 })
+
+var _ = Describe("BillingAccount default payment method", func() {
+	const (
+		timeout  = 10 * time.Second
+		interval = 250 * time.Millisecond
+	)
+
+	createPaymentMethod := func(name, account string) *billingv1alpha1.PaymentMethod {
+		pm := &billingv1alpha1.PaymentMethod{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: billingv1alpha1.PaymentMethodSpec{
+				BillingAccountRef:     billingv1alpha1.BillingAccountRef{Name: account},
+				DisplayName:           name,
+				PaymentMethodClassRef: &billingv1alpha1.PaymentMethodClassRef{Name: "test-class"},
+			},
+		}
+		Expect(k8sClient.Create(ctx, pm)).To(Succeed())
+		DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, pm))).To(Succeed()) })
+		return pm
+	}
+
+	setActive := func(pm *billingv1alpha1.PaymentMethod) {
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.PaymentMethod
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(pm), &fetched)).To(Succeed())
+			fetched.Status.Phase = billingv1alpha1.PaymentMethodPhaseActive
+			g.Expect(k8sClient.Status().Update(ctx, &fetched)).To(Succeed())
+		}, 5*time.Second, 100*time.Millisecond).Should(Succeed())
+	}
+
+	createAccount := func(name string, ref *billingv1alpha1.DefaultPaymentMethodRef) *billingv1alpha1.BillingAccount {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "default"},
+			Spec: billingv1alpha1.BillingAccountSpec{
+				CurrencyCode:            "USD",
+				DefaultPaymentMethodRef: ref,
+			},
+		}
+		Expect(k8sClient.Create(ctx, account)).To(Succeed())
+		DeferCleanup(func() { Expect(client.IgnoreNotFound(k8sClient.Delete(ctx, account))).To(Succeed()) })
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountPhaseReady))
+		}, timeout, interval).Should(Succeed())
+		return account
+	}
+
+	defaultOf := func(account *billingv1alpha1.BillingAccount) func(g Gomega) string {
+		return func(g Gomega) string {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			if fetched.Spec.DefaultPaymentMethodRef == nil {
+				return ""
+			}
+			return fetched.Spec.DefaultPaymentMethodRef.Name
+		}
+	}
+
+	It("makes the first Active card the default", func() {
+		account := createAccount("dpm-first", nil)
+		pm := createPaymentMethod("dpm-first-card", account.Name)
+		Consistently(defaultOf(account), 2*time.Second, interval).Should(BeEmpty())
+
+		setActive(pm)
+
+		Eventually(defaultOf(account), timeout, interval).Should(Equal(pm.Name))
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingAccount
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(account), &fetched)).To(Succeed())
+			c := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentReady)
+			g.Expect(c).NotTo(BeNil())
+			g.Expect(c.Status).To(Equal(metav1.ConditionTrue))
+			g.Expect(c.Reason).To(Equal("PaymentMethodReady"))
+		}, timeout, interval).Should(Succeed())
+	})
+
+	It("keeps an existing default when another card becomes Active", func() {
+		first := createPaymentMethod("dpm-keep-first", "dpm-keep")
+		setActive(first)
+		account := createAccount("dpm-keep", &billingv1alpha1.DefaultPaymentMethodRef{Name: first.Name})
+
+		second := createPaymentMethod("dpm-keep-second", account.Name)
+		setActive(second)
+
+		Consistently(defaultOf(account), 3*time.Second, interval).Should(Equal(first.Name))
+	})
+
+	It("leaves the choice to the customer when several cards are Active", func() {
+		first := createPaymentMethod("dpm-several-first", "dpm-several")
+		second := createPaymentMethod("dpm-several-second", "dpm-several")
+		setActive(first)
+		setActive(second)
+		account := createAccount("dpm-several", nil)
+
+		Consistently(defaultOf(account), 3*time.Second, interval).Should(BeEmpty())
+	})
+})

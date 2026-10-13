@@ -1,0 +1,112 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: payment-method-default
+spec:
+  description: |
+    Tests how a BillingAccount's default payment method is chosen:
+    1. A customer's first card becomes the account's default once it turns Active, without any client action.
+    2. A second card turning Active leaves the existing default in place.
+    3. A card can be designated default immediately after it turns Active, before the webhook's cache has caught up.
+  steps:
+    - name: create-resources
+      description: Create a BillingAccount with no default and its first PaymentMethod.
+      try:
+        - create:
+            file: 01-resources.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: pm-default-first
+                namespace: default
+              status:
+                phase: Pending
+
+    - name: first-active-card-becomes-default
+      description: Simulates the provider confirming the first card; the controller makes it the default.
+      try:
+        - script:
+            content: |
+              kubectl patch paymentmethod pm-default-first -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active"}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: pm-default-acct
+                namespace: default
+              spec:
+                defaultPaymentMethodRef:
+                  name: pm-default-first
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "True"
+                    reason: Ready
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "True"
+                    reason: PaymentMethodReady
+
+    - name: second-active-card-keeps-default
+      description: A second card turning Active does not replace the existing default.
+      try:
+        - create:
+            file: 02-second-card.yaml
+        - script:
+            content: |
+              kubectl wait paymentmethod pm-default-second -n default --for=jsonpath='{.status.phase}'=Pending --timeout=30s
+              kubectl patch paymentmethod pm-default-second -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active"}}'
+        - sleep:
+            duration: 3s
+        - script:
+            content: |
+              kubectl get billingaccount pm-default-acct -n default -o jsonpath='{.spec.defaultPaymentMethodRef.name}'
+            check:
+              ($error == null): true
+              ($stdout): pm-default-first
+
+    - name: designate-default-right-after-active
+      description: |
+        Mirrors the portal, which designates a card default as soon as it turns Active. The webhook must
+        judge the card by its phase in the API server, not a cache that may still show it unconfirmed.
+      try:
+        - create:
+            file: 03-third-card.yaml
+        - script:
+            content: |
+              kubectl wait paymentmethod pm-default-third -n default --for=jsonpath='{.status.phase}'=Pending --timeout=30s
+        - script:
+            content: |
+              set -e
+              kubectl patch paymentmethod pm-default-third -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active"}}'
+              kubectl patch billingaccount pm-default-acct -n default --type=merge --patch '{"spec":{"defaultPaymentMethodRef":{"name":"pm-default-third"}}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: pm-default-acct
+                namespace: default
+              spec:
+                defaultPaymentMethodRef:
+                  name: pm-default-third
+
+    - name: delete-account
+      description: |
+        Delete the account before cleanup removes the cards: the webhook refuses to delete a card that is
+        an existing account's default, and the controller would re-default a lone remaining Active card.
+      try:
+        - script:
+            content: |
+              kubectl delete billingaccount pm-default-acct -n default --wait=true --timeout=60s

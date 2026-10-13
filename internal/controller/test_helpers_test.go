@@ -60,6 +60,10 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 		return ctrl.Result{}, nil
 	}
 
+	if err := (&BillingAccountReconciler{client: r.client}).reconcileDefaultPaymentMethod(ctx, &account); err != nil {
+		return ctrl.Result{}, err
+	}
+
 	// Determine phase
 	reconciler := &BillingAccountReconciler{}
 	targetPhase := reconciler.determinePhase(&account)

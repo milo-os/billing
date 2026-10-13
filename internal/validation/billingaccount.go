@@ -86,9 +86,9 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 
 // ValidateBillingAccountDefaultPaymentMethodRef checks that the
 // defaultPaymentMethodRef (when set) points at a PaymentMethod that
-// exists in the same namespace and is in the Active phase. Callers pass
-// a Reader so this can be invoked from the admission webhook against the
-// live API server.
+// exists in the same namespace and is in the Active phase. Admission
+// callers must pass an uncached reader: a card often becomes the default
+// moments after it turns Active, before the cache has seen the change.
 func ValidateBillingAccountDefaultPaymentMethodRef(ctx context.Context, c client.Reader, account *billingv1alpha1.BillingAccount) field.ErrorList {
 	var allErrs field.ErrorList
 	fldPath := field.NewPath("spec", "defaultPaymentMethodRef", "name")
