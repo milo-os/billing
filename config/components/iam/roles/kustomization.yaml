@@ -21,3 +21,4 @@ resources:
   - payment-method-class-viewer.yaml
   - service-pricing-admin.yaml
   - service-pricing-viewer.yaml
+  - usage-viewer.yaml
