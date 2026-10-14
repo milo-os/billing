@@ -39,7 +39,7 @@ const (
 	UsageScopeOrganization UsageScopeType = "Organization"
 
 	// UsageScopeProject is a request made in a project. It may read only the
-	// usage of that project, on the billing account the project is bound to.
+	// usage of that project, on every billing account of its organization.
 	UsageScopeProject UsageScopeType = "Project"
 )
 
@@ -61,9 +61,11 @@ const (
 //   - In an organization (/organizations/<org>/control-plane/...): the
 //     organization's billing accounts.
 //   - In a project (/projects/<project>/control-plane/...): only that
-//     project's usage, on the billing account it is bound to.
+//     project's usage, on every billing account of its organization, so a
+//     project that moved between billing accounts keeps its history.
 //   - On the platform (no parent): any billing account. Only platform staff
-//     are authorized to do this.
+//     are authorized to do this, and the query must name billing accounts
+//     or projects.
 //
 // The spec can only narrow that scope. A spec that reaches outside it, such
 // as another organization's billing account, is rejected as Forbidden rather
@@ -117,8 +119,10 @@ type UsageQuerySpec struct {
 
 	// BillingAccounts narrows the query to these billing accounts. Leave it
 	// empty to read every billing account in scope: all of the
-	// organization's in an organization, the bound one in a project.
-	// Platform queries must name the accounts they read.
+	// organization's in an organization, or, on the platform, those of the
+	// organizations that own spec.projects. Platform queries must set this
+	// or spec.projects. It cannot be set in a project: project members may
+	// not be allowed to see their organization's billing accounts.
 	//
 	// +optional
 	// +listType=atomic
@@ -133,7 +137,8 @@ type UsageQuerySpec struct {
 	Projects []string `json:"projects,omitempty"`
 
 	// Meters lists the MeterDefinitions to read, by name. Leave it empty to
-	// read every published MeterDefinition.
+	// read every published or deprecated MeterDefinition; a grouping by a
+	// dimension only some of them have then has no series for the others.
 	//
 	// +optional
 	// +listType=atomic
@@ -152,8 +157,8 @@ type UsageQuerySpec struct {
 // BillingAccountReference names a billing account.
 type BillingAccountReference struct {
 	// Namespace is the namespace of the billing account. In an
-	// organization or project it defaults to the organization's namespace,
-	// and any other namespace is rejected. Platform queries must set it.
+	// organization it defaults to the organization's namespace, and any
+	// other namespace is rejected. Platform queries must set it.
 	//
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
@@ -184,7 +189,9 @@ type UsageQueryStatus struct {
 	// +optional
 	Scope UsageScope `json:"scope,omitempty"`
 
-	// BillingAccounts lists the billing accounts the results cover.
+	// BillingAccounts lists the billing accounts the results cover. It is
+	// left empty for a project query, which does not reveal its
+	// organization's billing accounts.
 	//
 	// +optional
 	// +listType=atomic

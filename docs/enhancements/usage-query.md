@@ -104,10 +104,10 @@ aggregated API servers. The server derives the scope from it with
 narrow it.**
 
 | Request made in | Billing accounts read | Project filter |
-|---|---|---|
+| --- | --- | --- |
 | Organization `acme` | All in `organization-acme`, or the ones in `spec.billingAccounts` (which must be in that namespace) | `spec.projects`, optional |
-| Project `web` | The one `web` is bound to (active `BillingAccountBinding`) | Always `web`; naming another project is rejected |
-| Platform (no parent) | The ones in `spec.billingAccounts`, with namespaces | `spec.projects`, optional |
+| Project `web` | All of its organization's, so its history survives a move between billing accounts. `spec.billingAccounts` is rejected, and the response does not list them, since project members may not be allowed to see them | Always `web`; naming another project is rejected |
+| Platform (no parent) | The ones in `spec.billingAccounts` (with namespaces), or else those of the organizations that own `spec.projects`. One of the two is required | `spec.projects`, optional |
 | Anything else (e.g. a `User` parent) | Rejected | |
 
 A spec that reaches outside its scope is rejected as Forbidden, not answered
@@ -143,7 +143,7 @@ with empty results, so a client can tell a mistake from "no usage".
 ### Risks and Mitigations
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | A bug in scope handling leaks another tenant's usage | Scope rules live in one place in billing (`ScopeFromUserExtra`), with tests; unknown parents are rejected, not treated as the platform |
 | A platform request from a non-staff caller | Milo only authorizes a request with no parent against platform-wide permission, which only staff hold. Providers log every platform query with its caller |
 | One request fans out into many backend queries | The limits above; providers query in parallel with a bounded pool |
@@ -162,7 +162,7 @@ spec:
   timeZone: UTC                       # IANA; default UTC
   billingAccounts: []                 # narrow; empty = all in scope
   projects: []                        # narrow; project_name
-  meters: []                          # MeterDefinition names; empty = all published
+  meters: []                          # MeterDefinition names; empty = all published and deprecated
   groupings:                          # empty = [{groupBy: []}], the total
     - groupBy: []
     - groupBy: [project_name]
@@ -191,7 +191,7 @@ Values are decimal strings, because Kubernetes APIs do not use floats.
 ### What Lives Where
 
 | Piece | Repository |
-|---|---|
+| --- | --- |
 | Types, defaults, validation, scope rules (`api/usage/v1alpha1`) | billing |
 | OpenAPI definitions (`api/usage/openapi`) | billing (generated) |
 | `ProtectedResource`, `billing.miloapis.com-usage-viewer` role, discovery policy | billing |
@@ -205,8 +205,8 @@ A provider's REST storage for `usagequeries`:
 1. Calls `SetDefaults` and `Validate`, returning 400 on errors.
 2. Calls `ScopeFromUserExtra` on the request's user; 403 on error.
 3. Resolves the billing accounts and project filter for the scope, reading
-   BillingAccounts, BillingAccountBindings and Projects from Milo, and returns
-   403 if the spec reaches outside it.
+   BillingAccounts and Projects from Milo, and returns 403 if the spec
+   reaches outside it.
 4. Checks each meter and `groupBy` dimension against the MeterDefinitions
    (declared dimensions plus `status.systemDimensions`); 400 if unknown.
 5. Queries the backend for each meter × grouping, plus an un-windowed query
