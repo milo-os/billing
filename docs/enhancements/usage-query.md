@@ -63,7 +63,8 @@ portal a path to all of that.
 
 ### Non-Goals
 
-- Pricing or spend. The portal still works out spend from catalog rates.
+- Prices or rate cards. With `spec.includeSpend` a query returns what each
+  meter's usage costs, not the prices behind it.
 - Billing cycles. The client picks the time range; cycle windows stay in the
   portal.
 - Writing usage. Usage still enters through the ingestion gateway.
@@ -136,6 +137,15 @@ with empty results, so a client can tell a mistake from "no usage".
   organizations have one billing account.
 - **Empty buckets.** Buckets and series without usage are left out, not
   zero-filled. A dimension the events did not set has the value `""`.
+- **Spend.** With `spec.includeSpend`, each meter also gets `spend`: its
+  usage priced with each billing account's plan the way the invoice prices
+  it. Tiered prices continue from the usage earlier in the billing period,
+  so a window inside a billing period costs what it adds to that invoice.
+  With a project filter, the filtered usage is priced as if it were the
+  account's only usage. Accounts billed in different currencies give a
+  `spendError` instead. `status.spend` adds up every meter's spend; it is
+  left out, with a `status.spendError`, if any meter's usage or spend could
+  not be read, so a partial total is never shown as the whole.
 - **Limits.** `Validate` caps a query at 100 meters, 10 groupings of up to 3
   dimensions, 50 billing accounts and 50 projects, and the range at 31 days
   hourly, 400 days daily and about 5 years monthly or totals-only.
@@ -163,6 +173,7 @@ spec:
   billingAccounts: []                 # narrow; empty = all in scope
   projects: []                        # narrow; project_name
   meters: []                          # MeterDefinition names; empty = all published and deprecated
+  includeSpend: true                  # also return the spend, per meter and in total
   groupings:                          # empty = [{groupBy: []}], the total
     - groupBy: []
     - groupBy: [project_name]
@@ -183,7 +194,9 @@ status:
               total: "412.5"
               points:
                 - { start: "2026-10-05T00:00:00Z", end: "2026-10-06T00:00:00Z", value: "18.2" }
+      spend: { amount: "20.63", currency: USD }   # with includeSpend
       error: ""                       # set when this meter could not be read
+  spend: { amount: "20.63", currency: USD }       # every meter's spend together
 ```
 
 Values are decimal strings, because Kubernetes APIs do not use floats.

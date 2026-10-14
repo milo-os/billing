@@ -28,6 +28,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageQueryStatus":        schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref),
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageScope":              schema_billing_api_usage_v1alpha1_UsageScope(ref),
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageSeries":             schema_billing_api_usage_v1alpha1_UsageSeries(ref),
+		"go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend":              schema_billing_api_usage_v1alpha1_UsageSpend(ref),
 		v1.APIGroup{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_APIGroup(ref),
 		v1.APIGroupList{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_APIGroupList(ref),
 		v1.APIResource{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_APIResource(ref),
@@ -175,12 +176,25 @@ func schema_billing_api_usage_v1alpha1_MeterUsage(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
+					"spend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spend is what the meter's usage over the time range costs, when spec.includeSpend is set. It is priced with the prices of each billing account's plan in effect at the time, the same way its invoice is, so tiered prices continue from the usage earlier in the billing period. Left empty when no billing account's plan prices this meter.",
+							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
+						},
+					},
+					"spendError": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SpendError explains why Spend could not be computed, for example because the billing accounts are billed in different currencies. The usage results are still returned.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"meterDefinition"},
 			},
 		},
 		Dependencies: []string{
-			"go.miloapis.com/billing/api/usage/v1alpha1.UsageGroupingResult"},
+			"go.miloapis.com/billing/api/usage/v1alpha1.UsageGroupingResult", "go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"},
 	}
 }
 
@@ -516,6 +530,13 @@ func schema_billing_api_usage_v1alpha1_UsageQuerySpec(ref common.ReferenceCallba
 							},
 						},
 					},
+					"includeSpend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IncludeSpend also returns what each meter's usage costs (status.meters[].spend), priced with each billing account's current plan the same way its invoice is. It costs extra backend queries, so it is off by default.",
+							Type:        []string{"boolean"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"startTime", "endTime"},
 			},
@@ -577,11 +598,24 @@ func schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref common.ReferenceCall
 							},
 						},
 					},
+					"spend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spend is the sum of every meter's spend in Meters, when spec.includeSpend is set: what the usage the query read costs altogether. Meters no plan prices add nothing. Left empty when no meter is priced, or when SpendError is set.",
+							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
+						},
+					},
+					"spendError": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SpendError explains why Spend is left out: some meter's usage or spend could not be read, or the meters are billed in different currencies. The meters' own results are still returned.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"go.miloapis.com/billing/api/usage/v1alpha1.BillingAccountReference", "go.miloapis.com/billing/api/usage/v1alpha1.MeterUsage", "go.miloapis.com/billing/api/usage/v1alpha1.UsageScope"},
+			"go.miloapis.com/billing/api/usage/v1alpha1.BillingAccountReference", "go.miloapis.com/billing/api/usage/v1alpha1.MeterUsage", "go.miloapis.com/billing/api/usage/v1alpha1.UsageScope", "go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"},
 	}
 }
 
@@ -669,6 +703,36 @@ func schema_billing_api_usage_v1alpha1_UsageSeries(ref common.ReferenceCallback)
 		},
 		Dependencies: []string{
 			"go.miloapis.com/billing/api/usage/v1alpha1.UsagePoint"},
+	}
+}
+
+func schema_billing_api_usage_v1alpha1_UsageSpend(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UsageSpend is what usage costs.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"amount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Amount is the cost as a decimal string in Currency (for example \"12.5\"), before taxes, credits, discounts and minimum commitments. In a project, or with spec.projects set, it prices only that usage, as if it were the billing account's only usage.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"currency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Currency is the ISO 4217 code of Amount, for example \"USD\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"amount", "currency"},
+			},
+		},
 	}
 }
 

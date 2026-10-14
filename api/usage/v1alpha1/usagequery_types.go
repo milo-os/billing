@@ -152,6 +152,14 @@ type UsageQuerySpec struct {
 	// +optional
 	// +listType=atomic
 	Groupings []UsageGrouping `json:"groupings,omitempty"`
+
+	// IncludeSpend also returns what each meter's usage costs
+	// (status.meters[].spend), priced with each billing account's current
+	// plan the same way its invoice is. It costs extra backend queries, so it
+	// is off by default.
+	//
+	// +optional
+	IncludeSpend bool `json:"includeSpend,omitempty"`
 }
 
 // BillingAccountReference names a billing account.
@@ -203,6 +211,21 @@ type UsageQueryStatus struct {
 	// +optional
 	// +listType=atomic
 	Meters []MeterUsage `json:"meters,omitempty"`
+
+	// Spend is the sum of every meter's spend in Meters, when
+	// spec.includeSpend is set: what the usage the query read costs
+	// altogether. Meters no plan prices add nothing. Left empty when no
+	// meter is priced, or when SpendError is set.
+	//
+	// +optional
+	Spend *UsageSpend `json:"spend,omitempty"`
+
+	// SpendError explains why Spend is left out: some meter's usage or
+	// spend could not be read, or the meters are billed in different
+	// currencies. The meters' own results are still returned.
+	//
+	// +optional
+	SpendError string `json:"spendError,omitempty"`
 }
 
 // UsageScope identifies the parent a UsageQuery was made in.
@@ -255,6 +278,38 @@ type MeterUsage struct {
 	//
 	// +optional
 	Error string `json:"error,omitempty"`
+
+	// Spend is what the meter's usage over the time range costs, when
+	// spec.includeSpend is set. It is priced with the prices of each billing
+	// account's plan in effect at the time, the same way its invoice is, so
+	// tiered prices continue from the usage earlier in the billing period.
+	// Left empty when no billing account's plan prices this meter.
+	//
+	// +optional
+	Spend *UsageSpend `json:"spend,omitempty"`
+
+	// SpendError explains why Spend could not be computed, for example
+	// because the billing accounts are billed in different currencies. The
+	// usage results are still returned.
+	//
+	// +optional
+	SpendError string `json:"spendError,omitempty"`
+}
+
+// UsageSpend is what usage costs.
+type UsageSpend struct {
+	// Amount is the cost as a decimal string in Currency (for example
+	// "12.5"), before taxes, credits, discounts and minimum commitments. In
+	// a project, or with spec.projects set, it prices only that usage, as if
+	// it were the billing account's only usage.
+	//
+	// +required
+	Amount string `json:"amount"`
+
+	// Currency is the ISO 4217 code of Amount, for example "USD".
+	//
+	// +required
+	Currency string `json:"currency"`
 }
 
 // UsageGroupingResult is one breakdown of a meter's usage.
