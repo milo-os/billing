@@ -17,4 +17,5 @@ resources:
   - paymentmethodclass.yaml
   - invoice.yaml
   - servicepricing.yaml
+  - usagequery.yaml
 

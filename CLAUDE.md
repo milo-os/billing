@@ -15,6 +15,11 @@ A Kubernetes-native billing service for managing billing accounts and project bi
 - Version: `v1alpha1`
 - Resources: `BillingAccount`, `BillingAccountBinding`
 
+`usage.billing.miloapis.com/v1alpha1` (`api/usage/v1alpha1`) holds `UsageQuery`,
+which is not a CRD: a usage provider serves it from an aggregated API server.
+Billing owns its types, validation, scope rules and IAM. See
+`docs/enhancements/usage-query.md`.
+
 ## Repo Layout
 
 ```

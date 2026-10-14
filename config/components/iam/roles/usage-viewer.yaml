@@ -1,0 +1,12 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-usage-viewer
+  annotations:
+    kubernetes.io/display-name: Usage Viewer
+    kubernetes.io/description: "View metered usage, by querying UsageQuery"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    # Creating a UsageQuery only reads usage; nothing is stored or changed.
+    - usage.billing.miloapis.com/usagequeries.create

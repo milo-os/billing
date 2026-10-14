@@ -1,0 +1,21 @@
+# UsageQuery (usage.billing.miloapis.com) is served by the usage provider's
+# aggregated API server, not by a CRD. It is cluster-scoped and create-only:
+# the parent the request is made in (organization, project, or none for
+# platform staff) decides which billing accounts the query reads.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: usage.billing.miloapis.com-usagequery
+spec:
+  serviceRef:
+    name: "usage.billing.miloapis.com"
+  kind: UsageQuery
+  plural: usagequeries
+  singular: usagequery
+  permissions:
+    - create
+  parentResources:
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Organization
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Project
