@@ -10,4 +10,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/paymentmethodclasses.list
     - billing.miloapis.com/paymentmethodclasses.get
+    - billing.miloapis.com/paymentmethodclasses/status.get
     - billing.miloapis.com/paymentmethodclasses.watch
