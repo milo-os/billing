@@ -63,7 +63,8 @@ portal a path to all of that.
 
 ### Non-Goals
 
-- Pricing or spend. The portal still works out spend from catalog rates.
+- Prices or rate cards. With `spec.includeSpend` a query returns what each
+  meter's usage costs, not the prices behind it.
 - Billing cycles. The client picks the time range; cycle windows stay in the
   portal.
 - Writing usage. Usage still enters through the ingestion gateway.
@@ -104,10 +105,10 @@ aggregated API servers. The server derives the scope from it with
 narrow it.**
 
 | Request made in | Billing accounts read | Project filter |
-|---|---|---|
+| --- | --- | --- |
 | Organization `acme` | All in `organization-acme`, or the ones in `spec.billingAccounts` (which must be in that namespace) | `spec.projects`, optional |
-| Project `web` | The one `web` is bound to (active `BillingAccountBinding`) | Always `web`; naming another project is rejected |
-| Platform (no parent) | The ones in `spec.billingAccounts`, with namespaces | `spec.projects`, optional |
+| Project `web` | All of its organization's, so its history survives a move between billing accounts. `spec.billingAccounts` is rejected, and the response does not list them, since project members may not be allowed to see them | Always `web`; naming another project is rejected |
+| Platform (no parent) | The ones in `spec.billingAccounts` (with namespaces), or else those of the organizations that own `spec.projects`. One of the two is required | `spec.projects`, optional |
 | Anything else (e.g. a `User` parent) | Rejected | |
 
 A spec that reaches outside its scope is rejected as Forbidden, not answered
@@ -136,6 +137,15 @@ with empty results, so a client can tell a mistake from "no usage".
   organizations have one billing account.
 - **Empty buckets.** Buckets and series without usage are left out, not
   zero-filled. A dimension the events did not set has the value `""`.
+- **Spend.** With `spec.includeSpend`, each meter also gets `spend`: its
+  usage priced with each billing account's plan the way the invoice prices
+  it. Tiered prices continue from the usage earlier in the billing period,
+  so a window inside a billing period costs what it adds to that invoice.
+  With a project filter, the filtered usage is priced as if it were the
+  account's only usage. Accounts billed in different currencies give a
+  `spendError` instead. `status.spend` adds up every meter's spend; it is
+  left out, with a `status.spendError`, if any meter's usage or spend could
+  not be read, so a partial total is never shown as the whole.
 - **Limits.** `Validate` caps a query at 100 meters, 10 groupings of up to 3
   dimensions, 50 billing accounts and 50 projects, and the range at 31 days
   hourly, 400 days daily and about 5 years monthly or totals-only.
@@ -143,7 +153,7 @@ with empty results, so a client can tell a mistake from "no usage".
 ### Risks and Mitigations
 
 | Risk | Mitigation |
-|---|---|
+| --- | --- |
 | A bug in scope handling leaks another tenant's usage | Scope rules live in one place in billing (`ScopeFromUserExtra`), with tests; unknown parents are rejected, not treated as the platform |
 | A platform request from a non-staff caller | Milo only authorizes a request with no parent against platform-wide permission, which only staff hold. Providers log every platform query with its caller |
 | One request fans out into many backend queries | The limits above; providers query in parallel with a bounded pool |
@@ -162,7 +172,8 @@ spec:
   timeZone: UTC                       # IANA; default UTC
   billingAccounts: []                 # narrow; empty = all in scope
   projects: []                        # narrow; project_name
-  meters: []                          # MeterDefinition names; empty = all published
+  meters: []                          # MeterDefinition names; empty = all published and deprecated
+  includeSpend: true                  # also return the spend, per meter and in total
   groupings:                          # empty = [{groupBy: []}], the total
     - groupBy: []
     - groupBy: [project_name]
@@ -183,7 +194,9 @@ status:
               total: "412.5"
               points:
                 - { start: "2026-10-05T00:00:00Z", end: "2026-10-06T00:00:00Z", value: "18.2" }
+      spend: { amount: "20.63", currency: USD }   # with includeSpend
       error: ""                       # set when this meter could not be read
+  spend: { amount: "20.63", currency: USD }       # every meter's spend together
 ```
 
 Values are decimal strings, because Kubernetes APIs do not use floats.
@@ -191,7 +204,7 @@ Values are decimal strings, because Kubernetes APIs do not use floats.
 ### What Lives Where
 
 | Piece | Repository |
-|---|---|
+| --- | --- |
 | Types, defaults, validation, scope rules (`api/usage/v1alpha1`) | billing |
 | OpenAPI definitions (`api/usage/openapi`) | billing (generated) |
 | `ProtectedResource`, `billing.miloapis.com-usage-viewer` role, discovery policy | billing |
@@ -205,8 +218,8 @@ A provider's REST storage for `usagequeries`:
 1. Calls `SetDefaults` and `Validate`, returning 400 on errors.
 2. Calls `ScopeFromUserExtra` on the request's user; 403 on error.
 3. Resolves the billing accounts and project filter for the scope, reading
-   BillingAccounts, BillingAccountBindings and Projects from Milo, and returns
-   403 if the spec reaches outside it.
+   BillingAccounts and Projects from Milo, and returns 403 if the spec
+   reaches outside it.
 4. Checks each meter and `groupBy` dimension against the MeterDefinitions
    (declared dimensions plus `status.systemDimensions`); 400 if unknown.
 5. Queries the backend for each meter × grouping, plus an un-windowed query

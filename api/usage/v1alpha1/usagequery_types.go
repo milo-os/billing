@@ -39,7 +39,7 @@ const (
 	UsageScopeOrganization UsageScopeType = "Organization"
 
 	// UsageScopeProject is a request made in a project. It may read only the
-	// usage of that project, on the billing account the project is bound to.
+	// usage of that project, on every billing account of its organization.
 	UsageScopeProject UsageScopeType = "Project"
 )
 
@@ -61,9 +61,11 @@ const (
 //   - In an organization (/organizations/<org>/control-plane/...): the
 //     organization's billing accounts.
 //   - In a project (/projects/<project>/control-plane/...): only that
-//     project's usage, on the billing account it is bound to.
+//     project's usage, on every billing account of its organization, so a
+//     project that moved between billing accounts keeps its history.
 //   - On the platform (no parent): any billing account. Only platform staff
-//     are authorized to do this.
+//     are authorized to do this, and the query must name billing accounts
+//     or projects.
 //
 // The spec can only narrow that scope. A spec that reaches outside it, such
 // as another organization's billing account, is rejected as Forbidden rather
@@ -117,8 +119,10 @@ type UsageQuerySpec struct {
 
 	// BillingAccounts narrows the query to these billing accounts. Leave it
 	// empty to read every billing account in scope: all of the
-	// organization's in an organization, the bound one in a project.
-	// Platform queries must name the accounts they read.
+	// organization's in an organization, or, on the platform, those of the
+	// organizations that own spec.projects. Platform queries must set this
+	// or spec.projects. It cannot be set in a project: project members may
+	// not be allowed to see their organization's billing accounts.
 	//
 	// +optional
 	// +listType=atomic
@@ -133,7 +137,8 @@ type UsageQuerySpec struct {
 	Projects []string `json:"projects,omitempty"`
 
 	// Meters lists the MeterDefinitions to read, by name. Leave it empty to
-	// read every published MeterDefinition.
+	// read every published or deprecated MeterDefinition; a grouping by a
+	// dimension only some of them have then has no series for the others.
 	//
 	// +optional
 	// +listType=atomic
@@ -147,13 +152,21 @@ type UsageQuerySpec struct {
 	// +optional
 	// +listType=atomic
 	Groupings []UsageGrouping `json:"groupings,omitempty"`
+
+	// IncludeSpend also returns what each meter's usage costs
+	// (status.meters[].spend), priced with each billing account's current
+	// plan the same way its invoice is. It costs extra backend queries, so it
+	// is off by default.
+	//
+	// +optional
+	IncludeSpend bool `json:"includeSpend,omitempty"`
 }
 
 // BillingAccountReference names a billing account.
 type BillingAccountReference struct {
 	// Namespace is the namespace of the billing account. In an
-	// organization or project it defaults to the organization's namespace,
-	// and any other namespace is rejected. Platform queries must set it.
+	// organization it defaults to the organization's namespace, and any
+	// other namespace is rejected. Platform queries must set it.
 	//
 	// +optional
 	Namespace string `json:"namespace,omitempty"`
@@ -184,7 +197,9 @@ type UsageQueryStatus struct {
 	// +optional
 	Scope UsageScope `json:"scope,omitempty"`
 
-	// BillingAccounts lists the billing accounts the results cover.
+	// BillingAccounts lists the billing accounts the results cover. It is
+	// left empty for a project query, which does not reveal its
+	// organization's billing accounts.
 	//
 	// +optional
 	// +listType=atomic
@@ -196,6 +211,21 @@ type UsageQueryStatus struct {
 	// +optional
 	// +listType=atomic
 	Meters []MeterUsage `json:"meters,omitempty"`
+
+	// Spend is the sum of every meter's spend in Meters, when
+	// spec.includeSpend is set: what the usage the query read costs
+	// altogether. Meters no plan prices add nothing. Left empty when no
+	// meter is priced, or when SpendError is set.
+	//
+	// +optional
+	Spend *UsageSpend `json:"spend,omitempty"`
+
+	// SpendError explains why Spend is left out: some meter's usage or
+	// spend could not be read, or the meters are billed in different
+	// currencies. The meters' own results are still returned.
+	//
+	// +optional
+	SpendError string `json:"spendError,omitempty"`
 }
 
 // UsageScope identifies the parent a UsageQuery was made in.
@@ -248,6 +278,38 @@ type MeterUsage struct {
 	//
 	// +optional
 	Error string `json:"error,omitempty"`
+
+	// Spend is what the meter's usage over the time range costs, when
+	// spec.includeSpend is set. It is priced with the prices of each billing
+	// account's plan in effect at the time, the same way its invoice is, so
+	// tiered prices continue from the usage earlier in the billing period.
+	// Left empty when no billing account's plan prices this meter.
+	//
+	// +optional
+	Spend *UsageSpend `json:"spend,omitempty"`
+
+	// SpendError explains why Spend could not be computed, for example
+	// because the billing accounts are billed in different currencies. The
+	// usage results are still returned.
+	//
+	// +optional
+	SpendError string `json:"spendError,omitempty"`
+}
+
+// UsageSpend is what usage costs.
+type UsageSpend struct {
+	// Amount is the cost as a decimal string in Currency (for example
+	// "12.5"), before taxes, credits, discounts and minimum commitments. In
+	// a project, or with spec.projects set, it prices only that usage, as if
+	// it were the billing account's only usage.
+	//
+	// +required
+	Amount string `json:"amount"`
+
+	// Currency is the ISO 4217 code of Amount, for example "USD".
+	//
+	// +required
+	Currency string `json:"currency"`
 }
 
 // UsageGroupingResult is one breakdown of a meter's usage.
