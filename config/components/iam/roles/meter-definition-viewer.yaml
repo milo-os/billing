@@ -10,4 +10,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/meterdefinitions.list
     - billing.miloapis.com/meterdefinitions.get
+    - billing.miloapis.com/meterdefinitions/status.get
     - billing.miloapis.com/meterdefinitions.watch

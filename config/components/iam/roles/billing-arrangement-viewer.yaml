@@ -13,4 +13,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/billingarrangements.list
     - billing.miloapis.com/billingarrangements.get
+    - billing.miloapis.com/billingarrangements/status.get
     - billing.miloapis.com/billingarrangements.watch
