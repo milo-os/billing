@@ -10,4 +10,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/billingentitlements.list
     - billing.miloapis.com/billingentitlements.get
+    - billing.miloapis.com/billingentitlements/status.get
     - billing.miloapis.com/billingentitlements.watch
