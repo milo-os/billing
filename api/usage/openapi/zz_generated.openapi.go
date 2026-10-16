@@ -28,6 +28,7 @@ func GetOpenAPIDefinitions(ref common.ReferenceCallback) map[string]common.OpenA
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageQueryStatus":        schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref),
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageScope":              schema_billing_api_usage_v1alpha1_UsageScope(ref),
 		"go.miloapis.com/billing/api/usage/v1alpha1.UsageSeries":             schema_billing_api_usage_v1alpha1_UsageSeries(ref),
+		"go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend":              schema_billing_api_usage_v1alpha1_UsageSpend(ref),
 		v1.APIGroup{}.OpenAPIModelName():                                     schema_pkg_apis_meta_v1_APIGroup(ref),
 		v1.APIGroupList{}.OpenAPIModelName():                                 schema_pkg_apis_meta_v1_APIGroupList(ref),
 		v1.APIResource{}.OpenAPIModelName():                                  schema_pkg_apis_meta_v1_APIResource(ref),
@@ -93,7 +94,7 @@ func schema_billing_api_usage_v1alpha1_BillingAccountReference(ref common.Refere
 				Properties: map[string]spec.Schema{
 					"namespace": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Namespace is the namespace of the billing account. In an organization or project it defaults to the organization's namespace, and any other namespace is rejected. Platform queries must set it.",
+							Description: "Namespace is the namespace of the billing account. In an organization it defaults to the organization's namespace, and any other namespace is rejected. Platform queries must set it.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
@@ -175,12 +176,25 @@ func schema_billing_api_usage_v1alpha1_MeterUsage(ref common.ReferenceCallback) 
 							Format:      "",
 						},
 					},
+					"spend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spend is what the meter's usage over the time range costs, when spec.includeSpend is set. It is priced with the prices of each billing account's plan in effect at the time, the same way its invoice is, so tiered prices continue from the usage earlier in the billing period. Left empty when no billing account's plan prices this meter.",
+							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
+						},
+					},
+					"spendError": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SpendError explains why Spend could not be computed, for example because the billing accounts are billed in different currencies. The usage results are still returned.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 				Required: []string{"meterDefinition"},
 			},
 		},
 		Dependencies: []string{
-			"go.miloapis.com/billing/api/usage/v1alpha1.UsageGroupingResult"},
+			"go.miloapis.com/billing/api/usage/v1alpha1.UsageGroupingResult", "go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"},
 	}
 }
 
@@ -311,7 +325,7 @@ func schema_billing_api_usage_v1alpha1_UsageQuery(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "UsageQuery reads metered usage for billing accounts over a time range.\n\nA UsageQuery is never stored: the client creates one, and the server returns it with status filled in, the same way a TokenReview or SubjectAccessReview works.\n\nWhat a query may read is decided by where the request is made, not by the spec:\n\n  - In an organization (/organizations/<org>/control-plane/...): the\n    organization's billing accounts.\n  - In a project (/projects/<project>/control-plane/...): only that\n    project's usage, on the billing account it is bound to.\n  - On the platform (no parent): any billing account. Only platform staff\n    are authorized to do this.\n\nThe spec can only narrow that scope. A spec that reaches outside it, such as another organization's billing account, is rejected as Forbidden rather than returning empty results.\n\nExample:\n\n\tapiVersion: usage.billing.miloapis.com/v1alpha1\n\tkind: UsageQuery\n\tspec:\n\t  startTime: \"2026-10-05T00:00:00Z\"\n\t  endTime: \"2026-10-13T15:00:00Z\"\n\t  granularity: Day\n\t  groupings:\n\t    - groupBy: []\n\t    - groupBy: [project_name]\n\t    - groupBy: [region]",
+				Description: "UsageQuery reads metered usage for billing accounts over a time range.\n\nA UsageQuery is never stored: the client creates one, and the server returns it with status filled in, the same way a TokenReview or SubjectAccessReview works.\n\nWhat a query may read is decided by where the request is made, not by the spec:\n\n  - In an organization (/organizations/<org>/control-plane/...): the\n    organization's billing accounts.\n  - In a project (/projects/<project>/control-plane/...): only that\n    project's usage, on every billing account of its organization, so a\n    project that moved between billing accounts keeps its history.\n  - On the platform (no parent): any billing account. Only platform staff\n    are authorized to do this, and the query must name billing accounts\n    or projects.\n\nThe spec can only narrow that scope. A spec that reaches outside it, such as another organization's billing account, is rejected as Forbidden rather than returning empty results.\n\nExample:\n\n\tapiVersion: usage.billing.miloapis.com/v1alpha1\n\tkind: UsageQuery\n\tspec:\n\t  startTime: \"2026-10-05T00:00:00Z\"\n\t  endTime: \"2026-10-13T15:00:00Z\"\n\t  granularity: Day\n\t  groupings:\n\t    - groupBy: []\n\t    - groupBy: [project_name]\n\t    - groupBy: [region]",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"kind": {
@@ -445,7 +459,7 @@ func schema_billing_api_usage_v1alpha1_UsageQuerySpec(ref common.ReferenceCallba
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "BillingAccounts narrows the query to these billing accounts. Leave it empty to read every billing account in scope: all of the organization's in an organization, the bound one in a project. Platform queries must name the accounts they read.",
+							Description: "BillingAccounts narrows the query to these billing accounts. Leave it empty to read every billing account in scope: all of the organization's in an organization, or, on the platform, those of the organizations that own spec.projects. Platform queries must set this or spec.projects. It cannot be set in a project: project members may not be allowed to see their organization's billing accounts.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -484,7 +498,7 @@ func schema_billing_api_usage_v1alpha1_UsageQuerySpec(ref common.ReferenceCallba
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "Meters lists the MeterDefinitions to read, by name. Leave it empty to read every published MeterDefinition.",
+							Description: "Meters lists the MeterDefinitions to read, by name. Leave it empty to read every published or deprecated MeterDefinition; a grouping by a dimension only some of them have then has no series for the others.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -514,6 +528,13 @@ func schema_billing_api_usage_v1alpha1_UsageQuerySpec(ref common.ReferenceCallba
 									},
 								},
 							},
+						},
+					},
+					"includeSpend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "IncludeSpend also returns what each meter's usage costs (status.meters[].spend), priced with each billing account's current plan the same way its invoice is. It costs extra backend queries, so it is off by default.",
+							Type:        []string{"boolean"},
+							Format:      "",
 						},
 					},
 				},
@@ -546,7 +567,7 @@ func schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref common.ReferenceCall
 							},
 						},
 						SchemaProps: spec.SchemaProps{
-							Description: "BillingAccounts lists the billing accounts the results cover.",
+							Description: "BillingAccounts lists the billing accounts the results cover. It is left empty for a project query, which does not reveal its organization's billing accounts.",
 							Type:        []string{"array"},
 							Items: &spec.SchemaOrArray{
 								Schema: &spec.Schema{
@@ -577,11 +598,24 @@ func schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref common.ReferenceCall
 							},
 						},
 					},
+					"spend": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Spend is the sum of every meter's spend in Meters, when spec.includeSpend is set: what the usage the query read costs altogether. Meters no plan prices add nothing. Left empty when no meter is priced, or when SpendError is set.",
+							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
+						},
+					},
+					"spendError": {
+						SchemaProps: spec.SchemaProps{
+							Description: "SpendError explains why Spend is left out: some meter's usage or spend could not be read, or the meters are billed in different currencies. The meters' own results are still returned.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
 				},
 			},
 		},
 		Dependencies: []string{
-			"go.miloapis.com/billing/api/usage/v1alpha1.BillingAccountReference", "go.miloapis.com/billing/api/usage/v1alpha1.MeterUsage", "go.miloapis.com/billing/api/usage/v1alpha1.UsageScope"},
+			"go.miloapis.com/billing/api/usage/v1alpha1.BillingAccountReference", "go.miloapis.com/billing/api/usage/v1alpha1.MeterUsage", "go.miloapis.com/billing/api/usage/v1alpha1.UsageScope", "go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"},
 	}
 }
 
@@ -594,7 +628,7 @@ func schema_billing_api_usage_v1alpha1_UsageScope(ref common.ReferenceCallback) 
 				Properties: map[string]spec.Schema{
 					"type": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Type is Platform, Organization or Project.\n\n\nPossible enum values:\n - `\"Organization\"` is a request made in an organization. It may read the billing accounts of that organization.\n - `\"Platform\"` is a request made outside any organization or project, which only platform staff are authorized to make. It may read any billing account.\n - `\"Project\"` is a request made in a project. It may read only the usage of that project, on the billing account the project is bound to.",
+							Description: "Type is Platform, Organization or Project.\n\n\nPossible enum values:\n - `\"Organization\"` is a request made in an organization. It may read the billing accounts of that organization.\n - `\"Platform\"` is a request made outside any organization or project, which only platform staff are authorized to make. It may read any billing account.\n - `\"Project\"` is a request made in a project. It may read only the usage of that project, on every billing account of its organization.",
 							Type:        []string{"string"},
 							Format:      "",
 							Enum:        []interface{}{"Organization", "Platform", "Project"},
@@ -669,6 +703,36 @@ func schema_billing_api_usage_v1alpha1_UsageSeries(ref common.ReferenceCallback)
 		},
 		Dependencies: []string{
 			"go.miloapis.com/billing/api/usage/v1alpha1.UsagePoint"},
+	}
+}
+
+func schema_billing_api_usage_v1alpha1_UsageSpend(ref common.ReferenceCallback) common.OpenAPIDefinition {
+	return common.OpenAPIDefinition{
+		Schema: spec.Schema{
+			SchemaProps: spec.SchemaProps{
+				Description: "UsageSpend is what usage costs.",
+				Type:        []string{"object"},
+				Properties: map[string]spec.Schema{
+					"amount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Amount is the cost as a decimal string in Currency (for example \"12.5\"), before taxes, credits, discounts and minimum commitments. In a project, or with spec.projects set, it prices only that usage, as if it were the billing account's only usage.",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"currency": {
+						SchemaProps: spec.SchemaProps{
+							Description: "Currency is the ISO 4217 code of Amount, for example \"USD\".",
+							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+				},
+				Required: []string{"amount", "currency"},
+			},
+		},
 	}
 }
 
