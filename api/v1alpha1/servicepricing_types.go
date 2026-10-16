@@ -14,6 +14,7 @@ import (
 // rather than parsing ServiceConfiguration.
 //
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit) && has(self.rates))",message="Usage ServicePricing requires metric, pricingUnit, and rates"
+// +kubebuilder:validation:XValidation:rule="self.chargeType == 'Usage' || !has(self.unitConversion)",message="unitConversion is only allowed for Usage ServicePricing"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'OneTime' || (has(self.amount) && has(self.trigger))",message="OneTime ServicePricing requires amount and trigger"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Recurring' || (has(self.amount) && has(self.interval))",message="Recurring ServicePricing requires amount and interval"
 type ServicePricingSpec struct {
@@ -59,6 +60,14 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:MaxLength=64
 	PricingUnit string `json:"pricingUnit,omitempty"`
 
+	// UnitConversion converts the meter's usage into pricingUnit before the
+	// rates apply, for a metric measured in a different unit than it is
+	// priced in (e.g. bytes priced per GiB). Omitted when the metric is
+	// already measured in pricingUnit. Usage charges only.
+	//
+	// +kubebuilder:validation:Optional
+	UnitConversion *UnitConversion `json:"unitConversion,omitempty"`
+
 	// Rates is the ordered list of rate entries for Usage charges.
 	// Required when chargeType is Usage.
 	//
@@ -83,6 +92,31 @@ type ServicePricingSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`
+}
+
+// UnitConversion converts usage measured in the meter's unit into the
+// ServicePricing's pricingUnit: usage in pricingUnit = metered usage /
+// meterUnitsPerPricingUnit. Rates and tier bounds stay in pricingUnit, and
+// invoices show the converted quantity.
+type UnitConversion struct {
+	// MeterUnitsPerPricingUnit is how many of the meter's units make one
+	// pricingUnit, as a positive decimal string (e.g. "1073741824" for a
+	// meter in bytes priced per GiB, "1000" for millicore-seconds priced
+	// per vCPU-second).
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)$`
+	MeterUnitsPerPricingUnit string `json:"meterUnitsPerPricingUnit"`
+
+	// Description explains the conversion to the people who maintain the
+	// pricing (e.g. "Memory is metered in byte-seconds and priced per
+	// GiB-second; 1 GiB = 2^30 bytes").
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=512
+	Description string `json:"description"`
 }
 
 // ServicePricingStatus defines the observed state of a ServicePricing.

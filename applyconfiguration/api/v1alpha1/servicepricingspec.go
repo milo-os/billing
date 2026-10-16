@@ -35,6 +35,11 @@ type ServicePricingSpecApplyConfiguration struct {
 	// "gib"). Required when chargeType is Usage. Does not need to be the
 	// literal UCUM unit string of the meter.
 	PricingUnit *string `json:"pricingUnit,omitempty"`
+	// UnitConversion converts the meter's usage into pricingUnit before the
+	// rates apply, for a metric measured in a different unit than it is
+	// priced in (e.g. bytes priced per GiB). Omitted when the metric is
+	// already measured in pricingUnit. Usage charges only.
+	UnitConversion *UnitConversionApplyConfiguration `json:"unitConversion,omitempty"`
 	// Rates is the ordered list of rate entries for Usage charges.
 	// Required when chargeType is Usage.
 	Rates []PricingRateApplyConfiguration `json:"rates,omitempty"`
@@ -98,6 +103,14 @@ func (b *ServicePricingSpecApplyConfiguration) WithMetric(value string) *Service
 // If called multiple times, the PricingUnit field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithPricingUnit(value string) *ServicePricingSpecApplyConfiguration {
 	b.PricingUnit = &value
+	return b
+}
+
+// WithUnitConversion sets the UnitConversion field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the UnitConversion field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithUnitConversion(value *UnitConversionApplyConfiguration) *ServicePricingSpecApplyConfiguration {
+	b.UnitConversion = value
 	return b
 }
 

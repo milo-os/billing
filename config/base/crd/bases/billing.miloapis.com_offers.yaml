@@ -262,6 +262,34 @@ spec:
                           enum:
                           - BillingAccountActivation
                           type: string
+                        unitConversion:
+                          description: |-
+                            UnitConversion converts the meter's usage into pricingUnit before the
+                            rates apply, for a metric measured in a different unit than it is
+                            priced in (e.g. bytes priced per GiB). Omitted when the metric is
+                            already measured in pricingUnit. Usage charges only.
+                          properties:
+                            description:
+                              description: |-
+                                Description explains the conversion to the people who maintain the
+                                pricing (e.g. "Memory is metered in byte-seconds and priced per
+                                GiB-second; 1 GiB = 2^30 bytes").
+                              maxLength: 512
+                              minLength: 1
+                              type: string
+                            meterUnitsPerPricingUnit:
+                              description: |-
+                                MeterUnitsPerPricingUnit is how many of the meter's units make one
+                                pricingUnit, as a positive decimal string (e.g. "1073741824" for a
+                                meter in bytes priced per GiB, "1000" for millicore-seconds priced
+                                per vCPU-second).
+                              maxLength: 64
+                              pattern: ^([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)$
+                              type: string
+                          required:
+                          - description
+                          - meterUnitsPerPricingUnit
+                          type: object
                       required:
                       - chargeType
                       - currency
@@ -272,6 +300,8 @@ spec:
                           and rates
                         rule: self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit)
                           && has(self.rates))
+                      - message: unitConversion is only allowed for Usage ServicePricing
+                        rule: self.chargeType == 'Usage' || !has(self.unitConversion)
                       - message: OneTime ServicePricing requires amount and trigger
                         rule: self.chargeType != 'OneTime' || (has(self.amount) &&
                           has(self.trigger))
