@@ -106,8 +106,7 @@ type UnitConversion struct {
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:MaxLength=64
-	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)(\.\d+)?$`
-	// +kubebuilder:validation:XValidation:rule="!self.matches('^0(\\\\.0+)?$')",message="meterUnitsPerPricingUnit must be greater than zero"
+	// +kubebuilder:validation:Pattern=`^([1-9]\d*(\.\d+)?|0\.\d*[1-9]\d*)$`
 	MeterUnitsPerPricingUnit string `json:"meterUnitsPerPricingUnit"`
 
 	// Description explains the conversion to the people who maintain the
