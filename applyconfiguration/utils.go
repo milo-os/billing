@@ -142,6 +142,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.ServicePricingStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("TaxID"):
 		return &apiv1alpha1.TaxIDApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("UnitConversion"):
+		return &apiv1alpha1.UnitConversionApplyConfiguration{}
 
 	}
 	return nil

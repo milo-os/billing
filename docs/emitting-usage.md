@@ -184,8 +184,8 @@ if err != nil {
   billing account. The billing controllers attribute project → account
   using the `BillingAccountBinding` graph at processing time.
 - **Do not use floating point.** `Quantity` is `int64`. Measure
-  cpu-*seconds*, not cpu-hours; bytes, not gibibytes. The meter's
-  `consumedUnit`/`pricingUnit` handle scale.
+  cpu-*seconds*, not cpu-hours; bytes, not gibibytes. A ServicePricing
+  priced in a larger unit converts with `unitConversion`.
 
 ## Emission contract
 

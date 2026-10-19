@@ -10,4 +10,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/servicepricings.list
     - billing.miloapis.com/servicepricings.get
+    - billing.miloapis.com/servicepricings/status.get
     - billing.miloapis.com/servicepricings.watch

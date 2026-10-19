@@ -10,4 +10,5 @@ spec:
   includedPermissions:
     - billing.miloapis.com/offers.list
     - billing.miloapis.com/offers.get
+    - billing.miloapis.com/offers/status.get
     - billing.miloapis.com/offers.watch
