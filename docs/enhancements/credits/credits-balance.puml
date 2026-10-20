@@ -1,0 +1,24 @@
+@startuml credits-balance
+title Reading the balance (BillingAccountBalance)
+
+actor Customer
+participant "cloud-portal" as Portal
+participant "Milo API server" as Milo
+participant "Billing provider\nusage API server" as Usage
+participant "Billing provider\nbackend" as Backend
+
+Customer -> Portal : Open the billing page
+Portal -> Milo : GET .../organizations/acme/control-plane/apis/\nusage.billing.miloapis.com/v1alpha1/namespaces/\norganization-acme/billingaccountbalances/acme-main\n(user's token)
+Milo -> Milo : authenticate,\ncheck billingaccountbalances.get on Organization acme
+Milo -> Usage : forward (parent: Organization acme)
+Usage -> Usage : scope: acme-main must be\nin organization-acme
+Usage -> Backend : credit balance of acme-main\n(after usage metered so far)
+Backend --> Usage : available 499.90, booked 500.00, pending 0
+Usage -> Backend : this period's usage, priced\nas the invoice will price it
+Backend --> Usage : charges 0.10
+Usage -> Backend : active grants
+Backend --> Usage : welcome-acme, $500, expires 2027-01-18
+Usage --> Portal : status: credits {available, booked, pending},\ncurrentPeriod {charges, creditsApplied, amountDue},\ngrants[]
+Portal --> Customer : "$499.90 credit · $0.10 this period · $0 due"
+note over Usage, Backend : nothing is stored in Milo:\nevery GET reads the provider
+@enduml

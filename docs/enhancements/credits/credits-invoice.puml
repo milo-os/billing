@@ -1,0 +1,25 @@
+@startuml credits-invoice
+title Invoicing with credits
+
+participant "Billing provider\nbackend" as Backend
+participant "Payment processor" as Payments
+participant "Billing provider\ncontrollers" as Provider
+participant "Milo API server" as Milo
+actor Customer
+
+== End of the billing period ==
+Backend -> Backend : price the period's usage: $90
+Backend -> Backend : apply available credit: $50\n(soonest-expiring grant first)
+Backend -> Backend : invoice: total $90,\ncredits $50, due $40
+Backend -> Payments : charge $40 to the payment method\n(or send the invoice for invoice terms)
+Backend -> Backend : record the $50 as used\n(booked balance drops)
+
+== Projection ==
+Provider -> Backend : the account's invoices (resync)
+Backend --> Provider : total 90, credits 50, amount due 40
+Provider -> Milo : Invoice status: total 90,\ncreditsApplied 50, amountDue 40
+Customer -> Milo : list Invoices (cloud-portal)
+Milo --> Customer : $90 of usage, $50 credit, $40 charged
+
+note over Backend, Payments : an invoice fully covered by credit\nhas amountDue 0: nothing is charged
+@enduml
