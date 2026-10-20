@@ -85,6 +85,13 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return ctrl.Result{}, nil
 	}
 
+	// Make the account's only Active card its default. This patches spec
+	// and refreshes account from the response, so it runs before any
+	// status is computed.
+	if err := r.reconcileDefaultPaymentMethod(ctx, &account); err != nil {
+		return ctrl.Result{}, fmt.Errorf("defaulting payment method: %w", err)
+	}
+
 	// Determine the target phase based on current state
 	targetPhase := r.determinePhase(&account)
 
@@ -222,6 +229,57 @@ func (r *BillingAccountReconciler) reconcileDelete(
 
 	logger.Info("finalized billing account")
 	return ctrl.Result{}, nil
+}
+
+// reconcileDefaultPaymentMethod sets spec.defaultPaymentMethodRef when the
+// account has no default and exactly one Active payment method, so a
+// customer's first card becomes the default without the client having to
+// ask. An existing default is never replaced, and with several Active
+// cards the choice is left to the customer.
+//
+// The patch carries the account's resourceVersion, so a default set by
+// someone else since our read wins and this reconcile retries. On success
+// account is updated in place with the server's copy.
+func (r *BillingAccountReconciler) reconcileDefaultPaymentMethod(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+) error {
+	if account.Spec.DefaultPaymentMethodRef != nil && account.Spec.DefaultPaymentMethodRef.Name != "" {
+		return nil
+	}
+
+	var pmList billingv1alpha1.PaymentMethodList
+	if err := r.client.List(ctx, &pmList,
+		client.InNamespace(account.Namespace),
+		client.MatchingFields{PaymentMethodBillingAccountRefField: account.Name},
+	); err != nil {
+		return fmt.Errorf("listing payment methods: %w", err)
+	}
+
+	var active *billingv1alpha1.PaymentMethod
+	for i := range pmList.Items {
+		pm := &pmList.Items[i]
+		if pm.Status.Phase != billingv1alpha1.PaymentMethodPhaseActive || !pm.DeletionTimestamp.IsZero() {
+			continue
+		}
+		if active != nil {
+			return nil
+		}
+		active = pm
+	}
+	if active == nil {
+		return nil
+	}
+
+	base := account.DeepCopy()
+	account.Spec.DefaultPaymentMethodRef = &billingv1alpha1.DefaultPaymentMethodRef{Name: active.Name}
+	if err := r.client.Patch(ctx, account,
+		client.MergeFromWithOptions(base, client.MergeFromWithOptimisticLock{}),
+	); err != nil {
+		return fmt.Errorf("setting default payment method %q: %w", active.Name, err)
+	}
+	log.FromContext(ctx).Info("defaulted payment method", "paymentMethod", active.Name)
+	return nil
 }
 
 // reconcileDefaultPaymentMethodCondition keeps the

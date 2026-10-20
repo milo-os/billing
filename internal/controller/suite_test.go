@@ -124,6 +124,17 @@ var _ = BeforeSuite(func() {
 	)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.PaymentMethod{},
+		PaymentMethodBillingAccountRefField,
+		func(obj client.Object) []string {
+			pm := obj.(*billingv1alpha1.PaymentMethod)
+			return []string{pm.Spec.BillingAccountRef.Name}
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Register BillingAccount controller. We use a thin test adapter rather
 	// than the production reconciler so that test-specific behavior (e.g.,
 	// refetching before status update to avoid stale conflicts) can be

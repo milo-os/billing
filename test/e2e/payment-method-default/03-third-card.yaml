@@ -1,0 +1,11 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: PaymentMethod
+metadata:
+  name: pm-default-third
+  namespace: default
+spec:
+  billingAccountRef:
+    name: pm-default-acct
+  displayName: "E2E Third Card"
+  paymentMethodClassRef:
+    name: stripe-default

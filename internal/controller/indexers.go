@@ -38,6 +38,10 @@ const (
 	// BillingEntitlementBillingAccountRefField indexes BillingEntitlements by
 	// billing account name.
 	BillingEntitlementBillingAccountRefField = ".spec.billingAccountRef.name"
+
+	// PaymentMethodBillingAccountRefField indexes PaymentMethods by
+	// billing account name.
+	PaymentMethodBillingAccountRefField = ".spec.billingAccountRef.name"
 )
 
 // AddIndexers adds field indexers to the manager for efficient lookups.
@@ -109,6 +113,18 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 		func(obj client.Object) []string {
 			be := obj.(*billingv1alpha1.BillingEntitlement)
 			return []string{be.Spec.BillingAccountRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.PaymentMethod{},
+		PaymentMethodBillingAccountRefField,
+		func(obj client.Object) []string {
+			pm := obj.(*billingv1alpha1.PaymentMethod)
+			return []string{pm.Spec.BillingAccountRef.Name}
 		},
 	); err != nil {
 		return err

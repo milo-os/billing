@@ -24,6 +24,10 @@ var billingAccountLog = logf.Log.WithName("billingaccount-webhook")
 func SetupBillingAccountWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &billingAccountWebhook{
 		client: mgr.GetClient(),
+		// The default payment method check reads the card straight from
+		// the API server: a card that turned Active moments ago may still
+		// look AwaitingConfirmation in the cache.
+		reader: mgr.GetAPIReader(),
 	}
 
 	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.BillingAccount{}).
@@ -38,6 +42,7 @@ func SetupBillingAccountWebhookWithManager(mgr ctrl.Manager) error {
 
 type billingAccountWebhook struct {
 	client client.Client
+	reader client.Reader
 }
 
 var _ admission.Defaulter[*billingv1alpha1.BillingAccount] = &billingAccountWebhook{}
@@ -53,7 +58,7 @@ func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj *billing
 	billingAccountLog.Info("validating create", "name", obj.GetName())
 
 	errs := validation.ValidateBillingAccountCreate(obj)
-	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, obj)...)
+	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.reader, obj)...)
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
@@ -71,7 +76,7 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 
 	errs := validation.ValidateBillingAccountUpdate(oldObj, newObj)
 	if !defaultPaymentMethodRefUnchanged(oldObj, newObj) {
-		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.client, newObj)...)
+		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.reader, newObj)...)
 	}
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
