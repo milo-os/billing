@@ -90,6 +90,12 @@ func resolveCommon(cmd *cobra.Command) (scope, string, error) {
 	default:
 		return scope{}, "", usageErrorf("unknown output format %q; use table, json or yaml", format)
 	}
+	// datumctl pre-fills both flags from the active context. Naming another
+	// organization without a project means that whole organization, not the
+	// context's project, which may belong to a different one.
+	if cmd.Flags().Changed("org") && !cmd.Flags().Changed("project") {
+		project = ""
+	}
 	if org == "" && project == "" {
 		return scope{}, "", usageErrorf("no organization selected; run `datumctl ctx` or pass --org")
 	}
