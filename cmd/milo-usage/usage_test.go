@@ -156,6 +156,26 @@ func TestSummaryAllShowsIdleMeters(t *testing.T) {
 	}
 }
 
+func TestSummaryDeprecatedMeters(t *testing.T) {
+	client := sampleAPI()
+	// Memory has usage, DNS queries has none; deprecate both.
+	client.defs[0].Spec.Phase = billingv1alpha1.PhaseDeprecated
+	client.defs[2].Spec.Phase = billingv1alpha1.PhaseDeprecated
+
+	out := run(t, client, scope{org: "acme"}, "table", summaryOptions{all: true})
+	if !strings.Contains(out, "Memory Seconds") {
+		t.Errorf("a deprecated meter with usage stays, so the rows add up:\n%s", out)
+	}
+	if strings.Contains(out, "DNS Queries") {
+		t.Errorf("a deprecated meter without usage is left out, even with --all:\n%s", out)
+	}
+
+	out = run(t, client, scope{org: "acme"}, "table", summaryOptions{})
+	if strings.Contains(out, "hidden") {
+		t.Errorf("deprecated meters don't count as hidden:\n%s", out)
+	}
+}
+
 func TestSummaryBreakdown(t *testing.T) {
 	client := sampleAPI()
 	client.defs[0].Status.SystemDimensions = []string{"project_name"}

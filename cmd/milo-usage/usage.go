@@ -204,12 +204,19 @@ func parseTime(v string) (time.Time, error) {
 type meterInfo struct {
 	displayName string
 	service     string
+	// deprecated meters are on their way out; they're shown only while
+	// they still carry usage.
+	deprecated bool
 }
 
 func catalog(defs []billingv1alpha1.MeterDefinition) map[string]meterInfo {
 	out := make(map[string]meterInfo, len(defs))
 	for _, d := range defs {
-		out[d.Name] = meterInfo{displayName: d.Spec.DisplayName, service: serviceName(d.Spec.MeterName)}
+		out[d.Name] = meterInfo{
+			displayName: d.Spec.DisplayName,
+			service:     serviceName(d.Spec.MeterName),
+			deprecated:  d.Spec.Phase == billingv1alpha1.PhaseDeprecated,
+		}
 	}
 	return out
 }
@@ -269,9 +276,16 @@ func renderTable(out io.Writer, s scope, w window, q *usagev1alpha1.UsageQuery, 
 		unit := parseUnit(m.Unit)
 		total := firstSeries(m.Groupings, 0)
 
-		if !opts.all && (total == nil || (parseDecimal(total.Total) == 0 && len(total.Points) == 0)) {
-			hidden++
-			continue
+		if total == nil || (parseDecimal(total.Total) == 0 && len(total.Points) == 0) {
+			// A deprecated meter without usage isn't worth listing, even with
+			// --all; one that still has usage stays so the rows add up.
+			if mi.deprecated {
+				continue
+			}
+			if !opts.all {
+				hidden++
+				continue
+			}
 		}
 
 		var series []usagev1alpha1.UsageSeries

@@ -18,8 +18,8 @@ func newMetersCommand(out io.Writer, newAPI func() (api, error)) *cobra.Command 
 	return &cobra.Command{
 		Use:   "meters",
 		Short: "List the meters usage is reported for, with their units and dimensions",
-		Long: `List the published and deprecated meters, with the unit and aggregation
-each reports in and the dimensions you can break it down by (--by).`,
+		Long: `List the published meters, with the unit and aggregation each reports in
+and the dimensions you can break it down by (--by).`,
 		Args: cobra.NoArgs,
 		RunE: func(cmd *cobra.Command, _ []string) error {
 			format, _ := cmd.Flags().GetString("output")
@@ -39,7 +39,7 @@ each reports in and the dimensions you can break it down by (--by).`,
 func renderMeters(out io.Writer, defs []billingv1alpha1.MeterDefinition, format string) error {
 	var visible []billingv1alpha1.MeterDefinition
 	for _, d := range defs {
-		if d.Spec.Phase == billingv1alpha1.PhasePublished || d.Spec.Phase == billingv1alpha1.PhaseDeprecated {
+		if d.Spec.Phase == billingv1alpha1.PhasePublished {
 			visible = append(visible, d)
 		}
 	}
@@ -63,7 +63,7 @@ func renderMeters(out io.Writer, defs []billingv1alpha1.MeterDefinition, format 
 	}
 
 	tw := tabwriter.NewWriter(out, 0, 0, 3, ' ', 0)
-	_, _ = fmt.Fprintln(tw, "SERVICE\tMETER\tNAME\tUNIT\tAGGREGATION\tDIMENSIONS\tPHASE")
+	_, _ = fmt.Fprintln(tw, "SERVICE\tMETER\tNAME\tUNIT\tAGGREGATION\tDIMENSIONS")
 	for _, d := range visible {
 		dims := append(append([]string{}, d.Spec.Measurement.Dimensions...), d.Status.SystemDimensions...)
 		dims = unique(dims)
@@ -71,9 +71,9 @@ func renderMeters(out io.Writer, defs []billingv1alpha1.MeterDefinition, format 
 		if dimensions == "" {
 			dimensions = "—"
 		}
-		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
+		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
 			serviceName(d.Spec.MeterName), d.Spec.DisplayName, d.Name,
-			d.Spec.Measurement.Unit, d.Spec.Measurement.Aggregation, dimensions, d.Spec.Phase)
+			d.Spec.Measurement.Unit, d.Spec.Measurement.Aggregation, dimensions)
 	}
 	return tw.Flush()
 }

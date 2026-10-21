@@ -12,7 +12,9 @@ func TestMetersTable(t *testing.T) {
 	defs := sampleAPI().defs
 	retired := meterDef("old", "compute.datumapis.com/instance/old", "Old", "s", "Sum")
 	retired.Spec.Phase = billingv1alpha1.PhaseRetired
-	defs = append(defs, retired)
+	deprecated := meterDef("uptime", "compute.datumapis.com/instance/uptime-seconds", "Uptime", "s", "Sum")
+	deprecated.Spec.Phase = billingv1alpha1.PhaseDeprecated
+	defs = append(defs, retired, deprecated)
 	defs[0].Status.SystemDimensions = []string{"project_name"}
 
 	var out bytes.Buffer
@@ -25,7 +27,7 @@ func TestMetersTable(t *testing.T) {
 			t.Errorf("output is missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "Old") {
-		t.Errorf("retired meters can't be queried, so they're left out:\n%s", got)
+	if strings.Contains(got, "Old") || strings.Contains(got, "Uptime") {
+		t.Errorf("only published meters are listed:\n%s", got)
 	}
 }
