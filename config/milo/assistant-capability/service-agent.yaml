@@ -10,6 +10,15 @@ spec:
   serviceRef:
     name: billing-miloapis-com
   phase: Published
+  # Every project has usage and a billing account, so billing's agent should
+  # reach every project's assistant, not only those entitled to billing.
+  # This is a request: it takes effect only once the platform owner lists
+  # billing-assistant in the services operator's
+  # capabilities.entitlementFreeAgents (milo-os/service-catalog#119). Until
+  # then the agent is gated on entitlement as if this said Required, and its
+  # EntitlementWaived condition says why.
+  visibility:
+    entitlement: None
   displayName: Billing
   description: |
     Answers questions about what a project uses and what it costs, and about
