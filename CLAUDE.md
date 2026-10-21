@@ -30,6 +30,8 @@ billing/
 ├── internal/
 │   ├── config/                   # Operator configuration
 │   ├── controller/               # Reconcilers
+│   ├── mcpserver/                # `billing mcp`: usage tools for the assistant (Patch)
+│   ├── usagereport/              # Usage reports shared by the MCP server and the datumctl plugin
 │   ├── validation/               # Validation logic
 │   └── webhook/v1alpha1/         # Admission webhooks
 ├── config/                       # Kustomize manifests

@@ -1,0 +1,19 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+apiVersion: services.miloapis.com/v1alpha1
+kind: ServiceAgent
+metadata:
+  name: billing-assistant
+  labels:
+    app.kubernetes.io/name: billing-assistant
+    app.kubernetes.io/part-of: billing.miloapis.com
+spec:
+  serviceRef:
+    name: billing-miloapis-com
+  phase: Published
+  displayName: Billing
+  description: |
+    Answers questions about what a project uses and what it costs, and about
+    the billing account it is billed to: usage and spend per meter for a
+    billing cycle or date range, what drives usage and when it changed, the
+    account's status and payment methods, and its invoices. Reads as the
+    person asking; changes nothing.
