@@ -300,3 +300,29 @@ func TestServiceName(t *testing.T) {
 		}
 	}
 }
+
+func TestOrgFlagOverridesTheContextProject(t *testing.T) {
+	t.Setenv("DATUM_ORG", "home-org")
+	t.Setenv("DATUM_PROJECT", "home-project")
+
+	cases := []struct {
+		args []string
+		want scope
+	}{
+		{nil, scope{org: "home-org", project: "home-project"}},
+		{[]string{"--org", "other-org"}, scope{org: "other-org"}},
+		{[]string{"--org", "other-org", "--project", "web"}, scope{org: "other-org", project: "web"}},
+		{[]string{"--project", "web"}, scope{org: "home-org", project: "web"}},
+	}
+	for _, c := range cases {
+		client := sampleAPI()
+		root := newRootCommand(&bytes.Buffer{}, func() (api, error) { return client, nil })
+		root.SetArgs(append(c.args, "-o", "json"))
+		if err := root.Execute(); err != nil {
+			t.Fatalf("%v: %v", c.args, err)
+		}
+		if client.scope != c.want {
+			t.Errorf("%v: scope = %+v, want %+v", c.args, client.scope, c.want)
+		}
+	}
+}
