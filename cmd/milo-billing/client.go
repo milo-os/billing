@@ -58,7 +58,7 @@ type datumClient struct {
 func newDatumClient() (api, error) {
 	ctx := plugin.Context()
 	if ctx.APIHost == "" || ctx.CredentialsHelper == "" {
-		return nil, fmt.Errorf("no Datum Cloud session found; run this as `datumctl usage`")
+		return nil, fmt.Errorf("no Datum Cloud session found; run this as `datumctl billing`")
 	}
 	return &datumClient{
 		base:  strings.TrimRight(ensureScheme(ctx.APIHost), "/"),

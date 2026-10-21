@@ -1,32 +1,33 @@
-# milo-usage
+# milo-billing
 
-A [datumctl](https://github.com/datum-cloud/datumctl) plugin that shows metered
-usage and spend for an organization or project. It reads
+The [datumctl](https://github.com/datum-cloud/datumctl) billing plugin.
+`datumctl billing usage` shows metered usage and spend for an organization or
+project. It reads
 `usage.billing.miloapis.com/v1alpha1` `UsageQuery` with your datumctl session,
 the same API the cloud portal's usage page uses.
 
 ```sh
-datumctl plugin install usage
+datumctl plugin install billing
 ```
 
 ## Usage
 
 ```sh
 # Usage and spend for the current billing cycle
-datumctl usage
+datumctl billing usage
 
 # The previous billing cycle, for one project
-datumctl usage --cycle previous --project my-project
+datumctl billing usage --cycle previous --project my-project
 
 # Break each meter down by project, or by any dimension the meter declares
-datumctl usage --by project_name
-datumctl usage --by region
+datumctl billing usage --by project_name
+datumctl billing usage --by region
 
 # Usage per day over a custom range, as JSON
-datumctl usage --daily --from 2026-10-01 --to 2026-10-15 -o json
+datumctl billing usage --daily --from 2026-10-01 --to 2026-10-15 -o json
 
 # The meters usage is reported for, with their units and dimensions
-datumctl usage meters
+datumctl billing meters
 ```
 
 ```text
@@ -58,19 +59,19 @@ move the operator's; it builds against this repo's API types through a
 `replace`.
 
 ```sh
-cd cmd/milo-usage
+cd cmd/milo-billing
 go test ./...
-go build -o milo-usage .
+go build -o milo-billing .
 
 # Run it outside datumctl with the context datumctl would inject
 DATUM_API_HOST=api.staging.env.datum.net \
 DATUM_CREDENTIALS_HELPER="$(which datumctl)" \
 DATUM_ORG=my-org \
-  ./milo-usage
+  ./milo-billing
 ```
 
 Publishing a GitHub release runs `.github/workflows/release-plugin.yaml`:
 goreleaser attaches the per-platform archives, and a PR bumps
-`plugins/usage.yaml` in the [milo-os/cli-plugins](https://github.com/milo-os/cli-plugins)
+`plugins/billing.yaml` in the [milo-os/cli-plugins](https://github.com/milo-os/cli-plugins)
 catalog. That action only updates an existing entry, so the first catalog
 entry is added by hand.

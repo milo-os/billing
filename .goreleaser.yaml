@@ -1,29 +1,29 @@
-# GoReleaser config for the milo-usage datumctl plugin.
+# GoReleaser config for the milo-billing datumctl plugin.
 #
 # Publishing a GitHub release for a semver tag (vX.Y.Z) runs
 # .github/workflows/release-plugin.yaml, which builds the plugin for each
 # platform and attaches per-platform archives + checksums.txt to the release.
-# The datumctl plugin catalog entry (milo-os/cli-plugins, plugins/usage.yaml)
+# The datumctl plugin catalog entry (milo-os/cli-plugins, plugins/billing.yaml)
 # references these exact asset names, so the archive name_template must not
 # change casually.
 #
-# The plugin is its own Go module (cmd/milo-usage/go.mod) so the datumctl SDK's
+# The plugin is its own Go module (cmd/milo-billing/go.mod) so the datumctl SDK's
 # dependencies don't move the operator's.
 #
 # yaml-language-server: $schema=https://goreleaser.com/static/schema.json
 version: 2
 
-project_name: milo-usage
+project_name: milo-billing
 
 before:
   hooks:
-    - sh -c "cd cmd/milo-usage && go mod tidy"
+    - sh -c "cd cmd/milo-billing && go mod tidy"
 
 builds:
-  - id: milo-usage
-    dir: cmd/milo-usage
+  - id: milo-billing
+    dir: cmd/milo-billing
     main: .
-    binary: milo-usage
+    binary: milo-billing
     env:
       - CGO_ENABLED=0
     goos:
@@ -40,9 +40,9 @@ builds:
       - -X main.pluginVersion={{ .Version }}
 
 archives:
-  - id: milo-usage
+  - id: milo-billing
     # Linux/Darwin/Windows and x86_64 for amd64, matching the other milo
-    # plugins (milo-usage_Darwin_arm64, milo-usage_Linux_x86_64, ...).
+    # plugins (milo-billing_Darwin_arm64, milo-billing_Linux_x86_64, ...).
     name_template: >-
       {{ .ProjectName }}_
       {{- title .Os }}_

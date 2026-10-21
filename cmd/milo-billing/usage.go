@@ -12,7 +12,6 @@ import (
 	"time"
 
 	"github.com/spf13/cobra"
-	"go.datum.net/datumctl/plugin"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
@@ -29,54 +28,51 @@ type summaryOptions struct {
 	all   bool
 }
 
-func newRootCommand(out io.Writer, newAPI func() (api, error)) *cobra.Command {
+func newUsageCommand(out io.Writer, newAPI func() (api, error)) *cobra.Command {
 	opts := summaryOptions{}
-	root := plugin.NewRootCmd(pluginName, pluginDescription)
-	root.Long = `Show metered usage and spend for the active organization or project.
+	cmd := &cobra.Command{
+		Use:   "usage",
+		Short: "Show metered usage and spend for your organization or project",
+		Long: `Show metered usage and spend for the active organization or project.
 
 Usage is read from Milo's UsageQuery API with your datumctl session. With a
 project selected (in your context or with --project), the query only sees that
 project's usage. Spend is priced the way the invoice prices it, before taxes,
-credits and discounts.`
-	root.Example = `  # Usage and spend for the current billing cycle
-  datumctl usage
+credits and discounts.`,
+		Example: `  # Usage and spend for the current billing cycle
+  datumctl billing usage
 
   # The previous billing cycle, for one project
-  datumctl usage --cycle previous --project my-project
+  datumctl billing usage --cycle previous --project my-project
 
   # Break each meter down by project, or by any dimension the meter declares
-  datumctl usage --by project_name
-  datumctl usage --by region
+  datumctl billing usage --by project_name
+  datumctl billing usage --by region
 
   # Daily usage over a custom range, as JSON
-  datumctl usage --daily --from 2026-10-01 --to 2026-10-15 -o json`
-	root.Args = cobra.NoArgs
-	root.SilenceUsage = true
-	root.SilenceErrors = true
-	root.SetOut(out)
+  datumctl billing usage --daily --from 2026-10-01 --to 2026-10-15 -o json`,
+		Args: cobra.NoArgs,
+		RunE: func(cmd *cobra.Command, _ []string) error {
+			s, format, err := resolveCommon(cmd)
+			if err != nil {
+				return err
+			}
+			client, err := newAPI()
+			if err != nil {
+				return err
+			}
+			return runSummary(cmd.Context(), out, client, s, format, opts, time.Now())
+		},
+	}
 
-	f := root.Flags()
+	f := cmd.Flags()
 	f.StringVar(&opts.cycle, "cycle", "current", "Billing cycle to show: current or previous")
 	f.StringVar(&opts.from, "from", "", "Start of a custom range (YYYY-MM-DD or RFC 3339), instead of a billing cycle")
 	f.StringVar(&opts.to, "to", "", "End of a custom range, exclusive (default: now)")
 	f.StringVar(&opts.by, "by", "", "Break usage down by a dimension, e.g. project_name or region")
 	f.BoolVar(&opts.daily, "daily", false, "Show usage per day")
 	f.BoolVar(&opts.all, "all", false, "Include meters with no usage")
-
-	root.RunE = func(cmd *cobra.Command, _ []string) error {
-		s, format, err := resolveCommon(cmd)
-		if err != nil {
-			return err
-		}
-		client, err := newAPI()
-		if err != nil {
-			return err
-		}
-		return runSummary(cmd.Context(), out, client, s, format, opts, time.Now())
-	}
-
-	root.AddCommand(newMetersCommand(out, newAPI))
-	return root
+	return cmd
 }
 
 // resolveCommon reads the --org, --project and --output flags that
@@ -89,6 +85,12 @@ func resolveCommon(cmd *cobra.Command) (scope, string, error) {
 	case "table", "json", "yaml":
 	default:
 		return scope{}, "", usageErrorf("unknown output format %q; use table, json or yaml", format)
+	}
+	// datumctl pre-fills both flags from the active context. Naming another
+	// organization without a project means that whole organization, not the
+	// context's project, which may belong to a different one.
+	if cmd.Flags().Changed("org") && !cmd.Flags().Changed("project") {
+		project = ""
 	}
 	if org == "" && project == "" {
 		return scope{}, "", usageErrorf("no organization selected; run `datumctl ctx` or pass --org")
@@ -106,7 +108,7 @@ func runSummary(ctx context.Context, out io.Writer, client api, s scope, format 
 	// usage itself stands without it.
 	defs, _ := client.listMeterDefinitions(ctx)
 	if opts.by != "" && len(defs) > 0 && !hasDimension(defs, opts.by) {
-		return usageErrorf("no meter has a dimension named %q; run `datumctl usage meters` to see them", opts.by)
+		return usageErrorf("no meter has a dimension named %q; run `datumctl billing meters` to see them", opts.by)
 	}
 
 	spec := usagev1alpha1.UsageQuerySpec{
