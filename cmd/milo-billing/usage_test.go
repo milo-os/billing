@@ -279,7 +279,7 @@ func TestInvalidOptionsAreUsageErrors(t *testing.T) {
 
 func TestRootCommandNeedsAnOrganization(t *testing.T) {
 	root := newRootCommand(&bytes.Buffer{}, func() (api, error) { return sampleAPI(), nil })
-	root.SetArgs([]string{"--org", "", "--project", ""})
+	root.SetArgs([]string{"usage", "--org", "", "--project", ""})
 	err := root.Execute()
 	var usageErr *usageError
 	if !errors.As(err, &usageErr) || !strings.Contains(err.Error(), "no organization selected") {
@@ -317,12 +317,32 @@ func TestOrgFlagOverridesTheContextProject(t *testing.T) {
 	for _, c := range cases {
 		client := sampleAPI()
 		root := newRootCommand(&bytes.Buffer{}, func() (api, error) { return client, nil })
-		root.SetArgs(append(c.args, "-o", "json"))
+		root.SetArgs(append(append([]string{"usage"}, c.args...), "-o", "json"))
 		if err := root.Execute(); err != nil {
 			t.Fatalf("%v: %v", c.args, err)
 		}
 		if client.scope != c.want {
 			t.Errorf("%v: scope = %+v, want %+v", c.args, client.scope, c.want)
+		}
+	}
+}
+
+func TestCommandTree(t *testing.T) {
+	if got := pluginManifest().Name; got != "billing" {
+		t.Errorf("plugin name = %q, want billing", got)
+	}
+	root := newRootCommand(&bytes.Buffer{}, func() (api, error) { return sampleAPI(), nil })
+	for _, name := range []string{"usage", "meters"} {
+		cmd, _, err := root.Find([]string{name})
+		if err != nil || cmd.Name() != name {
+			t.Errorf("datumctl billing %s: got %v, %v", name, cmd, err)
+		}
+	}
+	// --org, --project and -o come from the root, for every subcommand.
+	usage, _, _ := root.Find([]string{"usage"})
+	for _, flag := range []string{"org", "project", "output", "cycle", "by"} {
+		if usage.Flag(flag) == nil {
+			t.Errorf("datumctl billing usage has no --%s", flag)
 		}
 	}
 }

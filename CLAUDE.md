@@ -25,7 +25,7 @@ Billing owns its types, validation, scope rules and IAM. See
 ```
 billing/
 ├── cmd/billing/main.go          # Binary entrypoint
-├── cmd/milo-usage/               # datumctl usage plugin (its own Go module)
+├── cmd/milo-billing/             # datumctl billing plugin (its own Go module)
 ├── api/v1alpha1/                 # CRD type definitions
 ├── internal/
 │   ├── config/                   # Operator configuration

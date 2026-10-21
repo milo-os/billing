@@ -1,6 +1,6 @@
-name: Usage Plugin
+name: Billing Plugin
 
-# cmd/milo-usage is its own Go module, so the repo-wide test and lint jobs
+# cmd/milo-billing is its own Go module, so the repo-wide test and lint jobs
 # don't reach it.
 
 on:
@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: cmd/milo-usage
+        working-directory: cmd/milo-billing
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
@@ -21,7 +21,7 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: cmd/milo-usage/go.mod
+          go-version-file: cmd/milo-billing/go.mod
 
       - name: Run tests
         run: go test ./...
@@ -39,10 +39,10 @@ jobs:
       - name: Setup Go
         uses: actions/setup-go@v5
         with:
-          go-version-file: cmd/milo-usage/go.mod
+          go-version-file: cmd/milo-billing/go.mod
 
       - name: Run linter
         uses: golangci/golangci-lint-action@v8
         with:
           version: v2.12.2
-          working-directory: cmd/milo-usage
+          working-directory: cmd/milo-billing

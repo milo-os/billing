@@ -1,4 +1,4 @@
-module go.miloapis.com/billing/cmd/milo-usage
+module go.miloapis.com/billing/cmd/milo-billing
 
 go 1.26.0
 

@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	pluginName        = "usage"
-	pluginDescription = "Show metered usage and spend for your organization or project"
+	pluginName        = "billing"
+	pluginDescription = "View metered usage and spend for your organization or project"
 	// pluginAPIVersion is the version of the datumctl <-> plugin contract this
 	// binary speaks, not the usage API version.
 	pluginAPIVersion = 1

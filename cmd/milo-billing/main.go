@@ -1,6 +1,7 @@
-// Command milo-usage is the usage plugin for datumctl. It reads metered usage
-// and spend from usage.billing.miloapis.com UsageQuery with the user's own
-// datumctl session, in the context of the active organization or project.
+// Command milo-billing is the billing plugin for datumctl. `datumctl billing
+// usage` reads metered usage and spend from usage.billing.miloapis.com
+// UsageQuery with the user's own datumctl session, in the context of the
+// active organization or project.
 package main
 
 import (
