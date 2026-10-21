@@ -1,0 +1,68 @@
+name: Release Plugin
+
+# Builds and publishes the milo-usage datumctl plugin, then opens a PR against
+# the datumctl plugin catalog. Separate from publish.yaml (the billing image
+# and kustomize bundle) so the two can evolve independently.
+
+on:
+  release:
+    types: ["published"]
+
+jobs:
+  # Build per-platform archives + checksums.txt and attach them to the
+  # release. The catalog entry (milo-os/cli-plugins, plugins/usage.yaml)
+  # references these asset names.
+  publish-plugin:
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Syft CLI
+        run: curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sudo sh -s -- -b /usr/local/bin
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: cmd/milo-usage/go.mod
+
+      - name: Run GoReleaser
+        uses: goreleaser/goreleaser-action@v6
+        with:
+          distribution: goreleaser
+          version: "~> v2"
+          args: release --clean
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Open a PR bumping plugins/usage.yaml in the catalog to this release. The
+  # action updates an existing entry, so the first entry is added by hand.
+  # Mint and use the GitHub App token in one job: a masked token passed
+  # between jobs arrives empty.
+  update-plugin-index:
+    needs:
+      - publish-plugin
+    if: github.event_name == 'release'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Mint catalog token from the milo-os GitHub App
+        id: app-token
+        uses: actions/create-github-app-token@v2
+        with:
+          app-id: ${{ secrets.PLUGIN_INDEX_APP_ID }}
+          private-key: ${{ secrets.PLUGIN_INDEX_APP_PRIVATE_KEY }}
+          owner: milo-os
+          repositories: cli-plugins
+
+      - name: Open the catalog PR
+        uses: datum-cloud/actions/update-plugin-index@v1.18.0
+        with:
+          index-repo: milo-os/cli-plugins
+          plugin-name: usage
+          version: ${{ github.event.release.tag_name }}
+          token: ${{ steps.app-token.outputs.token }}
