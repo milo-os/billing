@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for BillingArrangementDecline resources.
+# A BillingArrangementDecline records staff declining a payment terms
+# application.
+#
+# Design principles:
+# - Name the application (linked), since a decline carries no billing
+#   account of its own.
+# - Never include spec.internalNotes. Leave out spec.message too: it reaches
+#   the applicant through the application and the decline email, and the
+#   timeline can be read more widely.
+# - Deleting a decline puts the application back up for review, so say so.
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-billingarrangementdecline
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: BillingArrangementDecline
+
+  auditRules:
+    # "Sam declined the payment terms application acme-apply"
+    - name: create
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.applicationRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} declined the payment terms application {{ link(audit.responseObject.spec.applicationRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingarrangementapplications', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.applicationRef.name}) }}"
+
+    - name: create-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} declined a payment terms application ({{ audit.objectRef.name }})"
+
+    # "Sam updated the decline of payment terms application acme-apply"
+    - name: update
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.applicationRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated the decline of payment terms application {{ link(audit.responseObject.spec.applicationRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingarrangementapplications', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.applicationRef.name}) }}"
+
+    - name: update-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated the payment terms decline {{ audit.objectRef.name }}"
+
+    # "Sam deleted the decline of payment terms application acme-apply, so it's awaiting review again"
+    - name: delete-decline
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.applicationRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the decline of payment terms application {{ link(audit.responseObject.spec.applicationRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingarrangementapplications', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.applicationRef.name}) }}, so it's awaiting review again"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the payment terms decline {{ audit.objectRef.name }}"

@@ -29,6 +29,12 @@ type BillingArrangementSpecApplyConfiguration struct {
 	// with no fixed end. Staff end terms early by setting this to the
 	// current time, which keeps the record for history.
 	EndsAt *v1.Time `json:"endsAt,omitempty"`
+	// ApplicationRef names the BillingArrangementApplication in the same
+	// namespace that these terms approve, when they were granted in
+	// response to one. Leave unset for terms granted without an
+	// application (the sales-led path). The application must be for the
+	// same billing account and still pending. Immutable.
+	ApplicationRef *BillingArrangementApplicationRefApplyConfiguration `json:"applicationRef,omitempty"`
 	// Reason records why staff granted these terms (for example "Signed
 	// MSA, sales call 2026-10-01"). Internal: never shown to customers.
 	Reason *string `json:"reason,omitempty"`
@@ -77,6 +83,14 @@ func (b *BillingArrangementSpecApplyConfiguration) WithStartsAt(value v1.Time) *
 // If called multiple times, the EndsAt field is set to the value of the last call.
 func (b *BillingArrangementSpecApplyConfiguration) WithEndsAt(value v1.Time) *BillingArrangementSpecApplyConfiguration {
 	b.EndsAt = &value
+	return b
+}
+
+// WithApplicationRef sets the ApplicationRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ApplicationRef field is set to the value of the last call.
+func (b *BillingArrangementSpecApplyConfiguration) WithApplicationRef(value *BillingArrangementApplicationRefApplyConfiguration) *BillingArrangementSpecApplyConfiguration {
+	b.ApplicationRef = value
 	return b
 }
 

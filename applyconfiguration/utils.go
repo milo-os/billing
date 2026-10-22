@@ -18,6 +18,12 @@ import (
 func ForKind(kind schema.GroupVersionKind) interface{} {
 	switch kind {
 	// Group=billing.miloapis.com, Version=v1alpha1
+	case v1alpha1.SchemeGroupVersion.WithKind("Applicant"):
+		return &apiv1alpha1.ApplicantApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ApplicantOrganization"):
+		return &apiv1alpha1.ApplicantOrganizationApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ApplicationInvoiceDetails"):
+		return &apiv1alpha1.ApplicationInvoiceDetailsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccount"):
 		return &apiv1alpha1.BillingAccountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountBinding"):
@@ -38,6 +44,20 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAddressApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangement"):
 		return &apiv1alpha1.BillingArrangementApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementApplication"):
+		return &apiv1alpha1.BillingArrangementApplicationApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementApplicationRef"):
+		return &apiv1alpha1.BillingArrangementApplicationRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementApplicationSpec"):
+		return &apiv1alpha1.BillingArrangementApplicationSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementApplicationStatus"):
+		return &apiv1alpha1.BillingArrangementApplicationStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementDecline"):
+		return &apiv1alpha1.BillingArrangementDeclineApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementDeclineSpec"):
+		return &apiv1alpha1.BillingArrangementDeclineSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementRef"):
+		return &apiv1alpha1.BillingArrangementRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementSpec"):
 		return &apiv1alpha1.BillingArrangementSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingArrangementStatus"):

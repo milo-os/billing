@@ -66,6 +66,24 @@ spec:
           spec:
             description: BillingArrangementSpec defines the desired state of a BillingArrangement.
             properties:
+              applicationRef:
+                description: |-
+                  ApplicationRef names the BillingArrangementApplication in the same
+                  namespace that these terms approve, when they were granted in
+                  response to one. Leave unset for terms granted without an
+                  application (the sales-led path). The application must be for the
+                  same billing account and still pending. Immutable.
+                properties:
+                  name:
+                    description: Name is the name of the BillingArrangementApplication.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: applicationRef is immutable
+                  rule: self == oldSelf
               billingAccountRef:
                 description: |-
                   BillingAccountRef references the BillingAccount in the same
@@ -158,6 +176,8 @@ spec:
             x-kubernetes-validations:
             - message: invoice is required when type is Invoice
               rule: self.type != 'Invoice' || has(self.invoice)
+            - message: applicationRef is immutable
+              rule: has(self.applicationRef) == has(oldSelf.applicationRef)
           status:
             description: |-
               BillingArrangementStatus defines the observed state of a

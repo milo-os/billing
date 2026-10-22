@@ -1,0 +1,32 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: application-lifecycle-acct
+  namespace: default
+spec:
+  currencyCode: USD
+  contactInfo:
+    email: billing@example.com
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementApplication
+metadata:
+  name: application-lifecycle-first
+  namespace: default
+spec:
+  billingAccountRef:
+    name: application-lifecycle-acct
+  paymentOption: Invoice
+  organization:
+    legalName: Example Corporation Ltd
+    type: Company
+    website: https://example.com
+  situation: We pay vendors by purchase order on net-30 terms.
+  invoice:
+    estimatedMonthlySpend: From2500To10000
+    accountsPayableEmail: ap@example.com
+    purchaseOrderNumber: PO-4471
+  authorized: true
+  # Replaced by the webhook with the authenticated user.
+  applicant:
+    username: someone-else@example.com

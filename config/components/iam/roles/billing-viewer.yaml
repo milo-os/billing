@@ -26,3 +26,7 @@ spec:
     - billing.miloapis.com/invoices.get
     - billing.miloapis.com/invoices/status.get
     - billing.miloapis.com/invoices.watch
+    - billing.miloapis.com/billingarrangementapplications.list
+    - billing.miloapis.com/billingarrangementapplications.get
+    - billing.miloapis.com/billingarrangementapplications/status.get
+    - billing.miloapis.com/billingarrangementapplications.watch

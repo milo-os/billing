@@ -1,0 +1,15 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementApplication
+metadata:
+  name: application-lifecycle-second
+  namespace: default
+spec:
+  billingAccountRef:
+    name: application-lifecycle-acct
+  paymentOption: NotSure
+  organization:
+    legalName: Example Corporation Ltd
+    type: Company
+    website: https://example.com
+  situation: We sent our company registration number by email.
+  authorized: true

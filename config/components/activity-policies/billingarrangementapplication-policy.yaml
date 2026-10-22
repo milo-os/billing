@@ -1,0 +1,52 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for BillingArrangementApplication resources.
+# A BillingArrangementApplication is a customer's request for payment terms
+# ("Apply for payment terms"). Customers submit and withdraw applications;
+# staff decisions are recorded by the BillingArrangement (approval) and
+# BillingArrangementDecline (decline) policies.
+#
+# Design principles:
+# - Name the billing account (linked): it's what readers recognise.
+# - Never include the applicant's free-text answer (spec.situation). The
+#   timeline can be read more widely than the application.
+# - Customers withdraw by patching only spec.withdrawn to true, which is what
+#   the withdraw rule matches; any other write falls through to the update
+#   rules.
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-billingarrangementapplication
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: BillingArrangementApplication
+
+  auditRules:
+    # "Jo applied for payment terms (pay by invoice) for billing account acme"
+    - name: create
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.paymentOption) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} applied for payment terms{{ audit.responseObject.spec.paymentOption == 'Invoice' ? ' (pay by invoice)' : '' }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: create-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} applied for payment terms {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    # "Jo withdrew the payment terms application for billing account acme"
+    - name: withdraw
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'patch' && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && size(audit.requestObject.spec) == 1 && has(audit.requestObject.spec.withdrawn) && type(audit.requestObject.spec.withdrawn) == bool && audit.requestObject.spec.withdrawn && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} withdrew the payment terms application for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: update-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated the payment terms application {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    - name: delete-application
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the payment terms application {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the payment terms application {{ audit.objectRef.name }}"

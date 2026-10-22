@@ -1,0 +1,325 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: billingarrangementapplications.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: BillingArrangementApplication
+    listKind: BillingArrangementApplicationList
+    plural: billingarrangementapplications
+    singular: billingarrangementapplication
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.paymentOption
+      name: Option
+      type: string
+    - jsonPath: .spec.applicant.username
+      name: Applicant
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          BillingArrangementApplication is the Schema for the
+          billingarrangementapplications API.
+
+          A BillingArrangementApplication is a customer's request for payment
+          terms on a billing account ("Apply for payment terms"). Customers
+          create applications; staff decide them, approving with a
+          BillingArrangement whose spec.applicationRef names the application or
+          declining with a BillingArrangementDecline. Only one application per
+          billing account can be pending at a time. While one is, the
+          BillingAccount's PaymentReady condition reports ApplicationPending.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              BillingArrangementApplicationSpec defines the desired state of a
+              BillingArrangementApplication.
+
+              Everything except spec.withdrawn is fixed once submitted: to change an
+              application, withdraw it and apply again.
+            properties:
+              applicant:
+                description: |-
+                  Applicant is who submitted the application. Set by the admission
+                  webhook from the authenticated user on create; any value supplied
+                  by the client is replaced.
+                properties:
+                  uid:
+                    description: UID is the authenticated user's unique identifier.
+                    maxLength: 256
+                    type: string
+                  username:
+                    description: Username is the authenticated user's name.
+                    maxLength: 256
+                    type: string
+                required:
+                - username
+                type: object
+              authorized:
+                description: |-
+                  Authorized confirms the applicant is authorized to request payment
+                  terms on behalf of the organization. Must be true.
+                type: boolean
+                x-kubernetes-validations:
+                - message: the applicant must confirm they're authorized to request
+                    payment terms for the organization
+                  rule: self
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef references the BillingAccount in the same
+                  namespace that the applicant wants terms for.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              invoice:
+                description: |-
+                  Invoice carries the invoice details. Required when paymentOption is
+                  Invoice, and not allowed otherwise.
+                properties:
+                  accountsPayableEmail:
+                    description: |-
+                      AccountsPayableEmail receives invoices in addition to the billing
+                      contact.
+                    maxLength: 254
+                    minLength: 1
+                    type: string
+                  agreementReference:
+                    description: |-
+                      AgreementReference identifies an MSA or order form already signed
+                      with Datum, when there is one.
+                    maxLength: 128
+                    type: string
+                  estimatedMonthlySpend:
+                    description: EstimatedMonthlySpend is the applicant's spend estimate.
+                    enum:
+                    - Under500
+                    - From500To2500
+                    - From2500To10000
+                    - Over10000
+                    - NotSure
+                    type: string
+                  purchaseOrderNumber:
+                    description: PurchaseOrderNumber to print on invoices.
+                    maxLength: 64
+                    type: string
+                required:
+                - accountsPayableEmail
+                - estimatedMonthlySpend
+                type: object
+              organization:
+                description: Organization describes who is applying.
+                properties:
+                  legalName:
+                    description: LegalName is the organization's formal (registered)
+                      name.
+                    maxLength: 256
+                    minLength: 1
+                    type: string
+                  type:
+                    description: Type is the kind of organization.
+                    enum:
+                    - Company
+                    - PartnerOrReseller
+                    - Nonprofit
+                    - EducationOrResearch
+                    - Other
+                    type: string
+                  website:
+                    description: Website is the organization's website, used to verify
+                      it.
+                    maxLength: 2048
+                    pattern: ^https?://
+                    type: string
+                required:
+                - legalName
+                - type
+                - website
+                type: object
+              paymentOption:
+                description: PaymentOption is how the applicant would like to pay.
+                enum:
+                - Invoice
+                - NotSure
+                type: string
+              situation:
+                description: |-
+                  Situation is the applicant's own description of why they can't pay
+                  by card and how their organization pays its vendors.
+                maxLength: 2000
+                minLength: 1
+                type: string
+              withdrawn:
+                description: |-
+                  Withdrawn withdraws the application. It can only be set while the
+                  application is pending, and can't be undone.
+                type: boolean
+            required:
+            - authorized
+            - billingAccountRef
+            - organization
+            - paymentOption
+            - situation
+            type: object
+            x-kubernetes-validations:
+            - message: invoice is required when paymentOption is Invoice
+              rule: self.paymentOption != 'Invoice' || has(self.invoice)
+            - message: invoice may only be set when paymentOption is Invoice
+              rule: self.paymentOption == 'Invoice' || !has(self.invoice)
+            - message: an application can't be changed after it's submitted; withdraw
+                it and apply again
+              rule: self.billingAccountRef == oldSelf.billingAccountRef && self.paymentOption
+                == oldSelf.paymentOption && self.organization == oldSelf.organization
+                && self.situation == oldSelf.situation && self.authorized == oldSelf.authorized
+                && has(self.invoice) == has(oldSelf.invoice) && (!has(self.invoice)
+                || self.invoice == oldSelf.invoice) && has(self.applicant) == has(oldSelf.applicant)
+                && (!has(self.applicant) || self.applicant == oldSelf.applicant)
+            - message: a withdrawn application can't be reopened; apply again instead
+              rule: '!has(oldSelf.withdrawn) || !oldSelf.withdrawn || (has(self.withdrawn)
+                && self.withdrawn)'
+          status:
+            description: |-
+              BillingArrangementApplicationStatus defines the observed state of a
+              BillingArrangementApplication.
+            properties:
+              arrangementRef:
+                description: |-
+                  ArrangementRef names the BillingArrangement that approved the
+                  application. Its terms are published on the BillingAccount's
+                  status.paymentArrangement while they're active.
+                properties:
+                  name:
+                    description: Name is the name of the BillingArrangement.
+                    type: string
+                required:
+                - name
+                type: object
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  application's state. See BillingArrangementApplicationConditionDecided.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              decidedAt:
+                description: DecidedAt is when staff approved or declined the application.
+                format: date-time
+                type: string
+              declineMessage:
+                description: |-
+                  DeclineMessage is the reviewer's message to the applicant when the
+                  application was declined. Internal reviewer notes are never copied
+                  here.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase is where the application sits in review.
+                enum:
+                - Pending
+                - Approved
+                - Declined
+                - Withdrawn
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

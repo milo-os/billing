@@ -1,0 +1,15 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangement
+metadata:
+  name: application-lifecycle-terms
+  namespace: default
+spec:
+  billingAccountRef:
+    name: application-lifecycle-acct
+  applicationRef:
+    name: application-lifecycle-second
+  type: Invoice
+  invoice:
+    creditLimit: "10000"
+    accountsPayableEmail: ap@example.com
+  reason: E2E approved application

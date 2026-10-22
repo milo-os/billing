@@ -1,0 +1,21 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementApplication
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingarrangementapplication-sample
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  paymentOption: Invoice
+  organization:
+    legalName: Acme Corporation Ltd
+    type: Company
+    website: https://acme.example
+  situation: Our company pays software vendors by purchase order on net-30 terms.
+  invoice:
+    estimatedMonthlySpend: From2500To10000
+    accountsPayableEmail: ap@example.com
+    purchaseOrderNumber: PO-4471
+  authorized: true

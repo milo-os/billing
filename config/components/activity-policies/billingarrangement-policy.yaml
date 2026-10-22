@@ -11,6 +11,7 @@
 #   what readers recognise, and it's the same in every entry for the account.
 # - State the terms from the stored object (audit.responseObject), which
 #   carries CRD defaults such as netDays even when the request omitted them.
+# - Say when terms approve a customer's application, and link it.
 # - Never include spec.reason. It's internal, and the timeline can be read
 #   more widely than the arrangement itself.
 # - Dates render as "30 September 2027". The CEL environment has no string
@@ -30,6 +31,12 @@ spec:
     kind: BillingArrangement
 
   auditRules:
+    # "Jo approved the payment terms application acme-apply with invoice terms for billing account acme: net 30, credit limit 10000"
+    # Terms granted in response to an application name it; otherwise as create-invoice.
+    - name: create-approval
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.applicationRef) && has(audit.responseObject.spec.invoice) && has(audit.responseObject.spec.invoice.netDays) && has(audit.responseObject.spec.invoice.creditLimit) && has(audit.requestReceivedTimestamp) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} approved the payment terms application {{ link(audit.responseObject.spec.applicationRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingarrangementapplications', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.applicationRef.name}) }} with invoice terms for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}: net {{ string(int(audit.responseObject.spec.invoice.netDays)) }}, credit limit {{ audit.responseObject.spec.invoice.creditLimit }}{{ has(audit.responseObject.spec.invoice.purchaseOrderNumber) ? ', PO ' + audit.responseObject.spec.invoice.purchaseOrderNumber : '' }}{{ has(audit.responseObject.spec.startsAt) && timestamp(audit.responseObject.spec.startsAt) > timestamp(audit.requestReceivedTimestamp) ? ', starting ' + string(timestamp(audit.responseObject.spec.startsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.startsAt).getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.startsAt).getFullYear()) : '' }}{{ has(audit.responseObject.spec.endsAt) ? ', until ' + string(timestamp(audit.responseObject.spec.endsAt).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.endsAt).getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.endsAt).getFullYear()) : '' }}"
+
     # "Jo granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471, until 30 September 2027"
     # A start after the request time (scheduled terms) adds "starting <date>".
     - name: create-invoice

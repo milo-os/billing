@@ -211,6 +211,25 @@ func reconcileAccountFromArrangement(cl client.Client) handler.EventHandler {
 	)
 }
 
+// reconcileAccountFromApplication enqueues the referenced BillingAccount
+// when a BillingArrangementApplication changes.
+func reconcileAccountFromApplication(cl client.Client) handler.EventHandler {
+	return handler.EnqueueRequestsFromMapFunc(
+		func(ctx context.Context, obj client.Object) []reconcile.Request {
+			app, ok := obj.(*billingv1alpha1.BillingArrangementApplication)
+			if !ok {
+				return nil
+			}
+			return []reconcile.Request{{
+				NamespacedName: types.NamespacedName{
+					Name:      app.Spec.BillingAccountRef.Name,
+					Namespace: app.Namespace,
+				},
+			}}
+		},
+	)
+}
+
 // reconcileAccountFromInvoice enqueues the referenced BillingAccount
 // when an Invoice changes.
 func reconcileAccountFromInvoice(cl client.Client) handler.EventHandler {

@@ -526,7 +526,7 @@ Phase 1 is implemented in this repository:
   Billing Admin or Billing Viewer roles, so customers can't read, grant or
   change arrangements. Staff are bound to them from infra.
 
-Follow-ups in other repos:
+Follow-ups in other repos (all shipped):
 
 - **milo:** `OnboardingComplete` reads `PaymentReady` instead of
   `DefaultPaymentMethodReady`.
@@ -534,6 +534,71 @@ Follow-ups in other repos:
   PaymentMethod phases itself.
 - **infra:** staff PolicyBindings for the new roles.
 - **staff-portal:** grant, amend and end terms.
+
+### Phase 2 in billing
+
+Phase 2's billing resources are implemented in this repository:
+
+- **`BillingArrangementApplication`** (namespaced, in the organization's
+  namespace) is the "Apply for payment terms" form. It records the billing
+  account, the payment option (`Invoice` or `NotSure`), the organization's
+  legal name, type and website, the applicant's own description of their
+  situation, invoice details (estimated monthly spend, accounts payable
+  email, PO number, agreement reference), and the "I'm authorized"
+  confirmation. Sponsored access isn't offered yet: it arrives with credits
+  (decision 11), so the form's "Sponsored access" choice and its fields are
+  left out for now.
+  The admission webhook sets `spec.applicant` from the authenticated user, so
+  it can't be forged. Applying needs billing contact details on the billing
+  account, and only one application per account can be pending at a time.
+  Nothing can be edited after submission: the customer withdraws by setting
+  `spec.withdrawn` (which can't be undone) and applies again. Each
+  application is owned by its billing account.
+- **Approving** is granting terms: staff create a `BillingArrangement` whose
+  `spec.applicationRef` names the application. The application must be
+  pending and for the same billing account, and `applicationRef` is
+  immutable. Terms granted without an application (the sales-led path) leave
+  it unset.
+- **`BillingArrangementDecline`** records a decline: the application, a
+  `message` for the customer and `internalNotes` they never see. It's a
+  separate resource so customers, who can read their applications, can't
+  read the notes. Each decline is owned by its application.
+- **Application status** is derived from the decision: `Pending`,
+  `Approved` (with `status.arrangementRef`), `Declined` (with the
+  reviewer's `status.declineMessage`, never the notes) or `Withdrawn`, plus
+  `decidedAt` and a `Decided` condition. A decision outranks a withdrawal
+  that raced it, and an approval outranks a decline.
+- **`PaymentReady`** gains the reason `ApplicationPending` (False) while an
+  application awaits review and there's no working card or active terms. It
+  ranks below `ArrangementScheduled` and above a failed card or ended terms,
+  so the portal shows the review holding page, and milo keeps project
+  creation blocked until there's a decision.
+- **Permissions.** Billing Admin can create applications and withdraw them,
+  but not delete them. Billing Viewer can read them. Declines are readable
+  only through `billing-arrangement-viewer`, and `billing-arrangement-admin`
+  can now create declines. Reviewers use the existing staff bindings for
+  those two roles.
+- **Activity.** Applying, withdrawing, approving and declining each get a
+  summary. The applicant's free-text answers, the decline message and the
+  internal notes are never included.
+
+What billing doesn't do: send emails, open the Help Scout ticket, flag
+personal email domains (the staff queue reads `spec.applicant`), or run a
+fraud check. A fraud check could be added later as a condition on the
+application without changing the API (see Still Open).
+
+Follow-ups in other repos:
+
+- **cloud-portal:** leave "Sponsored access" off the application form for
+  now; create applications from the payment choice, the
+  older-account screen and billing settings; show the holding page while
+  `PaymentReady` is `ApplicationPending`; show the approved or declined
+  screen from the application's status; withdraw with "Add a card instead";
+  and show the member page from the `ApplicationPending` reason.
+- **staff-portal:** the applications queue, approving by granting terms
+  with `applicationRef` set, and declining.
+- **milo:** the application, approval and decline emails, and the Help
+  Scout ticket.
 
 | Repo | What changes |
 |---|---|
@@ -602,6 +667,10 @@ Follow-ups in other repos:
   turnaround, standard terms only, no self-service switch back to card,
   and sponsored access as credits. Phase 1 (`BillingArrangement`,
   `PaymentReady`) implemented in billing, for invoice terms only.
+- 2026-10-22: Phase 2's billing resources implemented:
+  `BillingArrangementApplication`, `BillingArrangementDecline`,
+  `BillingArrangement.spec.applicationRef` and the `ApplicationPending`
+  reason on `PaymentReady`.
 
 ## Future Work
 

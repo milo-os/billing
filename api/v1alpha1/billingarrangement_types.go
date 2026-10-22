@@ -44,6 +44,7 @@ const BillingArrangementConditionActive = "Active"
 // BillingArrangementSpec defines the desired state of a BillingArrangement.
 //
 // +kubebuilder:validation:XValidation:rule="self.type != 'Invoice' || has(self.invoice)",message="invoice is required when type is Invoice"
+// +kubebuilder:validation:XValidation:rule="has(self.applicationRef) == has(oldSelf.applicationRef)",message="applicationRef is immutable"
 type BillingArrangementSpec struct {
 	// BillingAccountRef references the BillingAccount in the same
 	// namespace that these terms apply to. Immutable.
@@ -76,6 +77,16 @@ type BillingArrangementSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+
+	// ApplicationRef names the BillingArrangementApplication in the same
+	// namespace that these terms approve, when they were granted in
+	// response to one. Leave unset for terms granted without an
+	// application (the sales-led path). The application must be for the
+	// same billing account and still pending. Immutable.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="applicationRef is immutable"
+	ApplicationRef *BillingArrangementApplicationRef `json:"applicationRef,omitempty"`
 
 	// Reason records why staff granted these terms (for example "Signed
 	// MSA, sales call 2026-10-01"). Internal: never shown to customers.

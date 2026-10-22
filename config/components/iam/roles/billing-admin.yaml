@@ -22,3 +22,9 @@ spec:
     - billing.miloapis.com/paymentmethods.update
     - billing.miloapis.com/paymentmethods.patch
     - billing.miloapis.com/paymentmethods.delete
+    # Customers apply for payment terms and withdraw their own
+    # applications (by setting spec.withdrawn). They can't delete them,
+    # since each one is kept as a record of the request.
+    - billing.miloapis.com/billingarrangementapplications.create
+    - billing.miloapis.com/billingarrangementapplications.update
+    - billing.miloapis.com/billingarrangementapplications.patch

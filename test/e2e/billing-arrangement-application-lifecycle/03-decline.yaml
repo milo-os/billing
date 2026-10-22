@@ -1,0 +1,10 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementDecline
+metadata:
+  name: application-lifecycle-decline
+  namespace: default
+spec:
+  applicationRef:
+    name: application-lifecycle-first
+  message: We couldn't verify your company details. Reply to our email with your company registration number, or add a card to continue.
+  internalNotes: E2E internal note

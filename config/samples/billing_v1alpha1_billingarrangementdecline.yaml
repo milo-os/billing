@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementDecline
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: billingarrangementdecline-sample
+spec:
+  applicationRef:
+    name: billingarrangementapplication-sample
+  message: We couldn't verify your company details. Reply to our email with your company registration number, or add a card to continue.
+  internalNotes: Website doesn't match the legal name given; no registration found.
