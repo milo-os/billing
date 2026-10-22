@@ -84,7 +84,7 @@ spec:
               kubectl patch billingarrangementapplication application-lifecycle-first -n default --type=merge --patch '{"spec":{"situation":"Something else"}}'
             check:
               ($error != null): true
-              (contains($stderr, "can't be changed after it's submitted")): true
+              (contains($stderr, 'withdraw it and apply again')): true
 
     - name: decline
       description: Staff decline the application with a message for the customer.
@@ -235,7 +235,7 @@ spec:
               kubectl patch billingarrangementapplication application-lifecycle-third -n default --type=merge --patch '{"spec":{"withdrawn":false}}'
             check:
               ($error != null): true
-              (contains($stderr, "can't be reopened")): true
+              (contains($stderr, 'be reopened; apply again instead')): true
 
     - name: reject-without-contact-details
       description: Applying needs billing contact details on the account.
