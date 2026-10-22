@@ -7,6 +7,7 @@ import (
 
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/util/retry"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -58,6 +59,18 @@ var _ = Describe("BillingArrangementApplication", func() {
 		cond := apimeta.FindStatusCondition(fetched.Status.Conditions, billingv1alpha1.BillingAccountConditionPaymentReady)
 		g.Expect(cond).NotTo(BeNil())
 		return cond.Reason
+	}
+	// updateLatest applies mutate to a fresh copy of obj and updates it,
+	// retrying when a controller's status write lands in between, so the
+	// error returned is the API server's verdict on the change itself.
+	updateLatest := func(obj client.Object, mutate func()) error {
+		return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+			if err := k8sClient.Get(ctx, client.ObjectKeyFromObject(obj), obj); err != nil {
+				return err
+			}
+			mutate()
+			return k8sClient.Update(ctx, obj)
+		})
 	}
 	applicationPhase := func(g Gomega, app *billingv1alpha1.BillingArrangementApplication) billingv1alpha1.BillingArrangementApplicationPhase {
 		var fetched billingv1alpha1.BillingArrangementApplication
@@ -122,13 +135,12 @@ var _ = Describe("BillingArrangementApplication", func() {
 		}, timeout, interval).Should(Succeed())
 
 		// The applicationRef on terms can't be changed or removed.
-		var arr billingv1alpha1.BillingArrangement
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(approval), &arr)).To(Succeed())
-		arr.Spec.ApplicationRef = &billingv1alpha1.BillingArrangementApplicationRef{Name: first.Name}
-		Expect(k8sClient.Update(ctx, &arr)).To(MatchError(ContainSubstring("applicationRef is immutable")))
-		Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(approval), &arr)).To(Succeed())
-		arr.Spec.ApplicationRef = nil
-		Expect(k8sClient.Update(ctx, &arr)).To(MatchError(ContainSubstring("applicationRef is immutable")))
+		arr := approval.DeepCopy()
+		Expect(updateLatest(arr, func() {
+			arr.Spec.ApplicationRef = &billingv1alpha1.BillingArrangementApplicationRef{Name: first.Name}
+		})).To(MatchError(ContainSubstring("applicationRef is immutable")))
+		Expect(updateLatest(arr, func() { arr.Spec.ApplicationRef = nil })).
+			To(MatchError(ContainSubstring("applicationRef is immutable")))
 
 		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
 	})
@@ -155,16 +167,13 @@ var _ = Describe("BillingArrangementApplication", func() {
 			app := newApplication("test-application-immutable", "any")
 			Expect(k8sClient.Create(ctx, app)).To(Succeed())
 
-			edited := app.DeepCopy()
-			edited.Spec.Situation = "Something else"
-			Expect(k8sClient.Update(ctx, edited)).To(MatchError(ContainSubstring("can't be changed after it's submitted")))
-
-			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(app), app)).To(Succeed())
-			app.Spec.Withdrawn = true
-			Expect(k8sClient.Update(ctx, app)).To(Succeed())
-
-			app.Spec.Withdrawn = false
-			Expect(k8sClient.Update(ctx, app)).To(MatchError(ContainSubstring("can't be reopened")))
+			// The application controller writes status after each change,
+			// so every update starts from the latest copy.
+			Expect(updateLatest(app, func() { app.Spec.Situation = "Something else" })).
+				To(MatchError(ContainSubstring("can't be changed after it's submitted")))
+			Expect(updateLatest(app, func() { app.Spec.Withdrawn = true })).To(Succeed())
+			Expect(updateLatest(app, func() { app.Spec.Withdrawn = false })).
+				To(MatchError(ContainSubstring("can't be reopened")))
 
 			Expect(k8sClient.Delete(ctx, app)).To(Succeed())
 		})
