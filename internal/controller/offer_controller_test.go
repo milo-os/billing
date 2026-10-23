@@ -245,7 +245,7 @@ func TestOfferReconciler_ReconcileGA_SnapshotsDiscounts(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Reconcile: %v", err)
 	}
-	if res.Requeue {
+	if res.RequeueAfter != 0 {
 		t.Fatal("unexpected requeue")
 	}
 
