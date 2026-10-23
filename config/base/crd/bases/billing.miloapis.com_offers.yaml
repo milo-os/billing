@@ -72,6 +72,20 @@ spec:
                 minItems: 1
                 type: array
                 x-kubernetes-list-type: set
+              discount:
+                description: |-
+                  Discount specifies an optional default discount applied to all
+                  services in this Offer that do not specify their own discount override.
+                properties:
+                  percentage:
+                    description: Percentage is a whole number from 0 to 100.
+                    format: int32
+                    maximum: 100
+                    minimum: 0
+                    type: integer
+                required:
+                - percentage
+                type: object
               launchStage:
                 allOf:
                 - enum:
@@ -96,6 +110,19 @@ spec:
                     ServicePricingRef names a ServicePricing resource referenced by an Offer
                     while in Draft. Namespace defaults to milo-system when omitted.
                   properties:
+                    discount:
+                      description: Discount specifies an optional discount override
+                        for this service pricing.
+                      properties:
+                        percentage:
+                          description: Percentage is a whole number from 0 to 100.
+                          format: int32
+                          maximum: 100
+                          minimum: 0
+                          type: integer
+                      required:
+                      - percentage
+                      type: object
                     name:
                       description: Name is the metadata.name of the ServicePricing.
                       maxLength: 253
@@ -124,6 +151,20 @@ spec:
                     ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
                     at Offer publish time, plus the source ServicePricing name.
                   properties:
+                    discount:
+                      description: |-
+                        Discount is the resolved discount for this service pricing snapshot,
+                        captured when the Offer becomes GA.
+                      properties:
+                        percentage:
+                          description: Percentage is a whole number from 0 to 100.
+                          format: int32
+                          maximum: 100
+                          minimum: 0
+                          type: integer
+                      required:
+                      - percentage
+                      type: object
                     name:
                       description: Name is the metadata.name of the source ServicePricing.
                       maxLength: 253

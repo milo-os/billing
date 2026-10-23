@@ -32,6 +32,12 @@ type OfferSpec struct {
 	// +kubebuilder:default=Draft
 	LaunchStage OfferLaunchStage `json:"launchStage"`
 
+	// Discount specifies an optional default discount applied to all
+	// services in this Offer that do not specify their own discount override.
+	//
+	// +kubebuilder:validation:Optional
+	Discount *Discount `json:"discount,omitempty"`
+
 	// ServicePricingRefs names the ServicePricing resources to include.
 	// Authored while Draft; retained for audit after publish. Runtime
 	// rating uses servicePricings only.

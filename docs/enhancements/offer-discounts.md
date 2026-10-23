@@ -78,7 +78,7 @@ Defining discounts at the `Offer` level solves this:
 
 ### API
 
-`OfferSpec` gets an optional `discount` (applies to all usage services in the
+`OfferSpec` gets an optional `discount` (applies to all services in the
 Offer), and `ServicePricingRef` gets an optional `discount` (overrides or sets
 the discount for that specific service):
 
@@ -91,7 +91,7 @@ spec:
   launchStage: Draft
   chargeTypes:
     - Usage
-  # Optional: default discount for all usage services in this Offer
+  # Optional: default discount for all services in this Offer
   discount:
     percentage: 20
   servicePricingRefs:
@@ -173,9 +173,8 @@ Accounts that stay on an older Offer keep their existing terms.
 ### Validation
 
 - `discount.percentage` must be an integer between `0` and `100`.
-- In the first version, `discount` is only allowed when `chargeType` is `Usage`.
-  `OneTime` and `Recurring` are rejected until the provider is tested with
-  them.
+- Percentage discounts apply across all charge types (`Usage`, `OneTime`,
+  `Recurring`).
 - Validated on create and update of Draft `Offer`s. Published GA Offers are
   already immutable.
 

@@ -126,6 +126,16 @@ type PricingRate struct {
 	Tiered []PricingTierBand `json:"tiered,omitempty"`
 }
 
+// Discount specifies a percentage discount applied to a service's charges.
+type Discount struct {
+	// Percentage is a whole number from 0 to 100.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	Percentage int32 `json:"percentage"`
+}
+
 // ServicePricingRef names a ServicePricing resource referenced by an Offer
 // while in Draft. Namespace defaults to milo-system when omitted.
 type ServicePricingRef struct {
@@ -142,6 +152,11 @@ type ServicePricingRef struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=63
 	Namespace string `json:"namespace,omitempty"`
+
+	// Discount specifies an optional discount override for this service pricing.
+	//
+	// +kubebuilder:validation:Optional
+	Discount *Discount `json:"discount,omitempty"`
 }
 
 // ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
@@ -153,6 +168,12 @@ type ServicePricingSnapshot struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	Name string `json:"name"`
+
+	// Discount is the resolved discount for this service pricing snapshot,
+	// captured when the Offer becomes GA.
+	//
+	// +kubebuilder:validation:Optional
+	Discount *Discount `json:"discount,omitempty"`
 
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	//
