@@ -1,0 +1,43 @@
+@startuml credits-containers
+!$NEW_C4_STYLE = 1
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Container.puml
+!include https://raw.githubusercontent.com/datum-cloud/enhancements/main/enhancements/datum-theme.puml
+
+title Credits — Container View
+
+Person(staff, "Staff", "Grants and voids credits")
+Person(customer, "Customer", "Reads balance and invoices")
+
+System_Boundary(portals, "Portals") {
+    Container(staffportal, "staff-portal", "Web", "Grant and void credits for a billing account")
+    Container(cloudportal, "cloud-portal", "Web", "Billing page: credit balance, amount due, invoices")
+}
+
+System_Boundary(milo, "Milo control plane") {
+    Container(apiserver, "Milo API server", "Kubernetes API", "Stores CreditGrant, BillingAccount, Invoice; forwards usage.billing.miloapis.com to the billing provider")
+    Container(billing, "billing", "Go, webhooks", "CreditGrant and BillingAccountBalance types; CreditGrant validation (immutable, one-way void)")
+    Container(servicecatalog, "service-catalog", "Go, controller", "signupCredit: one CreditGrant per new billing account")
+}
+
+System_Boundary(provider, "Billing provider (any implementation)") {
+    Container(controllers, "Provider controllers", "", "CreditGrant → grant (create, void, state); invoice credits → Invoice.status")
+    Container(usageapi, "Provider usage API server", "aggregated API", "Serves BillingAccountBalance (and UsageQuery) live")
+    Container(backend, "Provider billing backend", "", "Keeps the balance, expires credits, applies them to the invoices it issues")
+}
+
+System_Ext(payments, "Payment processor", "Charges what credits don't cover")
+
+Rel(staff, staffportal, "Grant / void")
+Rel(customer, cloudportal, "Billing page")
+Rel(staffportal, apiserver, "Create / update CreditGrant", "HTTPS")
+Rel(cloudportal, apiserver, "GET BillingAccountBalance, list Invoices", "HTTPS, user token")
+Rel(apiserver, billing, "Admission", "webhook")
+Rel(servicecatalog, apiserver, "Create CreditGrant", "HTTPS")
+Rel(controllers, apiserver, "Watch CreditGrant; write status, Invoice", "HTTPS")
+Rel(apiserver, usageapi, "Forward balance reads", "APIService")
+Rel(controllers, backend, "Grant, void, state")
+Rel(usageapi, backend, "Balance, charges")
+Rel(backend, payments, "Invoice remainder")
+
+SHOW_LEGEND()
+@enduml

@@ -1,0 +1,38 @@
+@startuml credits-signup
+title Signup credit (optional, one per organization and per card)
+
+actor Operator as Op
+participant "Milo API server" as Milo
+participant "service-catalog\nbilling defaults controller" as SC
+participant "Billing provider\ncontrollers" as Provider
+
+Op -> Milo : billing ServiceConfiguration\nspec.signupCredit: {amount 50.00,\nexpiresAfter 720h, description}
+
+== For each organization ==
+Milo -> SC : BillingAccount acme-main changed
+SC -> SC : organization-acme already has\nCreditGrant signup-credit? → stop\n(one per organization, whichever account)
+SC -> SC : acme-main's default payment method\na ready card? → else no signup credit
+SC -> Milo : get PaymentMethod (default)
+Milo --> SC : status.details.card.fingerprint: fp-7c1e
+SC -> Milo : any CreditGrant labeled\nsignup-card=fp-7c1e, in any organization?
+Milo --> SC : none
+SC -> Milo : create CreditGrant signup-credit\nin organization-acme, for acme-main,\nreason Promotional,\nlabels credit-grant-default, signup-card=fp-7c1e
+note right of SC : the name makes it one per organization;\nthe card label makes it one per card
+Milo -> Provider : watch event
+Provider -> Provider : grant it (as any CreditGrant)
+Provider -> Milo : status.phase: Active
+
+== Later billing accounts ==
+Milo -> SC : BillingAccount acme-eu created
+SC -> SC : signup-credit exists → nothing
+
+== Same card, another organization ==
+Milo -> SC : BillingAccount of organization globex,\npaid with the same card
+SC -> Milo : any CreditGrant labeled signup-card=fp-7c1e?
+Milo --> SC : yes (organization-acme)
+SC -> SC : nothing
+
+== Setting removed ==
+Op -> Milo : remove spec.signupCredit
+note right of SC : new organizations get no grant;\nexisting grants are untouched
+@enduml

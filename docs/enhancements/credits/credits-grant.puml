@@ -1,0 +1,44 @@
+@startuml credits-grant
+title Granting, voiding and expiring a credit
+
+actor Staff
+participant "staff-portal" as SP
+participant "Milo API server" as Milo
+participant "billing webhook" as Webhook
+participant "Billing provider\ncontrollers" as Provider
+participant "Billing provider\nbackend" as Backend
+
+== Grant ==
+Staff -> SP : Grant $500 to acme-main\n(reason, description, expiry)
+SP -> Milo : create CreditGrant welcome-acme
+Milo -> Webhook : validate
+Webhook --> Milo : ok (amount > 0, USD,\nbilling account exists)
+Milo --> SP : created (status.phase: Pending)
+Milo -> Provider : watch event
+Provider -> Backend : create grant for acme-main\n(amount, expiry,\nidempotent on the CreditGrant UID)
+Backend --> Provider : grant active
+Provider -> Milo : status.phase: Active, effectiveAt, expiresAt
+
+== Void ==
+Staff -> SP : Void what's left
+SP -> Milo : update spec.voided: true
+Milo -> Webhook : validate
+Webhook --> Milo : ok (only false → true;\neverything else immutable)
+Milo -> Provider : watch event
+Provider -> Backend : void grant
+Backend --> Provider : voided (remaining forfeited;\ncredit already used stays used)
+Provider -> Milo : status.phase: Voided
+
+== Expire ==
+Backend -> Backend : expiry reached:\nremaining forfeited
+Provider -> Backend : grant state (resync)
+Backend --> Provider : expired
+Provider -> Milo : status.phase: Expired
+
+== Delete ==
+Staff -> Milo : delete CreditGrant
+Milo -> Provider : deletionTimestamp set (finalizer)
+Provider -> Backend : void (if still active)
+Provider -> Milo : remove finalizer
+note right of Backend : the grant and its use stay\nin the provider's history
+@enduml
