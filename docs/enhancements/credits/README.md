@@ -175,7 +175,7 @@ The API has three pieces:
 | --- | --- |
 | Applying credits changes how the provider builds every invoice, not only for accounts with credits | The provider proves its existing invoices are unchanged (its end-to-end invoice tests) before turning credits on, and rolls out on staging first, comparing an invoice before and after |
 | A provider's credit support is new or limited | [Provider Requirements](#provider-requirements) lists what a provider must support; a provider that can't meet one doesn't serve credits yet (grants stay `Pending` with a condition) |
-| Signup credits invite abuse (many accounts or organizations to collect free credit) | Off by default; small amounts with short expiry; once per organization **and once per payment card**, so more billing accounts, more organizations or more users paying with the same card earn nothing more; only for accounts paying by a ready card, after the signup fraud checks |
+| Signup credits invite abuse (many accounts or organizations to collect free credit) | Manual credit delivery is the primary mechanism (MVP) until automated fraud prevention is established. For automated signup credits (future/optional): off by default; small amounts with short expiry; once per organization **and once per payment card**, so more billing accounts, more organizations or more users paying with the same card earn nothing more; only for accounts paying by a ready card, after signup fraud checks |
 | A grant in Milo and the provider disagree | The provider is authoritative. `CreditGrant` stores no balance, only its state; the provider re-checks it on every resync |
 | Staff grant the wrong amount | Grants are immutable: void and grant again. The provider keeps both in its history |
 
@@ -239,31 +239,40 @@ metadata:
   name: acme-main                     # the billing account's name
   namespace: organization-acme
 status:
-  retrievedAt: "2026-10-21T09:00:00Z"
+  retrievedAt: "2026-11-10T09:00:00Z"
   currency: USD
-  credits:
-    available: "499.90"   # what's left, after usage metered so far this period
-    booked: "500.00"      # granted minus what issued invoices have used
-    pending: "0.00"       # granted with a future start
-  currentPeriod:
-    start: "2026-10-20T00:00:00Z"
-    end: "2026-11-20T00:00:00Z"
-    charges: "0.10"         # usage so far, priced as the invoice will
-    creditsApplied: "0.10"  # what credits cover of it
-    amountDue: "0.00"       # charges − credits applied
-  grants:                   # active grants, soonest-expiring first
+  balance:                            # posted
+    creditRemaining: "130.00"         # 80 (welcome) + 50 (goodwill)
+    amountOwed: "75.00"               # past invoices outstanding (e.g. card declined)
+  forecast:                           # current billing period so far, not invoiced
+    periodStart: "2026-11-01T00:00:00Z"
+    periodEnd: "2026-12-01T00:00:00Z"
+    estimatedSpend: "60.00"
+    estimatedCreditUsed: "60.00"
+    estimatedAmountDue: "0.00"
+    estimatedCreditRemaining: "70.00"
+  grants:                             # active grants, soonest-expiring first
     - name: welcome-acme
       amount: "500.00"
-      expiresAt: "2027-01-18T14:00:00Z"
+      used: "420.00"                  # by past invoices
+      remaining: "80.00"
+      expiresAt: "2027-01-01T00:00:00Z"
+    - name: support-goodwill
+      amount: "50.00"
+      used: "0.00"
+      remaining: "50.00"              # no expiry
 ```
 
-- **`credits.available` is the running balance:** what's left after the
-  usage metered so far, before it is invoiced.
-- **`currentPeriod.amountDue`** is the running total of what the customer
-  owes. The billing page shows it with or without credits.
-- **A billing account with no credits** still has a balance: `available: 0`
-  and the period's charges. So the billing page always has one place to read
-  "what do I owe so far".
+- **`balance` represents posted ledger state:**
+  - `creditRemaining`: Total posted credit balance remaining across all grants.
+  - `amountOwed`: Total unpaid/outstanding amount from finalized invoices.
+- **`forecast` represents un-invoiced, forward-looking activity for the current period:**
+  - `estimatedSpend`: Metered usage charges accumulated so far this period, priced as the invoice will price it.
+  - `estimatedCreditUsed`: Amount of available credit projected to offset current period spend.
+  - `estimatedAmountDue`: Projected amount that will be due if invoiced now (`estimatedSpend` − `estimatedCreditUsed`).
+  - `estimatedCreditRemaining`: Projected credit remaining after covering current period spend.
+- **`grants` lists individual active grants:** Includes total granted `amount`, `used` by posted invoices, `remaining`, and optional `expiresAt`.
+- **A billing account with no credits** still has a balance: `creditRemaining: "0.00"` and reports current period forecast, providing a unified place to read accrued charges and account balance.
 - **Accounts on several billing periods** (rare) report the current one.
 
 ### Signup Credit
@@ -271,7 +280,7 @@ status:
 ![Signup credit](./credits-signup.png)
 
 A field on the billing.miloapis.com ServiceConfiguration, next to
-`defaultOffer`:
+`defaultOffer`. Manual credit granting is the primary mechanism for MVP (e.g. promotional grants for trusted accounts); automated signup credit delivery is optional and intended for when automated fraud prevention is ready.
 
 ```yaml
 spec:
@@ -282,7 +291,7 @@ spec:
     description: "Welcome credit"
 ```
 
-service-catalog's billing defaults controller, which already creates each
+When enabled, service-catalog's billing defaults controller, which already creates each
 new account's default `BillingEntitlement`, creates **one `CreditGrant` per
 organization and per payment card**. It goes to the organization's first
 billing account whose default payment method is a ready card, so the fraud
