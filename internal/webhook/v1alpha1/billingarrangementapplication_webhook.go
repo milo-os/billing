@@ -4,6 +4,7 @@ package webhook
 
 import (
 	"context"
+	"time"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -28,11 +29,15 @@ var billingArrangementApplicationLog = logf.Log.WithName("billingarrangementappl
 //
 // Validator responsibilities:
 //   - Ensure the referenced BillingAccount exists and has billing contact
-//     details.
+//     details and an address.
 //   - Ensure the details match the payment option and are well formed.
-//   - Ensure only one application per billing account is pending.
+//   - Ensure only one application per billing account is pending, and
+//     that the account doesn't already have open-ended or scheduled terms.
 //   - Ensure nothing but spec.withdrawn changes after submission, and
 //     that only a pending application can be withdrawn.
+//   - Ensure the application is owned only by its billing account, and
+//     that the owner reference can't be changed or removed while the
+//     account exists.
 func SetupBillingArrangementApplicationWebhookWithManager(mgr ctrl.Manager) error {
 	// Reads go straight to the API server: the pending checks have to see
 	// applications and decisions admitted moments ago.
@@ -50,6 +55,7 @@ func SetupBillingArrangementApplicationWebhookWithManager(mgr ctrl.Manager) erro
 
 type billingArrangementApplicationWebhook struct {
 	reader client.Reader
+	now    func() time.Time
 }
 
 var (
@@ -73,7 +79,7 @@ func (r *billingArrangementApplicationWebhook) Default(ctx context.Context, app 
 func (r *billingArrangementApplicationWebhook) ValidateCreate(ctx context.Context, app *billingv1alpha1.BillingArrangementApplication) (admission.Warnings, error) {
 	billingArrangementApplicationLog.Info("validating create", "name", app.Name, "namespace", app.Namespace)
 
-	if errs := validation.ValidateBillingArrangementApplicationCreate(ctx, r.reader, app); len(errs) > 0 {
+	if errs := validation.ValidateBillingArrangementApplicationCreate(ctx, r.reader, app, r.clock()); len(errs) > 0 {
 		return nil, errors.NewInvalid(app.GetObjectKind().GroupVersionKind().GroupKind(), app.Name, errs)
 	}
 	return nil, nil
@@ -90,4 +96,11 @@ func (r *billingArrangementApplicationWebhook) ValidateUpdate(ctx context.Contex
 
 func (r *billingArrangementApplicationWebhook) ValidateDelete(_ context.Context, _ *billingv1alpha1.BillingArrangementApplication) (admission.Warnings, error) {
 	return nil, nil
+}
+
+func (r *billingArrangementApplicationWebhook) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
 }

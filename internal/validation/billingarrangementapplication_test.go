@@ -49,14 +49,22 @@ func applicationDecline(name, application string) *billingv1alpha1.BillingArrang
 	}
 }
 
+// approval grants terms with an end date, so the account can still apply
+// to renew them.
 func approval(name, application string) *billingv1alpha1.BillingArrangement {
-	arr := invoiceArrangement(name, arrangementTime(1), nil)
+	arr := invoiceArrangement(name, arrangementTime(1), arrangementTime(30))
 	arr.Spec.ApplicationRef = &billingv1alpha1.BillingArrangementApplicationRef{Name: application}
 	return arr
 }
 
+// acmeOwner is the owner reference the defaulting webhook adds to an
+// application for the acme billing account.
+var acmeOwner = metav1.OwnerReference{
+	APIVersion: billingv1alpha1.GroupVersion.String(), Kind: "BillingAccount", Name: "acme", UID: "acme-uid",
+}
+
 // applicationTestClient is arrangementTestClient with an account that has
-// billing contact details, which applying requires.
+// billing contact details and an address, which applying requires.
 func applicationTestClient(t *testing.T, objs ...client.Object) client.Client {
 	t.Helper()
 	scheme := runtime.NewScheme()
@@ -67,14 +75,32 @@ func applicationTestClient(t *testing.T, objs ...client.Object) client.Client {
 		ObjectMeta: metav1.ObjectMeta{Name: "acme", Namespace: "org-acme", UID: "acme-uid"},
 		Spec: billingv1alpha1.BillingAccountSpec{
 			CurrencyCode: "USD",
-			ContactInfo:  &billingv1alpha1.BillingContactInfo{Email: "billing@acme.example"},
+			ContactInfo: &billingv1alpha1.BillingContactInfo{
+				Email:   "billing@acme.example",
+				Address: &billingv1alpha1.BillingAddress{Country: "GB"},
+			},
 		},
 	}
 	bare := &billingv1alpha1.BillingAccount{
 		ObjectMeta: metav1.ObjectMeta{Name: "no-contact", Namespace: "org-acme"},
 		Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
 	}
-	return fake.NewClientBuilder().WithScheme(scheme).WithObjects(append(objs, account, bare)...).Build()
+	noAddress := &billingv1alpha1.BillingAccount{
+		ObjectMeta: metav1.ObjectMeta{Name: "no-address", Namespace: "org-acme"},
+		Spec: billingv1alpha1.BillingAccountSpec{
+			CurrencyCode: "USD",
+			ContactInfo:  &billingv1alpha1.BillingContactInfo{Email: "billing@acme.example"},
+		},
+	}
+	leaving := &billingv1alpha1.BillingAccount{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "leaving", Namespace: "org-acme", UID: "leaving-uid",
+			DeletionTimestamp: arrangementTime(5), Finalizers: []string{"billing.miloapis.com/test"},
+		},
+		Spec: billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+	}
+	return fake.NewClientBuilder().WithScheme(scheme).
+		WithObjects(append(objs, account, bare, noAddress, leaving)...).Build()
 }
 
 func TestValidateBillingArrangementApplicationCreate(t *testing.T) {
@@ -84,6 +110,8 @@ func TestValidateBillingArrangementApplicationCreate(t *testing.T) {
 	otherAccount.Spec.BillingAccountRef.Name = "globex"
 	orphan := invoiceApplication("orphan")
 	orphan.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "deleted-account"}}
+	globexTerms := invoiceArrangement("globex-terms", arrangementTime(1), nil)
+	globexTerms.Spec.BillingAccountRef.Name = "globex"
 
 	tests := []struct {
 		name     string
@@ -110,6 +138,55 @@ func TestValidateBillingArrangementApplicationCreate(t *testing.T) {
 			name:    "billing account without contact details",
 			mutate:  func(a *billingv1alpha1.BillingArrangementApplication) { a.Spec.BillingAccountRef.Name = "no-contact" },
 			wantErr: "add billing contact details",
+		},
+		{
+			name:    "billing account without an address",
+			mutate:  func(a *billingv1alpha1.BillingArrangementApplication) { a.Spec.BillingAccountRef.Name = "no-address" },
+			wantErr: "and a billing address",
+		},
+		{
+			name: "owned by its billing account",
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences = []metav1.OwnerReference{acmeOwner}
+			},
+		},
+		{
+			name: "owned by another billing account",
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) {
+				ref := acmeOwner
+				ref.UID = "someone-else"
+				a.OwnerReferences = []metav1.OwnerReference{acmeOwner, ref}
+			},
+			wantErr: `can only be owned by billing account "acme"`,
+		},
+		{
+			name: "owned by something else",
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences = []metav1.OwnerReference{{APIVersion: "v1", Kind: "ConfigMap", Name: "x", UID: "x"}}
+			},
+			wantErr: `can only be owned by billing account "acme"`,
+		},
+		{
+			name:     "open-ended terms are already active",
+			existing: []client.Object{invoiceArrangement("terms", arrangementTime(1), nil)},
+			wantErr:  `billing account "acme" already has payment terms with no end date`,
+		},
+		{
+			name:     "terms are scheduled to start",
+			existing: []client.Object{invoiceArrangement("terms", arrangementTime(10), nil)},
+			wantErr:  `billing account "acme" already has payment terms starting at 2026-10-10T00:00:00Z`,
+		},
+		{
+			name:     "renewing active terms with an end date",
+			existing: []client.Object{invoiceArrangement("terms", arrangementTime(1), arrangementTime(30))},
+		},
+		{
+			name:     "terms that have ended",
+			existing: []client.Object{invoiceArrangement("terms", arrangementTime(1), arrangementTime(5))},
+		},
+		{
+			name:     "open-ended terms on another account",
+			existing: []client.Object{globexTerms},
 		},
 		{
 			name:    "invoice option without invoice details",
@@ -187,7 +264,7 @@ func TestValidateBillingArrangementApplicationCreate(t *testing.T) {
 				tt.mutate(app)
 			}
 			c := applicationTestClient(t, tt.existing...)
-			errs := ValidateBillingArrangementApplicationCreate(context.Background(), c, app)
+			errs := ValidateBillingArrangementApplicationCreate(context.Background(), c, app, arrangementTime(6).Time)
 			checkErrs(t, errs.ToAggregate(), tt.wantErr)
 		})
 	}
@@ -239,11 +316,45 @@ func TestValidateBillingArrangementApplicationUpdate(t *testing.T) {
 			},
 			wantErr: "can't be changed after it's submitted",
 		},
+		{
+			name: "point the owner reference at another account",
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences[0].UID = "someone-else"
+			},
+			wantErr: "owner references can't be added or changed",
+		},
+		{
+			name: "add an owner reference",
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences = append(a.OwnerReferences, metav1.OwnerReference{APIVersion: "v1", Kind: "ConfigMap", Name: "x", UID: "x"})
+			},
+			wantErr: "owner references can't be added or changed",
+		},
+		{
+			name:    "remove the owner reference while the account exists",
+			mutate:  func(a *billingv1alpha1.BillingArrangementApplication) { a.OwnerReferences = nil },
+			wantErr: `the owner reference to billing account "acme" can't be removed while the account exists`,
+		},
+		{
+			name: "garbage collector orphans the application from a deleting account",
+			old: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "leaving", UID: "leaving-uid"}}
+			},
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) { a.OwnerReferences = nil },
+		},
+		{
+			name: "garbage collector removes a reference to a deleted account",
+			old: func(a *billingv1alpha1.BillingArrangementApplication) {
+				a.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "deleted-account"}}
+			},
+			mutate: func(a *billingv1alpha1.BillingArrangementApplication) { a.OwnerReferences = nil },
+		},
 	}
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			oldApp := invoiceApplication("apply")
+			oldApp.OwnerReferences = []metav1.OwnerReference{acmeOwner}
 			if tt.old != nil {
 				tt.old(oldApp)
 			}

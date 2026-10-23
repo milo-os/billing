@@ -142,6 +142,19 @@ var _ = Describe("BillingArrangementApplication", func() {
 		Expect(updateLatest(arr, func() { arr.Spec.ApplicationRef = nil })).
 			To(MatchError(ContainSubstring("applicationRef is immutable")))
 
+		// Deleting the record of the decision puts the application back up
+		// for review, as deleting a decline does. Ending the terms with
+		// endsAt is the normal path and keeps the approval.
+		Expect(k8sClient.Delete(ctx, approval)).To(Succeed())
+		Eventually(func(g Gomega) {
+			var fetched billingv1alpha1.BillingArrangementApplication
+			g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(second), &fetched)).To(Succeed())
+			g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingArrangementApplicationPhasePending))
+			g.Expect(fetched.Status.ArrangementRef).To(BeNil())
+			g.Expect(fetched.Status.DecidedAt).To(BeNil())
+			g.Expect(paymentReadyReason(g, account)).To(Equal("ApplicationPending"))
+		}, timeout, interval).Should(Succeed())
+
 		Expect(k8sClient.Delete(ctx, account)).To(Succeed())
 	})
 

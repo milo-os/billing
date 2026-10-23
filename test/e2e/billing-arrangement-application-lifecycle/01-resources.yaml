@@ -7,6 +7,8 @@ spec:
   currencyCode: USD
   contactInfo:
     email: billing@example.com
+    address:
+      country: GB
 ---
 apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingArrangementApplication

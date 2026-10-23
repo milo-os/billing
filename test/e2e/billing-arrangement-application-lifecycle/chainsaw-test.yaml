@@ -15,7 +15,8 @@ spec:
        application can't be withdrawn.
     4. The customer applies again, and approving with a BillingArrangement whose applicationRef names the
        application moves it to Approved and the account to PaymentReady=True (Reason: InvoiceTerms).
-    5. A third application is withdrawn by setting spec.withdrawn, and can no longer be declined.
+    5. A third application (renewing terms that have an end date) is withdrawn by setting spec.withdrawn, and
+       can no longer be declined or reopened. Its owner reference to the billing account can't be removed.
     6. Applying is rejected for a billing account with no billing contact details.
   steps:
     - name: apply
@@ -208,7 +209,7 @@ spec:
                     reason: InvoiceTerms
 
     - name: withdraw
-      description: A pending application is withdrawn, and can't be decided afterwards.
+      description: An application to renew terms is withdrawn, and can't be decided or reopened afterwards.
       try:
         - script:
             content: |
@@ -236,6 +237,12 @@ spec:
             check:
               ($error != null): true
               (contains($stderr, 'be reopened; apply again instead')): true
+        - script:
+            content: |
+              kubectl patch billingarrangementapplication application-lifecycle-third -n default --type=merge --patch '{"metadata":{"ownerReferences":[]}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'removed while the account exists')): true
 
     - name: reject-without-contact-details
       description: Applying needs billing contact details on the account.

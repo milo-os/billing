@@ -549,11 +549,16 @@ Phase 2's billing resources are implemented in this repository:
   (decision 11), so the form's "Sponsored access" choice and its fields are
   left out for now.
   The admission webhook sets `spec.applicant` from the authenticated user, so
-  it can't be forged. Applying needs billing contact details on the billing
-  account, and only one application per account can be pending at a time.
-  Nothing can be edited after submission: the customer withdraws by setting
-  `spec.withdrawn` (which can't be undone) and applies again. Each
-  application is owned by its billing account.
+  it can't be forged. Applying needs billing contact details and a billing
+  address on the billing account (tax IDs stay optional, since many
+  customers don't have one), and only one application per account can be
+  pending at a time. An account that already has terms with no end date, or
+  terms scheduled to start, can't apply; one whose active terms have an end
+  date can, to renew them. Nothing can be edited after submission: the
+  customer withdraws by setting `spec.withdrawn` (which can't be undone) and
+  applies again. Each application is owned by its billing account, and the
+  owner reference can't be changed or removed while the account exists, so a
+  customer can't hide an application or have it garbage collected.
 - **Approving** is granting terms: staff create a `BillingArrangement` whose
   `spec.applicationRef` names the application. The application must be
   pending and for the same billing account, and `applicationRef` is
@@ -567,7 +572,10 @@ Phase 2's billing resources are implemented in this repository:
   `Approved` (with `status.arrangementRef`), `Declined` (with the
   reviewer's `status.declineMessage`, never the notes) or `Withdrawn`, plus
   `decidedAt` and a `Decided` condition. A decision outranks a withdrawal
-  that raced it, and an approval outranks a decline.
+  that raced it, and an approval outranks a decline. The decision records
+  are the source of truth: deleting the approving arrangement or the
+  decline puts the application back up for review. Ending terms with
+  `endsAt` is the normal path and keeps the application approved.
 - **`PaymentReady`** gains the reason `ApplicationPending` (False) while an
   application awaits review and there's no working card or active terms. It
   ranks below `ArrangementScheduled` and above a failed card or ended terms,
@@ -598,7 +606,9 @@ Follow-ups in other repos:
 - **staff-portal:** the applications queue, approving by granting terms
   with `applicationRef` set, and declining.
 - **milo:** the application, approval and decline emails, and the Help
-  Scout ticket.
+  Scout ticket. Send the decision emails from the application's settled
+  status, not when a decision is created, so a decline that races an
+  approval doesn't also send a "declined" email.
 
 | Repo | What changes |
 |---|---|
@@ -671,6 +681,9 @@ Follow-ups in other repos:
   `BillingArrangementApplication`, `BillingArrangementDecline`,
   `BillingArrangement.spec.applicationRef` and the `ApplicationPending`
   reason on `PaymentReady`.
+- 2026-10-23: From review: owner references on applications are fixed,
+  applying needs a billing address and is blocked while open-ended or
+  scheduled terms exist, and deleting an approval reopens the application.
 
 ## Future Work
 

@@ -421,6 +421,13 @@ func TestBillingArrangementSummaries(t *testing.T) {
 			want:  "alice@example.com deleted the payment terms record acme-terms for billing account acme",
 		},
 		{
+			name: "delete terms that approved an application",
+			audit: event("delete", nil, stored(invoiceSpec(map[string]any{
+				"applicationRef": map[string]any{"name": "acme-apply"},
+			}))),
+			want: "alice@example.com deleted the payment terms record acme-terms for billing account acme, so its application acme-apply is awaiting review again",
+		},
+		{
 			name:  "delete returning Status",
 			audit: event("delete", nil, map[string]any{"kind": "Status", "status": "Success"}),
 			want:  "alice@example.com deleted the payment terms record acme-terms",

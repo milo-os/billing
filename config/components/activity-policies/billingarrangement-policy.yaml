@@ -66,9 +66,10 @@ spec:
 
     # Deleting removes the record entirely (ending terms is the normal
     # path), so call it out against the billing account when we can.
+    # Terms that approved an application put it back up for review.
     - name: delete-invoice
       match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
-      summary: "{{ actor }} deleted the payment terms record {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+      summary: "{{ actor }} deleted the payment terms record {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}{{ has(audit.responseObject.spec.applicationRef) && has(audit.responseObject.spec.applicationRef.name) ? ', so its application ' + audit.responseObject.spec.applicationRef.name + ' is awaiting review again' : '' }}"
 
     - name: delete
       match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"

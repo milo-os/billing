@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"net/url"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -116,7 +117,8 @@ func olderObject(a, b metav1.Object) bool {
 }
 
 // ValidateBillingArrangementApplicationCreate validates a
-// BillingArrangementApplication on creation.
+// BillingArrangementApplication on creation. now decides which of the
+// account's arrangements are scheduled or active.
 //
 // c should be an uncached reader: the one-pending-application check
 // must see applications and decisions admitted moments ago.
@@ -124,15 +126,19 @@ func ValidateBillingArrangementApplicationCreate(
 	ctx context.Context,
 	c client.Reader,
 	app *billingv1alpha1.BillingArrangementApplication,
+	now time.Time,
 ) field.ErrorList {
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
 
 	account, errs := getReferencedBillingAccount(ctx, c, app.Namespace, app.Spec.BillingAccountRef.Name)
 	allErrs = append(allErrs, errs...)
-	if account != nil && (account.Spec.ContactInfo == nil || account.Spec.ContactInfo.Email == "") {
-		allErrs = append(allErrs, field.Forbidden(specPath.Child("billingAccountRef", "name"),
-			fmt.Sprintf("add billing contact details to billing account %q before applying for payment terms", account.Name)))
+	if account != nil {
+		if contact := account.Spec.ContactInfo; contact == nil || contact.Email == "" || contact.Address == nil {
+			allErrs = append(allErrs, field.Forbidden(specPath.Child("billingAccountRef", "name"),
+				fmt.Sprintf("add billing contact details and a billing address to billing account %q before applying for payment terms", account.Name)))
+		}
+		allErrs = append(allErrs, validateApplicationOwnerReferencesOnCreate(app, account)...)
 	}
 
 	allErrs = append(allErrs, validateApplicationSpec(app)...)
@@ -147,7 +153,7 @@ func ValidateBillingArrangementApplicationCreate(
 	}
 
 	if account != nil {
-		allErrs = append(allErrs, validateNoPendingApplication(ctx, c, app, account)...)
+		allErrs = append(allErrs, validateAccountCanApply(ctx, c, app, account, now)...)
 	}
 	return allErrs
 }
@@ -156,7 +162,8 @@ func ValidateBillingArrangementApplicationCreate(
 // BillingArrangementApplication on update. Only spec.withdrawn may
 // change, from false to true, and only while the application is
 // pending. The CEL rules on the CRD enforce the same, apart from the
-// pending check.
+// pending check. Owner references are held fixed too (see
+// validateApplicationOwnerReferencesOnUpdate), which CEL can't see.
 func ValidateBillingArrangementApplicationUpdate(
 	ctx context.Context,
 	c client.Reader,
@@ -164,6 +171,8 @@ func ValidateBillingArrangementApplicationUpdate(
 ) field.ErrorList {
 	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
+
+	allErrs = append(allErrs, validateApplicationOwnerReferencesOnUpdate(ctx, c, oldApp, newApp)...)
 
 	oldSpec, newSpec := oldApp.Spec.DeepCopy(), newApp.Spec.DeepCopy()
 	oldSpec.Withdrawn, newSpec.Withdrawn = false, false
@@ -230,14 +239,21 @@ func validateApplicationSpec(app *billingv1alpha1.BillingArrangementApplication)
 	return allErrs
 }
 
-// validateNoPendingApplication rejects a second application for a
-// billing account while another is awaiting review. Pending is derived
-// from decisions rather than read from status, which may lag.
-func validateNoPendingApplication(
+// validateAccountCanApply rejects an application when the billing
+// account can't take one now:
+//   - another application for it is awaiting review. Pending is derived
+//     from decisions rather than read from status, which may lag. Two
+//     creates racing each other can both pass this check; both then show
+//     up in the review queue and staff decline one, so that's accepted.
+//   - it has terms with no end date, or terms scheduled to start, so
+//     there's nothing to apply for. Active terms with an end date can be
+//     renewed by applying again.
+func validateAccountCanApply(
 	ctx context.Context,
 	c client.Reader,
 	app *billingv1alpha1.BillingArrangementApplication,
 	account *billingv1alpha1.BillingAccount,
+	now time.Time,
 ) field.ErrorList {
 	fldPath := field.NewPath("spec", "billingAccountRef", "name")
 
@@ -261,7 +277,92 @@ func validateNoPendingApplication(
 				fmt.Sprintf("application %q for billing account %q is already awaiting review", other.Name, account.Name))}
 		}
 	}
+
+	for i := range arrs {
+		arr := &arrs[i]
+		if !arr.DeletionTimestamp.IsZero() || arr.Spec.BillingAccountRef.Name != account.Name ||
+			OwnedByOtherBillingAccount(arr, account.UID) {
+			continue
+		}
+		switch ArrangementPhaseAt(arr, now) {
+		case billingv1alpha1.BillingArrangementPhaseScheduled:
+			return field.ErrorList{field.Forbidden(fldPath,
+				fmt.Sprintf("billing account %q already has payment terms starting at %s",
+					account.Name, ArrangementStart(arr, arr.CreationTimestamp.Time).UTC().Format(time.RFC3339)))}
+		case billingv1alpha1.BillingArrangementPhaseActive:
+			if arr.Spec.EndsAt == nil {
+				return field.ErrorList{field.Forbidden(fldPath,
+					fmt.Sprintf("billing account %q already has payment terms with no end date", account.Name))}
+			}
+		}
+	}
 	return nil
+}
+
+// validateApplicationOwnerReferencesOnCreate allows an application to be
+// owned only by the billing account it's for. Any other owner reference
+// would let it outlive or be collected separately from that account.
+func validateApplicationOwnerReferencesOnCreate(
+	app *billingv1alpha1.BillingArrangementApplication,
+	account *billingv1alpha1.BillingAccount,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	fldPath := field.NewPath("metadata", "ownerReferences")
+	for i, ref := range app.OwnerReferences {
+		if ref.Kind != "BillingAccount" || ref.UID != account.UID || ref.Name != account.Name {
+			allErrs = append(allErrs, field.Forbidden(fldPath.Index(i),
+				fmt.Sprintf("an application can only be owned by billing account %q", account.Name)))
+		}
+	}
+	return allErrs
+}
+
+// validateApplicationOwnerReferencesOnUpdate holds an application's
+// owner references fixed. Customers can update applications (to withdraw
+// them), and pointing the billing account reference elsewhere would hide
+// the application from the one-pending check and PaymentReady, then let
+// the garbage collector delete it, which customers aren't allowed to do.
+//
+// The only change allowed is removing a reference whose owner is gone or
+// being deleted, which is how the garbage collector orphans dependents.
+func validateApplicationOwnerReferencesOnUpdate(
+	ctx context.Context,
+	c client.Reader,
+	oldApp, newApp *billingv1alpha1.BillingArrangementApplication,
+) field.ErrorList {
+	fldPath := field.NewPath("metadata", "ownerReferences")
+
+	for i, ref := range newApp.OwnerReferences {
+		if !containsOwnerReference(oldApp.OwnerReferences, ref) {
+			return field.ErrorList{field.Forbidden(fldPath.Index(i), "owner references can't be added or changed")}
+		}
+	}
+	for _, ref := range oldApp.OwnerReferences {
+		if containsOwnerReference(newApp.OwnerReferences, ref) || ref.Kind != "BillingAccount" {
+			continue
+		}
+		var account billingv1alpha1.BillingAccount
+		err := c.Get(ctx, types.NamespacedName{Namespace: oldApp.Namespace, Name: ref.Name}, &account)
+		switch {
+		case apierrors.IsNotFound(err):
+			continue
+		case err != nil:
+			return field.ErrorList{field.InternalError(fldPath, fmt.Errorf("reading billing account: %w", err))}
+		case account.UID == ref.UID && account.DeletionTimestamp.IsZero():
+			return field.ErrorList{field.Forbidden(fldPath,
+				fmt.Sprintf("the owner reference to billing account %q can't be removed while the account exists", ref.Name))}
+		}
+	}
+	return nil
+}
+
+func containsOwnerReference(refs []metav1.OwnerReference, ref metav1.OwnerReference) bool {
+	for _, r := range refs {
+		if equality.Semantic.DeepEqual(r, ref) {
+			return true
+		}
+	}
+	return false
 }
 
 // ValidateBillingArrangementDeclineCreate validates a
