@@ -12,6 +12,9 @@ package v1alpha1
 type ServicePricingSnapshotApplyConfiguration struct {
 	// Name is the metadata.name of the source ServicePricing.
 	Name *string `json:"name,omitempty"`
+	// Discount is the resolved discount for this service pricing snapshot,
+	// captured when the Offer becomes GA.
+	Discount *DiscountApplyConfiguration `json:"discount,omitempty"`
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	Spec *ServicePricingSpecApplyConfiguration `json:"spec,omitempty"`
 }
@@ -27,6 +30,14 @@ func ServicePricingSnapshot() *ServicePricingSnapshotApplyConfiguration {
 // If called multiple times, the Name field is set to the value of the last call.
 func (b *ServicePricingSnapshotApplyConfiguration) WithName(value string) *ServicePricingSnapshotApplyConfiguration {
 	b.Name = &value
+	return b
+}
+
+// WithDiscount sets the Discount field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Discount field is set to the value of the last call.
+func (b *ServicePricingSnapshotApplyConfiguration) WithDiscount(value *DiscountApplyConfiguration) *ServicePricingSnapshotApplyConfiguration {
+	b.Discount = value
 	return b
 }
 

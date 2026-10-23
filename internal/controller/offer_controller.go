@@ -164,9 +164,17 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 		if err := r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: ref.Name}, &sp); err != nil {
 			return nil, fmt.Errorf("resolving servicePricingRef %s/%s: %w", ns, ref.Name, err)
 		}
+		var discount *billingv1alpha1.Discount
+		if ref.Discount != nil {
+			discount = ref.Discount.DeepCopy()
+		} else if offer.Spec.Discount != nil {
+			discount = offer.Spec.Discount.DeepCopy()
+		}
+
 		snapshots = append(snapshots, billingv1alpha1.ServicePricingSnapshot{
-			Name: sp.Name,
-			Spec: *sp.Spec.DeepCopy(),
+			Name:     sp.Name,
+			Discount: discount,
+			Spec:     *sp.Spec.DeepCopy(),
 		})
 	}
 	return snapshots, nil
