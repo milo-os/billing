@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
@@ -13,12 +15,15 @@ import (
 
 	usagev1alpha1 "go.miloapis.com/billing/api/usage/v1alpha1"
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/usagereport"
 )
+
+func date(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
 
 var testNow = time.Date(2026, time.October, 21, 12, 0, 0, 0, time.UTC)
 
 type fakeAPI struct {
-	scope  scope
+	scope  usagereport.Scope
 	spec   usagev1alpha1.UsageQuerySpec
 	status usagev1alpha1.UsageQueryStatus
 	defs   []billingv1alpha1.MeterDefinition
@@ -26,7 +31,7 @@ type fakeAPI struct {
 	err    error
 }
 
-func (f *fakeAPI) queryUsage(_ context.Context, s scope, spec usagev1alpha1.UsageQuerySpec) (*usagev1alpha1.UsageQuery, error) {
+func (f *fakeAPI) queryUsage(_ context.Context, s usagereport.Scope, spec usagev1alpha1.UsageQuerySpec) (*usagev1alpha1.UsageQuery, error) {
 	f.scope, f.spec = s, spec
 	if f.err != nil {
 		return nil, f.err
@@ -38,7 +43,9 @@ func (f *fakeAPI) listMeterDefinitions(context.Context) ([]billingv1alpha1.Meter
 	return f.defs, nil
 }
 
-func (f *fakeAPI) paymentTerms(context.Context, scope) *billingv1alpha1.PaymentTerms { return f.terms }
+func (f *fakeAPI) paymentTerms(context.Context, usagereport.Scope) *billingv1alpha1.PaymentTerms {
+	return f.terms
+}
 
 func meterDef(name, meterName, display, unit, aggregation string, dims ...string) billingv1alpha1.MeterDefinition {
 	d := billingv1alpha1.MeterDefinition{}
@@ -99,7 +106,7 @@ func sampleAPI() *fakeAPI {
 	}
 }
 
-func run(t *testing.T, client *fakeAPI, s scope, format string, opts summaryOptions) string {
+func run(t *testing.T, client *fakeAPI, s usagereport.Scope, format string, opts summaryOptions) string {
 	t.Helper()
 	if opts.cycle == "" {
 		opts.cycle = "current"
@@ -113,7 +120,7 @@ func run(t *testing.T, client *fakeAPI, s scope, format string, opts summaryOpti
 
 func TestSummaryQueriesTheCurrentCycleWithSpend(t *testing.T) {
 	client := sampleAPI()
-	run(t, client, scope{org: "acme"}, "table", summaryOptions{})
+	run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{})
 
 	if !client.spec.StartTime.Equal(&metav1.Time{Time: date(2026, time.October, 1)}) {
 		t.Errorf("start = %v", client.spec.StartTime)
@@ -130,7 +137,7 @@ func TestSummaryQueriesTheCurrentCycleWithSpend(t *testing.T) {
 }
 
 func TestSummaryTable(t *testing.T) {
-	out := run(t, sampleAPI(), scope{org: "acme"}, "table", summaryOptions{})
+	out := run(t, sampleAPI(), usagereport.Scope{Org: "acme"}, "table", summaryOptions{})
 
 	for _, want := range []string{
 		"Usage for organization acme, current billing cycle (1 Oct - 1 Nov 2026)",
@@ -150,7 +157,7 @@ func TestSummaryTable(t *testing.T) {
 }
 
 func TestSummaryAllShowsIdleMeters(t *testing.T) {
-	out := run(t, sampleAPI(), scope{org: "acme"}, "table", summaryOptions{all: true})
+	out := run(t, sampleAPI(), usagereport.Scope{Org: "acme"}, "table", summaryOptions{all: true})
 	if !strings.Contains(out, "DNS Queries") || strings.Contains(out, "hidden") {
 		t.Errorf("--all should list every meter:\n%s", out)
 	}
@@ -162,7 +169,7 @@ func TestSummaryDeprecatedMeters(t *testing.T) {
 	client.defs[0].Spec.Phase = billingv1alpha1.PhaseDeprecated
 	client.defs[2].Spec.Phase = billingv1alpha1.PhaseDeprecated
 
-	out := run(t, client, scope{org: "acme"}, "table", summaryOptions{all: true})
+	out := run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{all: true})
 	if !strings.Contains(out, "Memory Seconds") {
 		t.Errorf("a deprecated meter with usage stays, so the rows add up:\n%s", out)
 	}
@@ -170,7 +177,7 @@ func TestSummaryDeprecatedMeters(t *testing.T) {
 		t.Errorf("a deprecated meter without usage is left out, even with --all:\n%s", out)
 	}
 
-	out = run(t, client, scope{org: "acme"}, "table", summaryOptions{})
+	out = run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{})
 	if strings.Contains(out, "hidden") {
 		t.Errorf("deprecated meters don't count as hidden:\n%s", out)
 	}
@@ -179,7 +186,7 @@ func TestSummaryDeprecatedMeters(t *testing.T) {
 func TestSummaryBreakdown(t *testing.T) {
 	client := sampleAPI()
 	client.defs[0].Status.SystemDimensions = []string{"project_name"}
-	out := run(t, client, scope{org: "acme"}, "table", summaryOptions{by: "region"})
+	out := run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{by: "region"})
 
 	if got := client.spec.Groupings; len(got) != 2 || got[1].GroupBy[0] != "region" {
 		t.Errorf("groupings = %+v", got)
@@ -197,7 +204,7 @@ func TestSummaryBreakdown(t *testing.T) {
 
 func TestSummaryDaily(t *testing.T) {
 	client := sampleAPI()
-	out := run(t, client, scope{org: "acme"}, "table", summaryOptions{daily: true})
+	out := run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{daily: true})
 
 	if client.spec.Granularity != usagev1alpha1.UsageGranularityDay {
 		t.Errorf("granularity = %q", client.spec.Granularity)
@@ -212,9 +219,9 @@ func TestSummaryDaily(t *testing.T) {
 func TestSummaryProjectScope(t *testing.T) {
 	client := sampleAPI()
 	client.status.BillingAccounts = nil // project queries never list them
-	out := run(t, client, scope{org: "acme", project: "web"}, "table", summaryOptions{})
+	out := run(t, client, usagereport.Scope{Org: "acme", Project: "web"}, "table", summaryOptions{})
 
-	if client.scope.project != "web" {
+	if client.scope.Project != "web" {
 		t.Errorf("scope = %+v", client.scope)
 	}
 	if !strings.Contains(out, "Usage for project web") || !strings.Contains(out, "Memory Seconds") {
@@ -225,14 +232,14 @@ func TestSummaryProjectScope(t *testing.T) {
 func TestSummaryNoBillingAccount(t *testing.T) {
 	client := sampleAPI()
 	client.status.BillingAccounts = nil
-	out := run(t, client, scope{org: "acme"}, "table", summaryOptions{})
+	out := run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{})
 	if !strings.Contains(out, "no billing account") {
 		t.Errorf("unexpected output:\n%s", out)
 	}
 }
 
 func TestSummaryJSONIsTheUsageQuery(t *testing.T) {
-	out := run(t, sampleAPI(), scope{org: "acme"}, "json", summaryOptions{})
+	out := run(t, sampleAPI(), usagereport.Scope{Org: "acme"}, "json", summaryOptions{})
 	var q usagev1alpha1.UsageQuery
 	if err := json.Unmarshal([]byte(out), &q); err != nil {
 		t.Fatalf("not a UsageQuery: %v\n%s", err, out)
@@ -245,7 +252,7 @@ func TestSummaryJSONIsTheUsageQuery(t *testing.T) {
 func TestPreviousCycleUsesPaymentTerms(t *testing.T) {
 	client := sampleAPI()
 	client.terms = &billingv1alpha1.PaymentTerms{InvoiceFrequency: "Monthly", InvoiceDayOfMonth: 15}
-	run(t, client, scope{org: "acme"}, "table", summaryOptions{cycle: "previous"})
+	run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{cycle: "previous"})
 
 	if !client.spec.StartTime.Time.Equal(date(2026, time.September, 15)) || !client.spec.EndTime.Time.Equal(date(2026, time.October, 15)) {
 		t.Errorf("window = %v - %v", client.spec.StartTime, client.spec.EndTime)
@@ -254,7 +261,7 @@ func TestPreviousCycleUsesPaymentTerms(t *testing.T) {
 
 func TestCustomRange(t *testing.T) {
 	client := sampleAPI()
-	run(t, client, scope{org: "acme"}, "table", summaryOptions{from: "2026-10-01", to: "2026-10-15"})
+	run(t, client, usagereport.Scope{Org: "acme"}, "table", summaryOptions{from: "2026-10-01", to: "2026-10-15"})
 	if !client.spec.StartTime.Time.Equal(date(2026, time.October, 1)) || !client.spec.EndTime.Time.Equal(date(2026, time.October, 15)) {
 		t.Errorf("window = %v - %v", client.spec.StartTime, client.spec.EndTime)
 	}
@@ -269,7 +276,7 @@ func TestInvalidOptionsAreUsageErrors(t *testing.T) {
 		{cycle: "current", by: "regoin"},
 	}
 	for _, opts := range cases {
-		err := runSummary(context.Background(), &bytes.Buffer{}, sampleAPI(), scope{org: "acme"}, "table", opts, testNow)
+		err := runSummary(context.Background(), &bytes.Buffer{}, sampleAPI(), usagereport.Scope{Org: "acme"}, "table", opts, testNow)
 		var usageErr *usageError
 		if !errors.As(err, &usageErr) {
 			t.Errorf("%+v: got %v, want a usage error", opts, err)
@@ -287,32 +294,18 @@ func TestRootCommandNeedsAnOrganization(t *testing.T) {
 	}
 }
 
-func TestServiceName(t *testing.T) {
-	cases := map[string]string{
-		"compute.datumapis.com/instance/cpu-seconds": "Compute",
-		"dns.networking.miloapis.com/zone/queries":   "DNS",
-		"ai-gateway.miloapis.com/requests":           "AI Gateway",
-		"":                                           "Other",
-	}
-	for in, want := range cases {
-		if got := serviceName(in); got != want {
-			t.Errorf("serviceName(%q) = %q, want %q", in, got, want)
-		}
-	}
-}
-
 func TestOrgFlagOverridesTheContextProject(t *testing.T) {
 	t.Setenv("DATUM_ORG", "home-org")
 	t.Setenv("DATUM_PROJECT", "home-project")
 
 	cases := []struct {
 		args []string
-		want scope
+		want usagereport.Scope
 	}{
-		{nil, scope{org: "home-org", project: "home-project"}},
-		{[]string{"--org", "other-org"}, scope{org: "other-org"}},
-		{[]string{"--org", "other-org", "--project", "web"}, scope{org: "other-org", project: "web"}},
-		{[]string{"--project", "web"}, scope{org: "home-org", project: "web"}},
+		{nil, usagereport.Scope{Org: "home-org", Project: "home-project"}},
+		{[]string{"--org", "other-org"}, usagereport.Scope{Org: "other-org"}},
+		{[]string{"--org", "other-org", "--project", "web"}, usagereport.Scope{Org: "other-org", Project: "web"}},
+		{[]string{"--project", "web"}, usagereport.Scope{Org: "home-org", Project: "web"}},
 	}
 	for _, c := range cases {
 		client := sampleAPI()

@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
@@ -12,6 +14,7 @@ import (
 	"sigs.k8s.io/yaml"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/usagereport"
 )
 
 func newMetersCommand(out io.Writer, newAPI func() (api, error)) *cobra.Command {
@@ -72,7 +75,7 @@ func renderMeters(out io.Writer, defs []billingv1alpha1.MeterDefinition, format 
 			dimensions = "—"
 		}
 		_, _ = fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
-			serviceName(d.Spec.MeterName), d.Spec.DisplayName, d.Name,
+			usagereport.ServiceName(d.Spec.MeterName), d.Spec.DisplayName, d.Name,
 			d.Spec.Measurement.Unit, d.Spec.Measurement.Aggregation, dimensions)
 	}
 	return tw.Flush()

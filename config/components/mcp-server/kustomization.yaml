@@ -1,0 +1,23 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# billing-mcp serves billing's usage tools, knowledge and skills to Datum's
+# assistant (Patch) over MCP. See config/milo/assistant-capability for the
+# catalog entries that point Patch at it.
+#
+# The deployment mounts a kubeconfig naming the Milo API server and CA from
+# the billing-mcp-milo-kubeconfig ConfigMap (key kubeconfig.yaml), which the
+# environment provides.
+# The server reads only with each caller's own token, so the kubeconfig needs
+# no credentials.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - service_account.yaml
+  - deployment.yaml
+  - service.yaml
+  - networkpolicy.yaml
+
+images:
+  - name: ghcr.io/milo-os/billing
+    newTag: latest

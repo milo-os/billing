@@ -1,0 +1,51 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Only the assistant may call billing-mcp, and billing-mcp may only reach DNS
+# and the Milo API server.
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: billing-mcp-assistant-only
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing-mcp
+    app.kubernetes.io/instance: billing-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: billing.miloapis.com
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: billing-mcp
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: patch-system
+          podSelector:
+            matchExpressions:
+              - key: app
+                operator: In
+                values:
+                  - assistant
+                  - assistant-apiserver
+      ports:
+        - protocol: TCP
+          port: 8080
+  egress:
+    - to:
+        - namespaceSelector: {}
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: datum-system
+      ports:
+        - protocol: TCP
+          port: 6443

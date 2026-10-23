@@ -1,12 +1,13 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 package main
 
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
-	"slices"
-	"sort"
 	"strings"
 	"text/tabwriter"
 	"time"
@@ -17,6 +18,7 @@ import (
 
 	usagev1alpha1 "go.miloapis.com/billing/api/usage/v1alpha1"
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/usagereport"
 )
 
 type summaryOptions struct {
@@ -77,14 +79,14 @@ credits and discounts.`,
 
 // resolveCommon reads the --org, --project and --output flags that
 // plugin.NewRootCmd defines and datumctl pre-fills from the active context.
-func resolveCommon(cmd *cobra.Command) (scope, string, error) {
+func resolveCommon(cmd *cobra.Command) (usagereport.Scope, string, error) {
 	org, _ := cmd.Flags().GetString("org")
 	project, _ := cmd.Flags().GetString("project")
 	format, _ := cmd.Flags().GetString("output")
 	switch format {
 	case "table", "json", "yaml":
 	default:
-		return scope{}, "", usageErrorf("unknown output format %q; use table, json or yaml", format)
+		return usagereport.Scope{}, "", usageErrorf("unknown output format %q; use table, json or yaml", format)
 	}
 	// datumctl pre-fills both flags from the active context. Naming another
 	// organization without a project means that whole organization, not the
@@ -93,27 +95,34 @@ func resolveCommon(cmd *cobra.Command) (scope, string, error) {
 		project = ""
 	}
 	if org == "" && project == "" {
-		return scope{}, "", usageErrorf("no organization selected; run `datumctl ctx` or pass --org")
+		return usagereport.Scope{}, "", usageErrorf("no organization selected; run `datumctl ctx` or pass --org")
 	}
-	return scope{org: org, project: project}, format, nil
+	return usagereport.Scope{Org: org, Project: project}, format, nil
 }
 
-func runSummary(ctx context.Context, out io.Writer, client api, s scope, format string, opts summaryOptions, now time.Time) error {
-	w, err := resolveWindow(ctx, client, s, opts, now)
-	if err != nil {
+func runSummary(ctx context.Context, out io.Writer, client api, s usagereport.Scope, format string, opts summaryOptions, now time.Time) error {
+	w, err := usagereport.ResolveWindow(
+		usagereport.WindowOptions{Cycle: opts.cycle, From: opts.from, To: opts.to},
+		func() *billingv1alpha1.PaymentTerms { return client.paymentTerms(ctx, s) },
+		now,
+	)
+	var inputErr *usagereport.InputError
+	if errors.As(err, &inputErr) {
+		return usageErrorf("%s", flagNames.Replace(inputErr.Msg))
+	} else if err != nil {
 		return err
 	}
 
 	// The catalog adds display names and lets us catch a mistyped --by; the
 	// usage itself stands without it.
 	defs, _ := client.listMeterDefinitions(ctx)
-	if opts.by != "" && len(defs) > 0 && !hasDimension(defs, opts.by) {
+	if opts.by != "" && len(defs) > 0 && !usagereport.HasDimension(defs, opts.by) {
 		return usageErrorf("no meter has a dimension named %q; run `datumctl billing meters` to see them", opts.by)
 	}
 
 	spec := usagev1alpha1.UsageQuerySpec{
-		StartTime:    metav1.NewTime(w.start),
-		EndTime:      metav1.NewTime(w.end),
+		StartTime:    metav1.NewTime(w.Start),
+		EndTime:      metav1.NewTime(w.End),
 		TimeZone:     "UTC",
 		IncludeSpend: true,
 		// Meters are left empty so the query reads every meter, and a
@@ -147,214 +156,65 @@ func runSummary(ctx context.Context, out io.Writer, client api, s scope, format 
 		return err
 	}
 
-	return renderTable(out, s, w, query, catalog(defs), opts)
+	report := usagereport.Build(s, w, query, defs, usagereport.ReportOptions{
+		By:          opts.by,
+		Daily:       opts.daily,
+		IncludeIdle: opts.all,
+	})
+	return renderTable(out, report, opts)
 }
 
-func resolveWindow(ctx context.Context, client api, s scope, opts summaryOptions, now time.Time) (window, error) {
-	if opts.from != "" {
-		start, err := parseTime(opts.from)
-		if err != nil {
-			return window{}, usageErrorf("invalid --from: %v", err)
-		}
-		end := now.UTC()
-		if opts.to != "" {
-			if end, err = parseTime(opts.to); err != nil {
-				return window{}, usageErrorf("invalid --to: %v", err)
-			}
-		}
-		if !end.After(start) {
-			return window{}, usageErrorf("--to must be after --from")
-		}
-		return window{name: "custom range", start: start, end: end, periodEnd: end}, nil
-	}
-	if opts.to != "" {
-		return window{}, usageErrorf("--to needs --from")
-	}
-
-	current, previous := billingCycles(client.paymentTerms(ctx, s), now)
-	switch opts.cycle {
-	case "current":
-		return current, nil
-	case "previous":
-		return previous, nil
-	}
-	return window{}, usageErrorf("unknown --cycle %q; use current or previous", opts.cycle)
-}
-
-func hasDimension(defs []billingv1alpha1.MeterDefinition, dimension string) bool {
-	for _, d := range defs {
-		if slices.Contains(d.Spec.Measurement.Dimensions, dimension) ||
-			slices.Contains(d.Status.SystemDimensions, dimension) {
-			return true
-		}
-	}
-	return false
-}
-
-func parseTime(v string) (time.Time, error) {
-	if t, err := time.Parse(time.DateOnly, v); err == nil {
-		return t.UTC(), nil
-	}
-	t, err := time.Parse(time.RFC3339, v)
-	if err != nil {
-		return time.Time{}, fmt.Errorf("%q is not a date (YYYY-MM-DD) or RFC 3339 time", v)
-	}
-	return t.UTC(), nil
-}
-
-// meterInfo is what the table shows about a meter beyond its usage.
-type meterInfo struct {
-	displayName string
-	service     string
-	// deprecated meters are on their way out; they're shown only while
-	// they still carry usage.
-	deprecated bool
-}
-
-func catalog(defs []billingv1alpha1.MeterDefinition) map[string]meterInfo {
-	out := make(map[string]meterInfo, len(defs))
-	for _, d := range defs {
-		out[d.Name] = meterInfo{
-			displayName: d.Spec.DisplayName,
-			service:     serviceName(d.Spec.MeterName),
-			deprecated:  d.Spec.Phase == billingv1alpha1.PhaseDeprecated,
-		}
-	}
-	return out
-}
-
-var serviceAcronyms = map[string]string{"dns": "DNS", "ai": "AI", "alb": "ALB", "iam": "IAM"}
-
-// serviceName derives a service label from a meter name's domain, e.g.
-// "compute.datumapis.com/instance/cpu-seconds" -> "Compute".
-func serviceName(meterName string) string {
-	domain, _, _ := strings.Cut(meterName, "/")
-	label, _, _ := strings.Cut(domain, ".")
-	if label == "" {
-		return "Other"
-	}
-	if acronym, ok := serviceAcronyms[label]; ok {
-		return acronym
-	}
-	words := strings.FieldsFunc(label, func(r rune) bool { return r == '-' || r == '_' })
-	for i, word := range words {
-		if acronym, ok := serviceAcronyms[word]; ok {
-			words[i] = acronym
-		} else {
-			words[i] = strings.ToUpper(word[:1]) + word[1:]
-		}
-	}
-	return strings.Join(words, " ")
-}
+// flagNames turns the shared window errors' field names into this
+// command's flags.
+var flagNames = strings.NewReplacer("invalid from", "invalid --from", "invalid to", "invalid --to",
+	"to must be after from", "--to must be after --from", "to needs from", "--to needs --from",
+	"unknown cycle", "unknown --cycle")
 
 type tableRow struct {
-	date    string
-	service string
-	meter   string
-	group   string
-	usage   string
-	spend   string
-	cost    float64
+	date, service, meter, group, usage, spend string
 }
 
-func renderTable(out io.Writer, s scope, w window, q *usagev1alpha1.UsageQuery, info map[string]meterInfo, opts summaryOptions) error {
-	_, _ = fmt.Fprintf(out, "Usage for %s, %s (%s)\n\n", s, w.name, rangeLabel(w.start, w.periodEnd))
+func renderTable(out io.Writer, r usagereport.Report, opts summaryOptions) error {
+	_, _ = fmt.Fprintf(out, "Usage for %s, %s (%s)\n\n", r.Scope, r.Period.Name, r.Period.Label)
 
-	if s.project == "" && len(q.Status.BillingAccounts) == 0 {
+	if r.NoBillingAccount {
 		_, _ = fmt.Fprintln(out, "This organization has no billing account, so there is no usage to show.")
 		return nil
 	}
 
 	breakdown := opts.by != ""
+	// Spend is per meter, so it only fits a row per meter.
 	showSpend := !breakdown && !opts.daily
+
 	var rows []tableRow
-	hidden := 0
-
-	for _, m := range q.Status.Meters {
-		mi, ok := info[m.MeterDefinition]
-		if !ok {
-			mi = meterInfo{displayName: m.MeterDefinition, service: serviceName(m.MeterName)}
-		}
-		unit := parseUnit(m.Unit)
-		total := firstSeries(m.Groupings, 0)
-
-		if total == nil || (parseDecimal(total.Total) == 0 && len(total.Points) == 0) {
-			// A deprecated meter without usage isn't worth listing, even with
-			// --all; one that still has usage stays so the rows add up.
-			if mi.deprecated {
-				continue
-			}
-			if !opts.all {
-				hidden++
-				continue
-			}
+	for _, m := range r.Meters {
+		row := tableRow{service: m.Service, meter: m.Name, usage: m.Display, spend: "—"}
+		switch {
+		case m.Spend != nil:
+			row.spend = m.Spend.Display
+		case m.SpendUnavailable:
+			row.spend = "unavailable"
 		}
 
-		var series []usagev1alpha1.UsageSeries
-		if breakdown {
-			if len(m.Groupings) > 1 {
-				series = m.Groupings[1].Series
-			}
-			if len(series) == 0 && !opts.all {
-				continue
-			}
-		} else if total != nil {
-			series = []usagev1alpha1.UsageSeries{*total}
-		}
-		if len(series) == 0 {
-			series = []usagev1alpha1.UsageSeries{{Total: "0"}}
-		}
-
-		for _, sr := range series {
-			group := ""
-			if breakdown {
-				group = sr.Group[opts.by]
-				if group == "" {
-					group = "(none)"
+		switch {
+		case breakdown && m.Breakdown != nil:
+			for _, g := range m.Breakdown.Groups {
+				if !opts.daily {
+					rows = append(rows, tableRow{service: m.Service, meter: m.Name, group: g.Value, usage: g.Display})
+					continue
+				}
+				for _, p := range g.Daily {
+					rows = append(rows, tableRow{date: p.Date, service: m.Service, meter: m.Name, group: g.Value, usage: p.Display})
 				}
 			}
-			if opts.daily {
-				for _, p := range sr.Points {
-					rows = append(rows, tableRow{
-						date:    p.Start.UTC().Format(time.DateOnly),
-						service: mi.service,
-						meter:   mi.displayName,
-						group:   group,
-						usage:   formatUsage(unit, parseDecimal(p.Value)),
-					})
-				}
-				continue
+		case opts.daily:
+			for _, p := range m.Daily {
+				rows = append(rows, tableRow{date: p.Date, service: m.Service, meter: m.Name, usage: p.Display})
 			}
-			row := tableRow{
-				service: mi.service,
-				meter:   mi.displayName,
-				group:   group,
-				usage:   withQualifier(formatUsage(unit, parseDecimal(sr.Total)), m.Aggregation),
-				spend:   "—",
-			}
-			if m.Spend != nil {
-				row.spend = formatMoney(m.Spend.Amount, m.Spend.Currency)
-				row.cost = parseDecimal(m.Spend.Amount)
-			} else if m.SpendError != "" {
-				row.spend = "unavailable"
-			}
+		default:
 			rows = append(rows, row)
 		}
 	}
-
-	sort.SliceStable(rows, func(i, j int) bool {
-		a, b := rows[i], rows[j]
-		if a.service != b.service {
-			return a.service < b.service
-		}
-		if a.meter != b.meter {
-			return a.meter < b.meter
-		}
-		if a.group != b.group {
-			return a.group < b.group
-		}
-		return a.date < b.date
-	})
 
 	if len(rows) == 0 {
 		_, _ = fmt.Fprintln(out, "No usage recorded in this period.")
@@ -373,18 +233,18 @@ func renderTable(out io.Writer, s scope, w window, q *usagev1alpha1.UsageQuery, 
 			header = append(header, "SPEND")
 		}
 		_, _ = fmt.Fprintln(tw, strings.Join(header, "\t"))
-		for _, r := range rows {
+		for _, row := range rows {
 			cells := []string{}
 			if opts.daily {
-				cells = append(cells, r.date)
+				cells = append(cells, row.date)
 			}
-			cells = append(cells, r.service, r.meter)
+			cells = append(cells, row.service, row.meter)
 			if breakdown {
-				cells = append(cells, r.group)
+				cells = append(cells, row.group)
 			}
-			cells = append(cells, r.usage)
+			cells = append(cells, row.usage)
 			if showSpend {
-				cells = append(cells, r.spend)
+				cells = append(cells, row.spend)
 			}
 			_, _ = fmt.Fprintln(tw, strings.Join(cells, "\t"))
 		}
@@ -395,24 +255,17 @@ func renderTable(out io.Writer, s scope, w window, q *usagev1alpha1.UsageQuery, 
 
 	_, _ = fmt.Fprintln(out)
 	switch {
-	case q.Status.Spend != nil:
-		_, _ = fmt.Fprintf(out, "Spend this period: %s\n", formatMoney(q.Status.Spend.Amount, q.Status.Spend.Currency))
-	case q.Status.SpendError != "":
+	case r.Spend != nil:
+		_, _ = fmt.Fprintf(out, "Spend this period: %s\n", r.Spend.Display)
+	case r.SpendUnavailable:
 		_, _ = fmt.Fprintln(out, "Spend this period: unavailable")
 	}
-	if hidden > 0 {
+	if n := r.MetersWithoutUsage; n > 0 {
 		noun := "meters"
-		if hidden == 1 {
+		if n == 1 {
 			noun = "meter"
 		}
-		_, _ = fmt.Fprintf(out, "%d %s with no usage hidden; use --all to show them.\n", hidden, noun)
+		_, _ = fmt.Fprintf(out, "%d %s with no usage hidden; use --all to show them.\n", n, noun)
 	}
 	return nil
-}
-
-func firstSeries(groupings []usagev1alpha1.UsageGroupingResult, index int) *usagev1alpha1.UsageSeries {
-	if len(groupings) <= index || len(groupings[index].Series) == 0 {
-		return nil
-	}
-	return &groupings[index].Series[0]
 }

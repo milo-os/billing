@@ -10,7 +10,6 @@ require (
 	github.com/spf13/cobra v1.10.2
 	go.datum.net/datumctl v0.22.0
 	go.miloapis.com/billing v0.4.2
-	golang.org/x/text v0.43.0
 	k8s.io/apimachinery v0.37.1
 	sigs.k8s.io/yaml v1.6.0
 )
@@ -26,6 +25,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/net v0.57.0 // indirect
+	golang.org/x/text v0.43.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect

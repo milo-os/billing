@@ -1,4 +1,6 @@
-package main
+// SPDX-License-Identifier: AGPL-3.0-only
+
+package usagereport
 
 import (
 	"time"
@@ -6,21 +8,25 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-// window is the time range a query reads. end is capped at "now" for an
+// Window is the time range a query reads. end is capped at "now" for an
 // in-progress cycle; periodEnd is where the cycle actually ends.
-type window struct {
-	name      string
-	start     time.Time
-	end       time.Time
-	periodEnd time.Time
+type Window struct {
+	// Name says which window this is, e.g. "current billing cycle".
+	Name string
+	// Start and End are the range a query reads; End is capped at now for
+	// an in-progress cycle.
+	Start time.Time
+	End   time.Time
+	// PeriodEnd is where the cycle actually ends.
+	PeriodEnd time.Time
 }
 
 var frequencyMonths = map[string]int{"Monthly": 1, "Quarterly": 3, "Annual": 12}
 
-// billingCycles returns the current and previous billing cycles for a
+// BillingCycles returns the current and previous billing cycles for a
 // billing account's payment terms, the same windows the portal's cycle
 // picker offers. Without terms it uses calendar months.
-func billingCycles(terms *billingv1alpha1.PaymentTerms, now time.Time) (current, previous window) {
+func BillingCycles(terms *billingv1alpha1.PaymentTerms, now time.Time) (current, previous Window) {
 	day, months := 1, 1
 	if terms != nil {
 		if terms.InvoiceDayOfMonth > 0 {
@@ -42,8 +48,8 @@ func billingCycles(terms *billingv1alpha1.PaymentTerms, now time.Time) (current,
 	periodEnd := addMonths(start, months, day)
 	previousStart := addMonths(start, -months, day)
 
-	current = window{name: "current billing cycle", start: start, end: minTime(periodEnd, now), periodEnd: periodEnd}
-	previous = window{name: "previous billing cycle", start: previousStart, end: start, periodEnd: start}
+	current = Window{Name: "current billing cycle", Start: start, End: minTime(periodEnd, now), PeriodEnd: periodEnd}
+	previous = Window{Name: "previous billing cycle", Start: previousStart, End: start, PeriodEnd: start}
 	return current, previous
 }
 
@@ -69,8 +75,8 @@ func minTime(a, b time.Time) time.Time {
 	return b
 }
 
-// rangeLabel renders a window like "30 Sep - 30 Oct 2026".
-func rangeLabel(start, end time.Time) string {
+// RangeLabel renders a Window like "30 Sep - 30 Oct 2026".
+func RangeLabel(start, end time.Time) string {
 	if start.Year() == end.Year() {
 		return start.Format("2 Jan") + " - " + end.Format("2 Jan 2006")
 	}

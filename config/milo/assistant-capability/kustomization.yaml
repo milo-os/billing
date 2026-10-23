@@ -1,0 +1,12 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# Billing's agent for Datum's assistant (Patch): what it offers a customer
+# and where its tools live. Opt-in, alongside config/components/mcp-server,
+# which serves those tools. The billing Service it belongs to is in
+# config/milo/service.yaml.
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+resources:
+  - service-agent.yaml
+  - service-agent-configuration.yaml
