@@ -35,6 +35,18 @@ const (
 	// billing account name.
 	ArrangementBillingAccountRefField = ".spec.billingAccountRef.name"
 
+	// ArrangementApplicationRefField indexes BillingArrangements by the
+	// application they approve.
+	ArrangementApplicationRefField = ".spec.applicationRef.name"
+
+	// ApplicationBillingAccountRefField indexes
+	// BillingArrangementApplications by billing account name.
+	ApplicationBillingAccountRefField = ".spec.billingAccountRef.name"
+
+	// DeclineApplicationRefField indexes BillingArrangementDeclines by the
+	// application they decline.
+	DeclineApplicationRefField = ".spec.applicationRef.name"
+
 	// BillingEntitlementBillingAccountRefField indexes BillingEntitlements by
 	// billing account name.
 	BillingEntitlementBillingAccountRefField = ".spec.billingAccountRef.name"
@@ -96,6 +108,39 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
+		&billingv1alpha1.BillingArrangement{},
+		ArrangementApplicationRefField,
+		arrangementApplicationRef,
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangementApplication{},
+		ApplicationBillingAccountRefField,
+		func(obj client.Object) []string {
+			app := obj.(*billingv1alpha1.BillingArrangementApplication)
+			return []string{app.Spec.BillingAccountRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangementDecline{},
+		DeclineApplicationRefField,
+		func(obj client.Object) []string {
+			decline := obj.(*billingv1alpha1.BillingArrangementDecline)
+			return []string{decline.Spec.ApplicationRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
 		&billingv1alpha1.BillingEntitlement{},
 		BillingEntitlementOfferRefField,
 		func(obj client.Object) []string {
@@ -131,6 +176,17 @@ func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
 	}
 
 	return nil
+}
+
+// arrangementApplicationRef indexes an arrangement under the application
+// it approves. Arrangements granted without an application aren't
+// indexed.
+func arrangementApplicationRef(obj client.Object) []string {
+	arr := obj.(*billingv1alpha1.BillingArrangement)
+	if arr.Spec.ApplicationRef == nil {
+		return nil
+	}
+	return []string{arr.Spec.ApplicationRef.Name}
 }
 
 // AddMeterDefinitionIndexers adds the MeterDefinition field index to the

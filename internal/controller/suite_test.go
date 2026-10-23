@@ -126,6 +126,36 @@ var _ = BeforeSuite(func() {
 
 	err = mgr.GetFieldIndexer().IndexField(
 		ctx,
+		&billingv1alpha1.BillingArrangement{},
+		ArrangementApplicationRefField,
+		arrangementApplicationRef,
+	)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangementDecline{},
+		DeclineApplicationRefField,
+		func(obj client.Object) []string {
+			decline := obj.(*billingv1alpha1.BillingArrangementDecline)
+			return []string{decline.Spec.ApplicationRef.Name}
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&billingv1alpha1.BillingArrangementApplication{},
+		ApplicationBillingAccountRefField,
+		func(obj client.Object) []string {
+			app := obj.(*billingv1alpha1.BillingArrangementApplication)
+			return []string{app.Spec.BillingAccountRef.Name}
+		},
+	)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = mgr.GetFieldIndexer().IndexField(
+		ctx,
 		&billingv1alpha1.PaymentMethod{},
 		PaymentMethodBillingAccountRefField,
 		func(obj client.Object) []string {
@@ -155,6 +185,9 @@ var _ = BeforeSuite(func() {
 			reconcileAccountFromArrangement(mgr.GetClient()),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
+		Watches(&billingv1alpha1.BillingArrangementApplication{},
+			reconcileAccountFromApplication(mgr.GetClient()),
+		).
 		Complete(&testBillingAccountReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
 
@@ -180,9 +213,13 @@ var _ = BeforeSuite(func() {
 		Complete(&testPaymentMethodReconciler{client: mgr.GetClient()})
 	Expect(err).NotTo(HaveOccurred())
 
-	// The production BillingArrangement reconciler has no envtest-only
-	// behaviour to adapt, so register it directly.
+	// The production BillingArrangement and BillingArrangementApplication
+	// reconcilers have no envtest-only behaviour to adapt, so register
+	// them directly.
 	err = (&BillingArrangementReconciler{}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
+	err = (&BillingArrangementApplicationReconciler{}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
 	// Get the cached client from the manager (supports field indexers)

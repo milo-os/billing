@@ -1,0 +1,17 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangement
+metadata:
+  name: application-lifecycle-terms
+  namespace: default
+spec:
+  billingAccountRef:
+    name: application-lifecycle-acct
+  applicationRef:
+    name: application-lifecycle-second
+  type: Invoice
+  invoice:
+    creditLimit: "10000"
+    accountsPayableEmail: ap@example.com
+  # An end date leaves room to apply again to renew.
+  endsAt: "2099-01-01T00:00:00Z"
+  reason: E2E approved application

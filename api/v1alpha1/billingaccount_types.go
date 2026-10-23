@@ -42,6 +42,7 @@ const BillingAccountConditionDefaultPaymentMethodReady = "DefaultPaymentMethodRe
 //   - PaymentMethodReady — the default payment method is active (True)
 //   - Unknown — the default payment method could not be read (Unknown)
 //   - ArrangementScheduled — no usable payment yet, but an arrangement is scheduled to start (False)
+//   - ApplicationPending — no usable payment yet, and a BillingArrangementApplication is awaiting review (False)
 //   - PaymentMethodNotFound, PaymentMethodDegraded — a default payment method is configured but unusable;
 //     passed through from DefaultPaymentMethodReady (False)
 //   - ArrangementEnded — the most recent arrangement has ended and no payment method is configured (False)

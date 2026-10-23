@@ -1,0 +1,258 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: billing-arrangement-application-lifecycle
+spec:
+  description: |
+    Tests customer applications for payment terms and staff decisions on them:
+    1. Submitting an application records the authenticated user as the applicant (replacing any client value),
+       adds an owner reference to the BillingAccount, and leaves it Pending. The account reports
+       PaymentReady=False (Reason: ApplicationPending).
+    2. A second application for the same account is rejected while the first is pending, and a submitted
+       application can't be edited.
+    3. Declining with a BillingArrangementDecline moves the application to Declined with the reviewer's message
+       (not the internal notes), and the account back to PaymentReady=False (Reason: NotConfigured). A declined
+       application can't be withdrawn.
+    4. The customer applies again, and approving with a BillingArrangement whose applicationRef names the
+       application moves it to Approved and the account to PaymentReady=True (Reason: InvoiceTerms).
+    5. A third application (renewing terms that have an end date) is withdrawn by setting spec.withdrawn, and
+       can no longer be declined or reopened. Its owner reference to the billing account can't be removed.
+    6. Applying is rejected for a billing account with no billing contact details.
+  steps:
+    - name: apply
+      description: Create a BillingAccount with contact details and submit an application.
+      try:
+        - create:
+            file: 01-resources.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementApplication
+              metadata:
+                name: application-lifecycle-first
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingAccount
+                    name: application-lifecycle-acct
+              spec:
+                (applicant.username != 'someone-else@example.com'): true
+              status:
+                phase: Pending
+                conditions:
+                  - type: Decided
+                    status: "False"
+                    reason: Pending
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: application-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: ApplicationPending
+
+    - name: reject-second-application
+      description: Only one application per billing account can be pending.
+      try:
+        - create:
+            file: 02-second-application.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'application "application-lifecycle-first" for billing account "application-lifecycle-acct" is already awaiting review')): true
+
+    - name: reject-editing
+      description: A submitted application can't be changed.
+      try:
+        - script:
+            content: |
+              kubectl patch billingarrangementapplication application-lifecycle-first -n default --type=merge --patch '{"spec":{"situation":"Something else"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'withdraw it and apply again')): true
+
+    - name: decline
+      description: Staff decline the application with a message for the customer.
+      try:
+        - create:
+            file: 03-decline.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementDecline
+              metadata:
+                name: application-lifecycle-decline
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingArrangementApplication
+                    name: application-lifecycle-first
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementApplication
+              metadata:
+                name: application-lifecycle-first
+                namespace: default
+              status:
+                phase: Declined
+                (decidedAt != null): true
+                (contains(declineMessage, 'company registration number')): true
+                (contains(declineMessage, 'E2E internal note')): false
+                conditions:
+                  - type: Decided
+                    status: "True"
+                    reason: Declined
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: application-lifecycle-acct
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "False"
+                    reason: NotConfigured
+        - script:
+            content: |
+              kubectl patch billingarrangementapplication application-lifecycle-first -n default --type=merge --patch '{"spec":{"withdrawn":true}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'already been declined')): true
+
+    - name: apply-again-and-approve
+      description: The customer applies again, and staff grant terms that approve the application.
+      try:
+        - create:
+            file: 02-second-application.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementApplication
+              metadata:
+                name: application-lifecycle-second
+                namespace: default
+              status:
+                phase: Pending
+        - create:
+            file: 04-approval.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementApplication
+              metadata:
+                name: application-lifecycle-second
+                namespace: default
+              status:
+                phase: Approved
+                arrangementRef:
+                  name: application-lifecycle-terms
+                conditions:
+                  - type: Decided
+                    status: "True"
+                    reason: Approved
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: application-lifecycle-acct
+                namespace: default
+              status:
+                paymentArrangement:
+                  name: application-lifecycle-terms
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: BillingAccountReady
+                  - type: DefaultPaymentMethodReady
+                    status: "False"
+                    reason: NotConfigured
+                  - type: InvoicingReady
+                    status: "True"
+                    reason: NoInvoicesYet
+                  - type: PaymentReady
+                    status: "True"
+                    reason: InvoiceTerms
+
+    - name: withdraw
+      description: An application to renew terms is withdrawn, and can't be decided or reopened afterwards.
+      try:
+        - script:
+            content: |
+              sed 's/application-lifecycle-second/application-lifecycle-third/' 02-second-application.yaml | kubectl create -f -
+              kubectl patch billingarrangementapplication application-lifecycle-third -n default --type=merge --patch '{"spec":{"withdrawn":true}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingArrangementApplication
+              metadata:
+                name: application-lifecycle-third
+                namespace: default
+              status:
+                phase: Withdrawn
+        - script:
+            content: |
+              sed 's/application-lifecycle-first/application-lifecycle-third/; s/application-lifecycle-decline/application-lifecycle-decline-third/' 03-decline.yaml | kubectl create -f -
+            check:
+              ($error != null): true
+              (contains($stderr, 'was withdrawn')): true
+        - script:
+            content: |
+              kubectl patch billingarrangementapplication application-lifecycle-third -n default --type=merge --patch '{"spec":{"withdrawn":false}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'be reopened; apply again instead')): true
+        - script:
+            content: |
+              kubectl patch billingarrangementapplication application-lifecycle-third -n default --type=merge --patch '{"metadata":{"ownerReferences":[]}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'removed while the account exists')): true
+
+    - name: reject-without-contact-details
+      description: Applying needs billing contact details on the account.
+      try:
+        - create:
+            file: 05-no-contact.yaml
+            expect:
+              - match:
+                  apiVersion: billing.miloapis.com/v1alpha1
+                  kind: BillingArrangementApplication
+                check:
+                  ($error != null): true
+                  (contains($error, 'add billing contact details')): true

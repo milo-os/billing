@@ -409,9 +409,23 @@ func TestBillingArrangementSummaries(t *testing.T) {
 			want:  "alice@example.com updated invoice terms for billing account acme: net 30, credit limit 10000, PO PO-4471",
 		},
 		{
+			name: "approve an application",
+			audit: event("create", nil, stored(invoiceSpec(map[string]any{
+				"applicationRef": map[string]any{"name": "acme-apply"},
+			}))),
+			want: "alice@example.com approved the payment terms application acme-apply with invoice terms for billing account acme: net 30, credit limit 10000, PO PO-4471",
+		},
+		{
 			name:  "delete returning the object",
 			audit: event("delete", nil, stored(invoiceSpec(nil))),
 			want:  "alice@example.com deleted the payment terms record acme-terms for billing account acme",
+		},
+		{
+			name: "delete terms that approved an application",
+			audit: event("delete", nil, stored(invoiceSpec(map[string]any{
+				"applicationRef": map[string]any{"name": "acme-apply"},
+			}))),
+			want: "alice@example.com deleted the payment terms record acme-terms for billing account acme, so its application acme-apply is awaiting review again",
 		},
 		{
 			name:  "delete returning Status",
@@ -420,24 +434,110 @@ func TestBillingArrangementSummaries(t *testing.T) {
 		},
 	}
 
-	matchEnv := newEnv(t)
-	summaryEnv := newSummaryEnv(t)
 	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			for _, r := range policy.Spec.AuditRules {
-				if !evalMatch(t, matchEnv, r, tt.audit) {
-					continue
-				}
-				got := renderSummary(t, summaryEnv, r, tt.audit)
-				if got != tt.want {
-					t.Errorf("rule %s rendered\n  %q\nwant\n  %q", r.Name, got, tt.want)
-				}
-				if strings.Contains(got, "Internal note") {
-					t.Errorf("summary leaks spec.reason: %q", got)
-				}
-				return
-			}
-			t.Fatal("no rule matched")
-		})
+		checkSummary(t, policy, tt.name, tt.audit, tt.want)
 	}
+}
+
+// checkSummary renders the first rule in policy that matches audit, as the
+// processor does, and compares it with want. Test fixtures put "Internal
+// note" in every field that must never reach the timeline.
+func checkSummary(t *testing.T, policy activityPolicy, name string, audit map[string]any, want string) {
+	t.Helper()
+	t.Run(name, func(t *testing.T) {
+		matchEnv := newEnv(t)
+		summaryEnv := newSummaryEnv(t)
+		for _, r := range policy.Spec.AuditRules {
+			if !evalMatch(t, matchEnv, r, audit) {
+				continue
+			}
+			got := renderSummary(t, summaryEnv, r, audit)
+			if got != want {
+				t.Errorf("rule %s rendered\n  %q\nwant\n  %q", r.Name, got, want)
+			}
+			if strings.Contains(got, "Internal note") {
+				t.Errorf("summary leaks an internal field: %q", got)
+			}
+			return
+		}
+		t.Fatal("no rule matched")
+	})
+}
+
+func policyNamed(t *testing.T, name string) activityPolicy {
+	t.Helper()
+	for _, pol := range loadPolicies(t) {
+		if pol.Metadata.Name == name {
+			return pol
+		}
+	}
+	t.Fatalf("policy %s not found", name)
+	return activityPolicy{}
+}
+
+func TestBillingArrangementApplicationSummaries(t *testing.T) {
+	policy := policyNamed(t, "billing.miloapis.com-billingarrangementapplication")
+
+	stored := func(option string) map[string]any {
+		spec := map[string]any{
+			"billingAccountRef": map[string]any{"name": "acme"},
+			"paymentOption":     option,
+			"situation":         "Internal note: the applicant's own words",
+		}
+		return map[string]any{
+			"metadata": map[string]any{"name": "acme-apply", "namespace": "organization-acme"},
+			"spec":     spec,
+		}
+	}
+	event := func(verb string, request any, response map[string]any) map[string]any {
+		audit := auditEvent(verb, successCode(verb), "/apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply", request)
+		audit["objectRef"] = map[string]any{"name": "acme-apply", "namespace": "organization-acme", "apiGroup": "billing.miloapis.com", "resource": "billingarrangementapplications"}
+		if response != nil {
+			audit["responseObject"] = response
+		}
+		return audit
+	}
+
+	checkSummary(t, policy, "apply to pay by invoice", event("create", stored("Invoice"), stored("Invoice")),
+		"alice@example.com applied for payment terms (pay by invoice) for billing account acme")
+	checkSummary(t, policy, "apply without choosing", event("create", stored("NotSure"), stored("NotSure")),
+		"alice@example.com applied for payment terms for billing account acme")
+	checkSummary(t, policy, "withdraw", event("patch", map[string]any{"spec": map[string]any{"withdrawn": true}}, stored("Invoice")),
+		"alice@example.com withdrew the payment terms application for billing account acme")
+	checkSummary(t, policy, "other edit", event("patch", map[string]any{"metadata": map[string]any{"labels": map[string]any{"a": "b"}}}, stored("Invoice")),
+		"alice@example.com updated the payment terms application acme-apply")
+	checkSummary(t, policy, "delete returning the object", event("delete", nil, stored("Invoice")),
+		"alice@example.com deleted the payment terms application acme-apply for billing account acme")
+	checkSummary(t, policy, "delete returning Status", event("delete", nil, map[string]any{"kind": "Status", "status": "Success"}),
+		"alice@example.com deleted the payment terms application acme-apply")
+}
+
+func TestBillingArrangementDeclineSummaries(t *testing.T) {
+	policy := policyNamed(t, "billing.miloapis.com-billingarrangementdecline")
+
+	stored := map[string]any{
+		"metadata": map[string]any{"name": "acme-decline", "namespace": "organization-acme"},
+		"spec": map[string]any{
+			"applicationRef": map[string]any{"name": "acme-apply"},
+			"message":        "Internal note: add a card to continue.",
+			"internalNotes":  "Internal note that must never appear",
+		},
+	}
+	event := func(verb string, request any, response map[string]any) map[string]any {
+		audit := auditEvent(verb, successCode(verb), "/apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline", request)
+		audit["objectRef"] = map[string]any{"name": "acme-decline", "namespace": "organization-acme", "apiGroup": "billing.miloapis.com", "resource": "billingarrangementdeclines"}
+		if response != nil {
+			audit["responseObject"] = response
+		}
+		return audit
+	}
+
+	checkSummary(t, policy, "decline", event("create", stored, stored),
+		"alice@example.com declined the payment terms application acme-apply")
+	checkSummary(t, policy, "correct the message", event("patch", map[string]any{"spec": map[string]any{"message": "x"}}, stored),
+		"alice@example.com updated the decline of payment terms application acme-apply")
+	checkSummary(t, policy, "delete returning the object", event("delete", nil, stored),
+		"alice@example.com deleted the decline of payment terms application acme-apply, so it's awaiting review again")
+	checkSummary(t, policy, "delete returning Status", event("delete", nil, map[string]any{"kind": "Status", "status": "Success"}),
+		"alice@example.com deleted the payment terms decline acme-decline")
 }

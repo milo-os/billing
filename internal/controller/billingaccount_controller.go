@@ -23,6 +23,7 @@ import (
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	billingv1alpha1ac "go.miloapis.com/billing/applyconfiguration/api/v1alpha1"
+	"go.miloapis.com/billing/internal/validation"
 )
 
 const (
@@ -49,6 +50,7 @@ type BillingAccountReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=paymentmethods,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=invoices,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangementapplications,verbs=get;list;watch
 
 func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -358,6 +360,11 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 		}
 	}
 
+	pending, err := r.pendingApplication(ctx, account)
+	if err != nil {
+		return time.Time{}, err
+	}
+
 	picked := pickArrangements(arrList.Items, account.UID, now)
 	active := picked.active
 	account.Status.PaymentArrangement = nil
@@ -396,6 +403,12 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 		cond.Reason = "ArrangementScheduled"
 		cond.Message = fmt.Sprintf("Payment terms under arrangement %q start at %s.",
 			picked.nextScheduled.Name, arrangementStart(picked.nextScheduled).UTC().Format(time.RFC3339))
+	case pending != nil:
+		// Ahead of a failed card or ended terms: the customer has already
+		// acted, and the portal shows the review holding page.
+		cond.Status = metav1.ConditionFalse
+		cond.Reason = "ApplicationPending"
+		cond.Message = fmt.Sprintf("Application %q for payment terms is awaiting review.", pending.Name)
 	case pm != nil && pm.Reason != "NotConfigured":
 		// A default payment method is configured but isn't usable (for
 		// example a declined card). Pass its reason through so the
@@ -416,6 +429,34 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
 	return next, nil
+}
+
+// pendingApplication returns the account's payment terms application
+// that is awaiting review, if any. It reads the phase the application
+// controller projects; an application it hasn't reconciled yet counts
+// as pending unless it's withdrawn.
+func (r *BillingAccountReconciler) pendingApplication(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+) (*billingv1alpha1.BillingArrangementApplication, error) {
+	var appList billingv1alpha1.BillingArrangementApplicationList
+	if err := r.client.List(ctx, &appList,
+		client.InNamespace(account.Namespace),
+		client.MatchingFields{ApplicationBillingAccountRefField: account.Name},
+	); err != nil {
+		return nil, fmt.Errorf("listing billing arrangement applications: %w", err)
+	}
+	for i := range appList.Items {
+		app := &appList.Items[i]
+		if !app.DeletionTimestamp.IsZero() || app.Spec.Withdrawn ||
+			validation.OwnedByOtherBillingAccount(app, account.UID) {
+			continue
+		}
+		if app.Status.Phase == "" || app.Status.Phase == billingv1alpha1.BillingArrangementApplicationPhasePending {
+			return app, nil
+		}
+	}
+	return nil, nil
 }
 
 // reconcileInvoicingCondition keeps latestInvoiceRef and the InvoicingReady
@@ -598,6 +639,24 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Status writes matter here: the application controller's phase
+		// is what clears ApplicationPending once staff decide.
+		Watches(&billingv1alpha1.BillingArrangementApplication{},
+			handler.EnqueueRequestsFromMapFunc(
+				func(ctx context.Context, obj client.Object) []reconcile.Request {
+					app, ok := obj.(*billingv1alpha1.BillingArrangementApplication)
+					if !ok {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: client.ObjectKey{
+							Name:      app.Spec.BillingAccountRef.Name,
+							Namespace: app.Namespace,
+						},
+					}}
+				},
+			),
 		).
 		Watches(&billingv1alpha1.Invoice{},
 			handler.EnqueueRequestsFromMapFunc(

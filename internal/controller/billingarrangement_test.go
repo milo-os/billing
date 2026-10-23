@@ -156,12 +156,25 @@ func TestPickArrangements(t *testing.T) {
 	}
 }
 
+func testApplication(name string, phase billingv1alpha1.BillingArrangementApplicationPhase) billingv1alpha1.BillingArrangementApplication {
+	return billingv1alpha1.BillingArrangementApplication{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "org-acme"},
+		Spec: billingv1alpha1.BillingArrangementApplicationSpec{
+			BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "acme"},
+			PaymentOption:     billingv1alpha1.ApplicationPaymentOptionNotSure,
+			Withdrawn:         phase == billingv1alpha1.BillingArrangementApplicationPhaseWithdrawn,
+		},
+		Status: billingv1alpha1.BillingArrangementApplicationStatus{Phase: phase},
+	}
+}
+
 func TestReconcilePaymentReadyCondition(t *testing.T) {
 	now := day(10)
 
 	tests := []struct {
 		name          string
 		arrangements  []billingv1alpha1.BillingArrangement
+		applications  []billingv1alpha1.BillingArrangementApplication
 		pmStatus      metav1.ConditionStatus
 		pmReason      string
 		wantStatus    metav1.ConditionStatus
@@ -244,6 +257,64 @@ func TestReconcilePaymentReadyCondition(t *testing.T) {
 			wantStatus: metav1.ConditionUnknown,
 			wantReason: "Unknown",
 		},
+		{
+			name:         "application awaiting review",
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", billingv1alpha1.BillingArrangementApplicationPhasePending)},
+			pmStatus:     metav1.ConditionFalse,
+			wantStatus:   metav1.ConditionFalse,
+			wantReason:   "ApplicationPending",
+		},
+		{
+			name:         "application the controller hasn't reconciled yet",
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", "")},
+			pmStatus:     metav1.ConditionFalse,
+			wantStatus:   metav1.ConditionFalse,
+			wantReason:   "ApplicationPending",
+		},
+		{
+			name:         "application after a failed card",
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", billingv1alpha1.BillingArrangementApplicationPhasePending)},
+			pmStatus:     metav1.ConditionFalse,
+			pmReason:     "PaymentMethodDegraded",
+			wantStatus:   metav1.ConditionFalse,
+			wantReason:   "ApplicationPending",
+		},
+		{
+			name:         "application to renew ended terms",
+			arrangements: []billingv1alpha1.BillingArrangement{testArrangement("terms", dayPtr(1), dayPtr(5))},
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", billingv1alpha1.BillingArrangementApplicationPhasePending)},
+			pmStatus:     metav1.ConditionFalse,
+			wantStatus:   metav1.ConditionFalse,
+			wantReason:   "ApplicationPending",
+		},
+		{
+			name:         "a working card outranks an application",
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", billingv1alpha1.BillingArrangementApplicationPhasePending)},
+			pmStatus:     metav1.ConditionTrue,
+			wantStatus:   metav1.ConditionTrue,
+			wantReason:   "PaymentMethodReady",
+		},
+		{
+			name:         "scheduled terms outrank an application",
+			arrangements: []billingv1alpha1.BillingArrangement{testArrangement("terms", dayPtr(15), nil)},
+			applications: []billingv1alpha1.BillingArrangementApplication{testApplication("apply", billingv1alpha1.BillingArrangementApplicationPhasePending)},
+			pmStatus:     metav1.ConditionFalse,
+			wantStatus:   metav1.ConditionFalse,
+			wantReason:   "ArrangementScheduled",
+			wantNext:     day(15),
+		},
+		{
+			name: "decided and withdrawn applications don't count",
+			applications: []billingv1alpha1.BillingArrangementApplication{
+				testApplication("declined", billingv1alpha1.BillingArrangementApplicationPhaseDeclined),
+				testApplication("withdrawn", billingv1alpha1.BillingArrangementApplicationPhaseWithdrawn),
+				// Withdrawn but not yet reconciled: spec.withdrawn decides.
+				testApplication("just-withdrawn", ""),
+			},
+			pmStatus:   metav1.ConditionFalse,
+			wantStatus: metav1.ConditionFalse,
+			wantReason: "NotConfigured",
+		},
 	}
 
 	for _, tt := range tests {
@@ -252,19 +323,33 @@ func TestReconcilePaymentReadyCondition(t *testing.T) {
 			if err := billingv1alpha1.AddToScheme(scheme); err != nil {
 				t.Fatal(err)
 			}
-			objs := make([]client.Object, 0, len(tt.arrangements))
+			objs := make([]client.Object, 0, len(tt.arrangements)+len(tt.applications))
 			for i := range tt.arrangements {
 				objs = append(objs, &tt.arrangements[i])
 			}
-			// Arrangements for another account must be ignored.
+			for i := range tt.applications {
+				app := &tt.applications[i]
+				if app.Name == "just-withdrawn" {
+					app.Spec.Withdrawn = true
+				}
+				objs = append(objs, app)
+			}
+			// Arrangements and applications for another account must be
+			// ignored.
 			other := testArrangement("globex-terms", dayPtr(1), nil)
 			other.Spec.BillingAccountRef.Name = "globex"
-			objs = append(objs, &other)
+			otherApp := testApplication("globex-apply", billingv1alpha1.BillingArrangementApplicationPhasePending)
+			otherApp.Spec.BillingAccountRef.Name = "globex"
+			objs = append(objs, &other, &otherApp)
 
 			c := fake.NewClientBuilder().WithScheme(scheme).
 				WithIndex(&billingv1alpha1.BillingArrangement{}, ArrangementBillingAccountRefField,
 					func(obj client.Object) []string {
 						return []string{obj.(*billingv1alpha1.BillingArrangement).Spec.BillingAccountRef.Name}
+					}).
+				WithIndex(&billingv1alpha1.BillingArrangementApplication{}, ApplicationBillingAccountRefField,
+					func(obj client.Object) []string {
+						return []string{obj.(*billingv1alpha1.BillingArrangementApplication).Spec.BillingAccountRef.Name}
 					}).
 				WithObjects(objs...).Build()
 

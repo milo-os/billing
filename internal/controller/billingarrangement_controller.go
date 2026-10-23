@@ -159,7 +159,7 @@ func pickArrangements(arrs []billingv1alpha1.BillingArrangement, accountUID type
 	endsAt := func(a *billingv1alpha1.BillingArrangement) time.Time { return a.Spec.EndsAt.Time }
 	for i := range arrs {
 		arr := &arrs[i]
-		if !arr.DeletionTimestamp.IsZero() || ownedByOtherAccount(arr, accountUID) {
+		if !arr.DeletionTimestamp.IsZero() || validation.OwnedByOtherBillingAccount(arr, accountUID) {
 			continue
 		}
 		switch validation.ArrangementPhaseAt(arr, now) {
@@ -178,18 +178,6 @@ func pickArrangements(arrs []billingv1alpha1.BillingArrangement, accountUID type
 		}
 	}
 	return picked
-}
-
-func ownedByOtherAccount(arr *billingv1alpha1.BillingArrangement, accountUID types.UID) bool {
-	if accountUID == "" {
-		return false
-	}
-	for _, ref := range arr.OwnerReferences {
-		if ref.Kind == "BillingAccount" && ref.UID != accountUID {
-			return true
-		}
-	}
-	return false
 }
 
 func laterArrangement(a, b *billingv1alpha1.BillingArrangement, at func(*billingv1alpha1.BillingArrangement) time.Time) bool {

@@ -36,13 +36,15 @@ func ValidateBillingArrangementCreate(
 	allErrs = append(allErrs, validateArrangementBillingAccountRef(ctx, c, arr)...)
 	allErrs = append(allErrs, validateBillingArrangementSpec(arr, start, false, now)...)
 	allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, arr, start)...)
+	allErrs = append(allErrs, validateArrangementApplicationRef(ctx, c, arr)...)
 
 	return allErrs
 }
 
 // ValidateBillingArrangementUpdate validates a BillingArrangement on
-// update. billingAccountRef and type immutability are enforced by CEL
-// rules on the CRD and repeated here for defence in depth.
+// update. billingAccountRef, type and applicationRef immutability are
+// enforced by CEL rules on the CRD and repeated here for defence in
+// depth.
 //
 // Two allowances keep staff able to end terms, which keeps the record
 // rather than deleting it:
@@ -66,6 +68,10 @@ func ValidateBillingArrangementUpdate(
 	if oldArr.Spec.Type != newArr.Spec.Type {
 		allErrs = append(allErrs, field.Forbidden(
 			field.NewPath("spec", "type"), "type is immutable; end this arrangement and create a new one"))
+	}
+	if applicationRefName(oldArr) != applicationRefName(newArr) {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("spec", "applicationRef"), "applicationRef is immutable"))
 	}
 
 	start := ArrangementStart(newArr, newArr.CreationTimestamp.Time)
@@ -128,10 +134,7 @@ func validateBillingArrangementSpec(arr *billingv1alpha1.BillingArrangement, sta
 				invPath.Child("creditLimit"), inv.CreditLimit, "creditLimit must be a positive decimal amount"))
 		}
 		if inv.AccountsPayableEmail != "" {
-			if addr, err := mail.ParseAddress(inv.AccountsPayableEmail); err != nil || addr.Address != inv.AccountsPayableEmail {
-				allErrs = append(allErrs, field.Invalid(
-					invPath.Child("accountsPayableEmail"), inv.AccountsPayableEmail, "must be a plain email address"))
-			}
+			allErrs = append(allErrs, validatePlainEmail(inv.AccountsPayableEmail, invPath.Child("accountsPayableEmail"))...)
 		}
 	}
 
@@ -143,28 +146,48 @@ func validateArrangementBillingAccountRef(
 	c client.Reader,
 	arr *billingv1alpha1.BillingArrangement,
 ) field.ErrorList {
+	_, errs := getReferencedBillingAccount(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name)
+	return errs
+}
+
+// getReferencedBillingAccount reads the BillingAccount a resource's
+// spec.billingAccountRef names, reporting it missing, unreadable or
+// being deleted. The account is returned only when it's usable.
+func getReferencedBillingAccount(
+	ctx context.Context,
+	c client.Reader,
+	namespace, name string,
+) (*billingv1alpha1.BillingAccount, field.ErrorList) {
 	var allErrs field.ErrorList
 	fldPath := field.NewPath("spec", "billingAccountRef", "name")
 
-	if arr.Spec.BillingAccountRef.Name == "" {
-		return append(allErrs, field.Required(fldPath, "billingAccountRef.name is required"))
+	if name == "" {
+		return nil, append(allErrs, field.Required(fldPath, "billingAccountRef.name is required"))
 	}
 
 	var account billingv1alpha1.BillingAccount
-	key := types.NamespacedName{Namespace: arr.Namespace, Name: arr.Spec.BillingAccountRef.Name}
-	if err := c.Get(ctx, key, &account); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Namespace: namespace, Name: name}, &account); err != nil {
 		if apierrors.IsNotFound(err) {
-			allErrs = append(allErrs, field.NotFound(fldPath, arr.Spec.BillingAccountRef.Name))
+			allErrs = append(allErrs, field.NotFound(fldPath, name))
 		} else {
 			allErrs = append(allErrs, field.InternalError(fldPath, fmt.Errorf("reading billing account: %w", err)))
 		}
-		return allErrs
+		return nil, allErrs
 	}
 	if !account.DeletionTimestamp.IsZero() {
-		allErrs = append(allErrs, field.Forbidden(fldPath,
+		return nil, append(allErrs, field.Forbidden(fldPath,
 			fmt.Sprintf("billing account %q is being deleted", account.Name)))
 	}
-	return allErrs
+	return &account, nil
+}
+
+// validatePlainEmail rejects anything but a bare address, such as a
+// display name ("Accounts <ap@example.com>") or a list.
+func validatePlainEmail(email string, fldPath *field.Path) field.ErrorList {
+	if addr, err := mail.ParseAddress(email); err != nil || addr.Address != email {
+		return field.ErrorList{field.Invalid(fldPath, email, "must be a plain email address")}
+	}
+	return nil
 }
 
 // validateNoOverlappingArrangement rejects an arrangement whose window

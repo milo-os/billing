@@ -35,6 +35,8 @@ var billingArrangementLog = logf.Log.WithName("billingarrangement-webhook")
 //   - Ensure the referenced BillingAccount exists in the same namespace.
 //   - Ensure endsAt is after startsAt and invoice terms are well formed.
 //   - Ensure arrangements for one billing account never overlap.
+//   - Ensure an arrangement approving an application names a pending
+//     application for the same billing account.
 func SetupBillingArrangementWebhookWithManager(mgr ctrl.Manager) error {
 	// Reads go straight to the API server: the overlap check has to see
 	// arrangements admitted moments ago, which the cache may not have.
@@ -70,31 +72,39 @@ func (r *billingArrangementWebhook) Default(ctx context.Context, arr *billingv1a
 		start := metav1.NewTime(r.clock().Truncate(time.Second))
 		arr.Spec.StartsAt = &start
 	}
-	r.defaultOwnerReference(ctx, arr)
+	addBillingAccountOwnerReference(ctx, r.reader, arr, arr.Spec.BillingAccountRef.Name)
 	return nil
 }
 
-// defaultOwnerReference points the arrangement at its BillingAccount.
-// A missing or unreadable account is left for ValidateCreate to report.
-// The reference isn't a controller reference and doesn't block owner
-// deletion: arrangements never hold up deleting an account.
-func (r *billingArrangementWebhook) defaultOwnerReference(ctx context.Context, arr *billingv1alpha1.BillingArrangement) {
+// addBillingAccountOwnerReference points obj at the BillingAccount it
+// belongs to, so it's garbage collected with the account and a new
+// account reusing the name never inherits it. A missing or unreadable
+// account is left for validation to report. The reference isn't a
+// controller reference and doesn't block owner deletion.
+func addBillingAccountOwnerReference(ctx context.Context, reader client.Reader, obj client.Object, accountName string) {
 	var account billingv1alpha1.BillingAccount
-	key := types.NamespacedName{Namespace: arr.Namespace, Name: arr.Spec.BillingAccountRef.Name}
-	if arr.Spec.BillingAccountRef.Name == "" || r.reader.Get(ctx, key, &account) != nil {
+	key := types.NamespacedName{Namespace: obj.GetNamespace(), Name: accountName}
+	if accountName == "" || reader.Get(ctx, key, &account) != nil {
 		return
 	}
-	for _, ref := range arr.OwnerReferences {
-		if ref.UID == account.UID {
+	addOwnerReference(obj, "BillingAccount", account.Name, account.UID)
+}
+
+// addOwnerReference adds a non-controller owner reference to a billing
+// resource, unless obj already has one for that owner.
+func addOwnerReference(obj client.Object, kind, name string, uid types.UID) {
+	refs := obj.GetOwnerReferences()
+	for _, ref := range refs {
+		if ref.UID == uid {
 			return
 		}
 	}
-	arr.OwnerReferences = append(arr.OwnerReferences, metav1.OwnerReference{
+	obj.SetOwnerReferences(append(refs, metav1.OwnerReference{
 		APIVersion: billingv1alpha1.GroupVersion.String(),
-		Kind:       "BillingAccount",
-		Name:       account.Name,
-		UID:        account.UID,
-	})
+		Kind:       kind,
+		Name:       name,
+		UID:        uid,
+	}))
 }
 
 func (r *billingArrangementWebhook) ValidateCreate(ctx context.Context, arr *billingv1alpha1.BillingArrangement) (admission.Warnings, error) {

@@ -1,0 +1,23 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: application-lifecycle-no-contact
+  namespace: default
+spec:
+  currencyCode: USD
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingArrangementApplication
+metadata:
+  name: application-lifecycle-no-contact
+  namespace: default
+spec:
+  billingAccountRef:
+    name: application-lifecycle-no-contact
+  paymentOption: NotSure
+  organization:
+    legalName: Example Corporation Ltd
+    type: Company
+    website: https://example.com
+  situation: We can't pay by card.
+  authorized: true
