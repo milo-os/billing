@@ -4,7 +4,7 @@ go 1.26.0
 
 require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
-	github.com/go-logr/logr v1.4.3
+	github.com/go-logr/logr v1.4.4
 	github.com/google/cel-go v0.26.0
 	github.com/modelcontextprotocol/go-sdk v1.4.1
 	github.com/nats-io/nats-server/v2 v2.14.0
@@ -14,10 +14,10 @@ require (
 	github.com/onsi/gomega v1.38.2
 	github.com/spf13/cobra v1.10.0
 	go.miloapis.com/milo v0.31.0
-	go.opentelemetry.io/otel v1.43.0
+	go.opentelemetry.io/otel v1.45.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.65.0
-	go.opentelemetry.io/otel/metric v1.43.0
-	go.opentelemetry.io/otel/sdk/metric v1.43.0
+	go.opentelemetry.io/otel/metric v1.45.0
+	go.opentelemetry.io/otel/sdk/metric v1.45.0
 	golang.org/x/text v0.36.0
 	k8s.io/api v0.35.0
 	k8s.io/apimachinery v0.35.0
@@ -87,8 +87,8 @@ require (
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace v1.34.0 // indirect
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.34.0 // indirect
-	go.opentelemetry.io/otel/sdk v1.43.0 // indirect
-	go.opentelemetry.io/otel/trace v1.43.0 // indirect
+	go.opentelemetry.io/otel/sdk v1.45.0 // indirect
+	go.opentelemetry.io/otel/trace v1.45.0 // indirect
 	go.opentelemetry.io/proto/otlp v1.5.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
@@ -100,7 +100,7 @@ require (
 	golang.org/x/net v0.52.0 // indirect
 	golang.org/x/oauth2 v0.34.0 // indirect
 	golang.org/x/sync v0.20.0 // indirect
-	golang.org/x/sys v0.43.0 // indirect
+	golang.org/x/sys v0.47.0 // indirect
 	golang.org/x/term v0.42.0 // indirect
 	golang.org/x/time v0.15.0 // indirect
 	golang.org/x/tools v0.43.0 // indirect
