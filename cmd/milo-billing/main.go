@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: AGPL-3.0-only
+
 // Command milo-billing is the billing plugin for datumctl. `datumctl billing
 // usage` reads metered usage and spend from usage.billing.miloapis.com
 // UsageQuery with the user's own datumctl session, in the context of the

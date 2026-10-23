@@ -1,0 +1,116 @@
+# Billing: usage and spend on Datum Cloud
+
+This describes how Datum Cloud meters usage and prices it, and how to read
+the billing tools' results. The tools read one project's usage, as the person
+asking, in the project the conversation is about.
+
+## Usage
+
+Every service reports what a project consumes on meters. A meter has:
+
+- A name, e.g. "ALB Requests", and a meter name naming the service that owns
+  it, e.g. networking.datumapis.com/gateway/requests.
+- A unit. Byte meters are shown in KB, MB and GB of 1024, the same GB byte
+  meters are priced in. Byte-seconds (memory held over time) are shown as
+  GB-hours (GB·h), millicore-seconds as vCPU time (vCPU·h), allocated CPU as
+  vCPU, durations as s, m, h and d, and everything else (requests, tokens,
+  queries) as a plain count.
+- An aggregation. Most meters sum (Sum, Count): the period's value is the
+  total consumed. Some are gauges: Latest is the most recent reading (e.g.
+  allocated CPU, active DNS records) and Max the peak. A gauge's value is a
+  level, not an amount used, and the tools mark it "latest" or "peak". Never
+  add gauge readings across days.
+- Dimensions it can be broken down by, e.g. region, model, httproute_name
+  (an ALB) or project_name. list_meters shows each meter's dimensions.
+
+A meter with no usage in a period is left out of results, and the result says
+how many were left out (metersWithoutUsage). A deprecated meter only appears
+while it still has usage.
+
+## Spend
+
+Spend is what the usage costs, priced the way the invoice prices it: with the
+prices of the billing account's plan in effect at the time, with tiered prices
+continuing from usage earlier in the billing period. It is before taxes,
+credits and discounts, so the invoice total can differ.
+
+- Spend is per meter and for the whole period. A breakdown or daily view
+  shows usage only.
+- A meter without spend has no price on the plan; it doesn't mean it is free
+  of charge elsewhere on the invoice.
+- spendUnavailable means the price could not be worked out for that meter or
+  the total. Say so rather than guessing a figure.
+- A project's spend is priced as if its usage were the billing account's only
+  usage, so for tiered prices the project's share of an organization's bill
+  can differ.
+
+## Billing cycles
+
+Usage is reported for billing cycles, which come from the billing account's
+payment terms: an invoice day of the month and a frequency (monthly,
+quarterly or annual). The current cycle runs from its start to now; the
+previous cycle is the one before it. When the billing account can't be read,
+cycles are assumed to be calendar months and the result's notes say so. Any
+other range can be read with from and to.
+
+## Billing accounts, payment methods and invoices
+
+A project is billed to one billing account, which belongs to its
+organization. Several projects can share an account.
+
+- An account's phase is Provisioning (being set up), Ready (can be billed),
+  Suspended or Archived. When it isn't Ready, its status and issues say why,
+  often a default payment method that isn't active.
+- The account's payment terms set its billing cycle (invoice day and
+  frequency) and how many days an invoice has to be paid (net days). Some
+  accounts pay by invoice under an arrangement with its own net days and
+  credit limit instead of by card.
+- The plan is the Offer whose prices the account's usage is charged at.
+- Payment methods are cards or US bank accounts. Only enough to recognise
+  one is shown: brand or bank, last four digits, and a card's expiry. A
+  payment method is Pending or AwaitingConfirmation while it is being set up,
+  Active once confirmed, and Failed with a reason when it can't be used. The
+  default payment method is the one the account is charged to.
+
+Invoices are issued for each billing cycle once it closes. An invoice only
+appears once it has been issued, so the current cycle's charges show as spend
+(usage_summary), not as an invoice.
+
+- Open: issued, payment outstanding (including while a payment is
+  processing). PastDue: not paid by its due date. Paid. Void: cancelled, or
+  written off as uncollectible.
+- Total is what the invoice charges; amount due is what is left to pay.
+- The link opens the invoice's hosted page, where it can be viewed,
+  downloaded and paid. It is kept current, so it always opens.
+- A problem on an invoice, such as a currency that doesn't match the
+  account's, is reported with it.
+
+The assistant can't change any of this. Payment methods, the default payment
+method and invoices are managed on the organization's Billing page in the
+Datum Cloud portal, by someone with an organization role that can edit
+billing.
+
+## Which tool to use
+
+- usage_summary: what did this project use and what does it cost, for the
+  current or previous billing cycle or a date range. Start here.
+- usage_breakdown: what is driving a meter's usage, split by one dimension
+  (e.g. region, model, ALB). Optionally one meter.
+- usage_daily: when did usage change, per day. Optionally one meter.
+- list_meters: what each meter measures, its unit, aggregation and
+  dimensions.
+- get_billing_account: the project's billing account: status and why,
+  currency, plan, payment terms, current cycle and default payment method.
+- list_payment_methods: the account's payment methods and their status.
+- list_invoices: the account's invoices, newest first, with status, amounts,
+  due dates and links.
+
+## Scope and access
+
+The usage tools read only this project's usage, which needs the billing
+viewer role that an organization's Viewer, Editor and Owner roles include.
+The billing account, payment methods and invoices belong to the
+organization, so reading them needs an organization role even when the
+project's usage is readable.
+Organization-wide usage, across every project, is on the organization's Usage
+page in the Datum Cloud portal, or `datumctl billing usage --org <org>`.

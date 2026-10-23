@@ -1,0 +1,120 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+#
+# What billing's agent offers a customer: docs to read, tools to call, and
+# guides to follow.
+#
+# New versions ship as new objects (billing-assistant-v2, ...) rather than
+# edits to this one, so it is always clear which content a customer saw. The
+# newest Published one wins.
+#
+# The catalog copies this into every entitled project, where the assistant
+# reads it. Nothing here entitles anyone on its own.
+apiVersion: services.miloapis.com/v1alpha1
+kind: ServiceAgentConfiguration
+metadata:
+  name: billing-assistant-v1
+  labels:
+    app.kubernetes.io/name: billing-assistant
+    app.kubernetes.io/part-of: billing.miloapis.com
+spec:
+  serviceAgentRef:
+    name: billing-assistant
+  phase: Published
+  # Our own stamp for the content below. Bump it, as a new object, whenever
+  # that content changes.
+  version: v1
+  # Where the billing team reads reports of things the assistant could not do.
+  reportingProject: datum-cloud
+
+  knowledge:
+    # Served by `billing mcp` (config/components/mcp-server). If it is ever
+    # unreachable the assistant carries on without it.
+    sources:
+      - type: LLMDocs
+        title: Usage, spend, billing accounts and invoices
+        url: http://billing-mcp.billing-system.svc.cluster.local:8080/llms-full.txt
+    # Short explanations so basic questions need no fetch.
+    concepts:
+      - gvk:
+          group: usage.billing.miloapis.com
+          kind: UsageQuery
+        summary: "A one-shot read of a project's metered usage over a time range, per meter, with totals, optional breakdowns by dimension and daily points, and what the usage costs on the billing account's plan before taxes, credits and discounts."
+      - gvk:
+          group: billing.miloapis.com
+          kind: BillingAccount
+        summary: "What an organization's projects are billed to: its currency, payment terms (billing cycle and days to pay), default payment method, and a phase (Provisioning, Ready, Suspended, Archived) with conditions saying why it isn't ready."
+      - gvk:
+          group: billing.miloapis.com
+          kind: Invoice
+        summary: "What a billing account owes for one billing cycle, issued once the cycle closes: Open (payment outstanding), PastDue, Paid or Void, with the total, amount due, due date and a link to the hosted invoice page to view or pay it."
+      - gvk:
+          group: billing.miloapis.com
+          kind: MeterDefinition
+        summary: "One meter a service reports usage on: what it measures, its unit, how it aggregates (Sum for amounts used, Latest or Max for levels such as allocated CPU), and the dimensions usage can be broken down by."
+
+  tools:
+    mcpServers:
+      # Tools reach the assistant as "billing__<tool>", so they cannot clash
+      # with another service's.
+      - name: billing
+        # Points straight at billing-mcp, which is fine in staging.
+        #
+        # Production needs this changed to the AI gateway address. Going direct
+        # there means the call is not billed, does not carry the customer's
+        # identity, and is refused by CAPABILITY_MCP_ENDPOINT_HOSTS.
+        endpoint: http://billing-mcp.billing-system.svc.cluster.local:8080/mcp
+        toolSelector:
+          # The approved list. Anything not named here is never offered to the
+          # assistant, even if billing-mcp serves it.
+          include:
+            - usage_summary
+            - usage_breakdown
+            - usage_daily
+            - list_meters
+            - get_billing_account
+            - list_payment_methods
+            - list_invoices
+        # None of these change anything. Left explicit so the next person
+        # adding a tool has to think about it.
+        mutating: []
+
+  # Only the name and description reach the assistant; the guide itself is
+  # fetched when it is relevant.
+  skills:
+    - name: explain-spend
+      description: Explain what a project's spend is made of, which meters and dimensions drive it, and how it compares with the previous billing cycle
+      source: http://billing-mcp.billing-system.svc.cluster.local:8080/runbooks/explain-spend.md
+    - name: usage-spike
+      description: Find when a meter's usage jumped, what drove it, and whether it is still going on
+      source: http://billing-mcp.billing-system.svc.cluster.local:8080/runbooks/usage-spike.md
+    - name: billing-problems
+      description: Find why a billing account isn't working, such as a failed or expired card, an overdue invoice or a suspended account, and what fixes it
+      source: http://billing-mcp.billing-system.svc.cluster.local:8080/runbooks/billing-problems.md
+
+  authority:
+    # Reads run as the person asking, so this grants nothing they do not
+    # already have. The tools leave out contact details, addresses and
+    # payment instrument details beyond brand, last four and expiry.
+    reads:
+      - gvk:
+          group: usage.billing.miloapis.com
+          kind: UsageQuery
+      - gvk:
+          group: billing.miloapis.com
+          kind: MeterDefinition
+      - gvk:
+          group: billing.miloapis.com
+          kind: BillingAccount
+      - gvk:
+          group: billing.miloapis.com
+          kind: BillingAccountBinding
+      - gvk:
+          group: billing.miloapis.com
+          kind: BillingEntitlement
+      - gvk:
+          group: billing.miloapis.com
+          kind: PaymentMethod
+      - gvk:
+          group: billing.miloapis.com
+          kind: Invoice
+    maxTaskDurationSeconds: 60

@@ -1,0 +1,22 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+apiVersion: v1
+kind: Service
+metadata:
+  name: billing-mcp
+  namespace: billing-system
+  labels:
+    app.kubernetes.io/name: billing-mcp
+    app.kubernetes.io/instance: billing-mcp
+    app.kubernetes.io/component: mcp-server
+    app.kubernetes.io/part-of: billing.miloapis.com
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http
+      protocol: TCP
+  selector:
+    app.kubernetes.io/name: billing-mcp
+    app.kubernetes.io/instance: billing-mcp
+    app.kubernetes.io/component: mcp-server

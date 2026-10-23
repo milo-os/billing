@@ -1,4 +1,6 @@
-package main
+// SPDX-License-Identifier: AGPL-3.0-only
+
+package usagereport
 
 import (
 	"math"
@@ -9,23 +11,23 @@ import (
 	"golang.org/x/text/message"
 )
 
-// unitKind is the display family of a meter's UCUM unit.
-type unitKind int
+// UnitKind is the display family of a meter's UCUM unit.
+type UnitKind int
 
 const (
-	unitCount    unitKind = iota
-	unitBytes             // bytes
-	unitDuration          // seconds
-	unitByteTime          // byte-seconds, e.g. memory over time
-	unitCPUTime           // core-seconds
-	unitCPU               // cores, e.g. allocated vCPU
+	UnitCount    UnitKind = iota
+	UnitBytes             // bytes
+	UnitDuration          // seconds
+	UnitByteTime          // byte-seconds, e.g. memory over time
+	UnitCPUTime           // core-seconds
+	UnitCPU               // cores, e.g. allocated vCPU
 )
 
-// meterUnit is a display family plus the factor that converts a raw value
+// MeterUnit is a display family plus the factor that converts a raw value
 // into the family's base unit.
-type meterUnit struct {
-	kind  unitKind
-	scale float64
+type MeterUnit struct {
+	Kind  UnitKind
+	Scale float64
 }
 
 var byteFactors = map[string]float64{
@@ -61,7 +63,7 @@ func parseTerm(term string) (unitFamily, float64) {
 	return familyOther, 1
 }
 
-// parseUnit maps a UCUM unit from a MeterDefinition onto a display family,
+// ParseUnit maps a UCUM unit from a MeterDefinition onto a display family,
 // matching the portal's usage formatter:
 //
 //	By, GiBy ...           bytes
@@ -70,8 +72,8 @@ func parseTerm(term string) (unitFamily, float64) {
 //	{millicore}.s ...      CPU time
 //	{cpu}, {millicore}     CPU (cores)
 //	everything else        count
-func parseUnit(unit string) meterUnit {
-	count := meterUnit{kind: unitCount, scale: 1}
+func ParseUnit(unit string) MeterUnit {
+	count := MeterUnit{Kind: UnitCount, Scale: 1}
 	var terms []string
 	for _, t := range strings.Split(strings.TrimSpace(unit), ".") {
 		if t != "" {
@@ -83,11 +85,11 @@ func parseUnit(unit string) meterUnit {
 		family, factor := parseTerm(terms[0])
 		switch family {
 		case familyBytes:
-			return meterUnit{kind: unitBytes, scale: factor}
+			return MeterUnit{Kind: UnitBytes, Scale: factor}
 		case familyTime:
-			return meterUnit{kind: unitDuration, scale: factor}
+			return MeterUnit{Kind: UnitDuration, Scale: factor}
 		case familyCPU:
-			return meterUnit{kind: unitCPU, scale: factor}
+			return MeterUnit{Kind: UnitCPU, Scale: factor}
 		}
 	case 2:
 		fa, a := parseTerm(terms[0])
@@ -100,9 +102,9 @@ func parseUnit(unit string) meterUnit {
 		}
 		switch fa {
 		case familyBytes:
-			return meterUnit{kind: unitByteTime, scale: a * b}
+			return MeterUnit{Kind: UnitByteTime, Scale: a * b}
 		case familyCPU:
-			return meterUnit{kind: unitCPUTime, scale: a * b}
+			return MeterUnit{Kind: UnitCPUTime, Scale: a * b}
 		}
 	}
 	return count
@@ -151,20 +153,20 @@ func formatDuration(s float64) string {
 
 var printer = message.NewPrinter(language.English)
 
-// formatUsage renders a raw meter value for its unit, e.g. "219 GB·h".
-func formatUsage(u meterUnit, value float64) string {
+// FormatUsage renders a raw meter value for its unit, e.g. "219 GB·h".
+func FormatUsage(u MeterUnit, value float64) string {
 	if value == 0 {
 		return "0"
 	}
-	base := value * u.scale
-	switch u.kind {
-	case unitBytes:
+	base := value * u.Scale
+	switch u.Kind {
+	case UnitBytes:
 		return formatBytes(base)
-	case unitDuration:
+	case UnitDuration:
 		return formatDuration(base)
-	case unitByteTime:
+	case UnitByteTime:
 		return formatBytes(base/3600) + "·h"
-	case unitCPUTime:
+	case UnitCPUTime:
 		switch {
 		case base >= 3600:
 			return trimNumber(base/3600) + " vCPU·h"
@@ -172,7 +174,7 @@ func formatUsage(u meterUnit, value float64) string {
 			return trimNumber(base/60) + " vCPU·min"
 		}
 		return trimNumber(base) + " vCPU·s"
-	case unitCPU:
+	case UnitCPU:
 		return trimNumber(base) + " vCPU"
 	}
 	if base == math.Trunc(base) {
@@ -185,8 +187,8 @@ var aggregationQualifiers = map[string]string{
 	"Latest": "latest", "Max": "peak", "Min": "lowest", "Average": "average", "UniqueCount": "unique",
 }
 
-// withQualifier marks values that aren't running totals, e.g. "4 vCPU latest".
-func withQualifier(value, aggregation string) string {
+// WithQualifier marks values that aren't running totals, e.g. "4 vCPU latest".
+func WithQualifier(value, aggregation string) string {
 	if q := aggregationQualifiers[aggregation]; q != "" {
 		return value + " " + q
 	}
@@ -195,9 +197,9 @@ func withQualifier(value, aggregation string) string {
 
 var currencySymbols = map[string]string{"USD": "$", "EUR": "€", "GBP": "£"}
 
-// formatMoney renders a decimal amount string in its currency: cents as
+// FormatMoney renders a decimal amount string in its currency: cents as
 // usual, up to four decimals below one unit ("$0.0042").
-func formatMoney(amount, currency string) string {
+func FormatMoney(amount, currency string) string {
 	v, err := strconv.ParseFloat(amount, 64)
 	if err != nil {
 		return amount + " " + currency
@@ -222,10 +224,34 @@ func formatMoney(amount, currency string) string {
 	return s + " " + currency
 }
 
-func parseDecimal(s string) float64 {
+func ParseDecimal(s string) float64 {
 	v, err := strconv.ParseFloat(s, 64)
 	if err != nil {
 		return 0
 	}
 	return v
+}
+
+var serviceAcronyms = map[string]string{"dns": "DNS", "ai": "AI", "alb": "ALB", "iam": "IAM"}
+
+// ServiceName derives a service label from a meter name's domain, e.g.
+// "compute.datumapis.com/instance/cpu-seconds" -> "Compute".
+func ServiceName(meterName string) string {
+	domain, _, _ := strings.Cut(meterName, "/")
+	label, _, _ := strings.Cut(domain, ".")
+	if label == "" {
+		return "Other"
+	}
+	if acronym, ok := serviceAcronyms[label]; ok {
+		return acronym
+	}
+	words := strings.FieldsFunc(label, func(r rune) bool { return r == '-' || r == '_' })
+	for i, word := range words {
+		if acronym, ok := serviceAcronyms[word]; ok {
+			words[i] = acronym
+		} else {
+			words[i] = strings.ToUpper(word[:1]) + word[1:]
+		}
+	}
+	return strings.Join(words, " ")
 }

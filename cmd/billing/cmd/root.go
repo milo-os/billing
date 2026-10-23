@@ -24,5 +24,6 @@ func NewRootCommand(info BuildInfo) *cobra.Command {
 	root.AddCommand(newOperatorCommand(info))
 	root.AddCommand(newGatewayCommand())
 	root.AddCommand(newUsageGeneratorCommand())
+	root.AddCommand(newMCPCommand(info))
 	return root
 }
