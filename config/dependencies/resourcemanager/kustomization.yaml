@@ -5,4 +5,4 @@ resources:
   # Sourced directly from milo-os/milo so this can't drift from the real
   # Project CRD. Keep the ref in sync with the go.miloapis.com/milo version
   # pinned in go.mod (see Taskfile.yaml's MILO_REPO_REF).
-  - https://raw.githubusercontent.com/milo-os/milo/refs/tags/v0.36.10/config/crd/bases/resourcemanager/resourcemanager.miloapis.com_projects.yaml
+  - https://raw.githubusercontent.com/milo-os/milo/refs/tags/v0.36.9/config/crd/bases/resourcemanager/resourcemanager.miloapis.com_projects.yaml
