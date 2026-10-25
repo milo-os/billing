@@ -11,7 +11,7 @@ vars:
   APPLYCONFIGURATION_GEN_VERSION: "v0.35.0"
   # Keep in sync with the k8s.io/kube-openapi version pinned in go.mod.
   OPENAPI_GEN_VERSION: "v0.0.0-20250910181357-589584f1c912"
-  GOLANGCI_LINT_VERSION: "v2.1.5"
+  GOLANGCI_LINT_VERSION: "v2.12.2"
   CHAINSAW_VERSION: "v0.2.15"
   # Keep in sync with the go.miloapis.com/milo version pinned in go.mod.
   MILO_REPO_REF: "v0.31.0"
