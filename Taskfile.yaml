@@ -14,7 +14,7 @@ vars:
   GOLANGCI_LINT_VERSION: "v2.12.2"
   CHAINSAW_VERSION: "v0.2.15"
   # Keep in sync with the go.miloapis.com/milo version pinned in go.mod.
-  MILO_REPO_REF: "v0.31.0"
+  MILO_REPO_REF: "v0.36.9"
 
 includes:
   # Must set TASK_X_REMOTE_TASKFILES=1 to use this feature.
