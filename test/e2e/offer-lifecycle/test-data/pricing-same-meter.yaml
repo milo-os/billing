@@ -1,0 +1,15 @@
+# A second price for the meter e2e-offer-cpu-allocated already prices.
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-offer-cpu-allocated-pro
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  serviceRef: compute.datumapis.com
+  currency: USD
+  displayName: E2E Offer CPU Allocated (Pro)
+  metric: e2e.billing.miloapis.com/offer/cpu-allocated
+  pricingUnit: vcpu
+  rates:
+    - flat: "0.025"

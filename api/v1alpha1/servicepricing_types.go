@@ -8,10 +8,14 @@ import (
 
 // ServicePricingSpec defines the desired state of a ServicePricing.
 //
-// ServicePricing resources are emitted by service-catalog fan-out
-// controllers (PricingFanOut / ChargeFanOut) and must not be authored by
-// hand. Providers watch this single shape — distinguished by chargeType —
-// rather than parsing ServiceConfiguration.
+// A ServicePricing is a price the platform sets, authored as a manifest
+// next to the service's meters. A Usage pricing selects one meter by name;
+// any number of pricings may select the same meter, and each Offer picks the
+// one it bills. OneTime and Recurring pricings name a service and carry a
+// fixed amount. Providers read the Offer's snapshot of this shape,
+// distinguished by chargeType.
+//
+// The spec is immutable: a new price is a new ServicePricing.
 //
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit) && has(self.rates))",message="Usage ServicePricing requires metric, pricingUnit, and rates"
 // +kubebuilder:validation:XValidation:rule="self.chargeType == 'Usage' || !has(self.unitConversion)",message="unitConversion is only allowed for Usage ServicePricing"
@@ -44,9 +48,10 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:MaxLength=128
 	DisplayName string `json:"displayName,omitempty"`
 
-	// Metric is the full metric name for Usage charges (e.g.
-	// "compute.datumapis.com/instance/cpu-allocated"). Required when
-	// chargeType is Usage.
+	// Metric is the meterName of the MeterDefinition a Usage pricing
+	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
+	// Required when chargeType is Usage. The meter must exist and not be
+	// Retired, and serviceRef must name the service that owns it.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=253
@@ -137,8 +142,8 @@ type ServicePricingStatus struct {
 }
 
 // ServicePricing is the Schema for the servicepricings API. One resource
-// per priced metric or fixed charge, emitted by service-catalog into
-// milo-system.
+// per price: a rate for one meter, or a fixed charge. Kept in GitOps and
+// applied to milo-system.
 //
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
@@ -152,6 +157,7 @@ type ServicePricing struct {
 	metav1.TypeMeta   `json:",inline"`
 	metav1.ObjectMeta `json:"metadata,omitempty"`
 
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable; create a new ServicePricing for a new price"
 	Spec   ServicePricingSpec   `json:"spec,omitempty"`
 	Status ServicePricingStatus `json:"status,omitempty"`
 }

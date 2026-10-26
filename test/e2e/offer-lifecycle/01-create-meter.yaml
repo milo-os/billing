@@ -1,0 +1,22 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MeterDefinition
+metadata:
+  name: e2e-offer-cpu-allocated
+  labels:
+    # Set by service-catalog's meter fan-out; a Usage ServicePricing's
+    # serviceRef must match it.
+    services.miloapis.com/service: compute.datumapis.com
+spec:
+  meterName: e2e.billing.miloapis.com/offer/cpu-allocated
+  displayName: E2E Offer CPU Allocated
+  description: E2E fixture for a meter a ServicePricing selects.
+  phase: Published
+  measurement:
+    aggregation: Average
+    unit: "{vcpu}"
+    dimensions:
+      - tier
+  billing:
+    consumedUnit: "{vcpu}"
+  monitoredResourceTypes:
+    - instance

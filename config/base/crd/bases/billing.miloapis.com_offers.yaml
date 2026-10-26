@@ -206,9 +206,10 @@ spec:
                           type: string
                         metric:
                           description: |-
-                            Metric is the full metric name for Usage charges (e.g.
-                            "compute.datumapis.com/instance/cpu-allocated"). Required when
-                            chargeType is Usage.
+                            Metric is the meterName of the MeterDefinition a Usage pricing
+                            selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
+                            Required when chargeType is Usage. The meter must exist and not be
+                            Retired, and serviceRef must name the service that owns it.
                           maxLength: 253
                           type: string
                         pricingUnit:

@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-meter-priced-twice
+spec:
+  chargeTypes:
+    - Usage
+  launchStage: Draft
+  # Both pricings select the same meter, so they'd bill the same usage twice.
+  servicePricingRefs:
+    - name: e2e-offer-cpu-allocated
+    - name: e2e-offer-cpu-allocated-pro

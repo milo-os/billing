@@ -14,8 +14,8 @@ import (
 // with apply.
 //
 // ServicePricing is the Schema for the servicepricings API. One resource
-// per priced metric or fixed charge, emitted by service-catalog into
-// milo-system.
+// per price: a rate for one meter, or a fixed charge. Kept in GitOps and
+// applied to milo-system.
 type ServicePricingApplyConfiguration struct {
 	v1.TypeMetaApplyConfiguration    `json:",inline"`
 	*v1.ObjectMetaApplyConfiguration `json:"metadata,omitempty"`

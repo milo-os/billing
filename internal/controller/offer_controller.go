@@ -5,17 +5,18 @@ package controller
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/validation"
 )
 
 // OfferReconciler reconciles an Offer object.
@@ -79,6 +80,26 @@ func (r *OfferReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 					ObservedGeneration: offer.Generation,
 					Reason:             "SnapshotPending",
 					Message:            "Waiting for ServicePricing snapshot before the Offer can be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
+
+			// Two pricings on one meter would bill the same usage
+			// twice, so the Offer isn't published.
+			if dups := validation.UsageMetersPricedTwice(snapshots); len(dups) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "MeterPricedTwice",
+					Message:            meterPricedTwiceMessage(dups),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "MeterPricedTwice",
+					Message:            "Offer prices a meter more than once and can't be published.",
 				})
 				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
 			}
@@ -156,13 +177,10 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 
 	snapshots := make([]billingv1alpha1.ServicePricingSnapshot, 0, len(offer.Spec.ServicePricingRefs))
 	for _, ref := range offer.Spec.ServicePricingRefs {
-		ns := ref.Namespace
-		if ns == "" {
-			ns = billingv1alpha1.DefaultServicePricingNamespace
-		}
+		key := validation.ServicePricingRefKey(ref)
 		var sp billingv1alpha1.ServicePricing
-		if err := r.client.Get(ctx, types.NamespacedName{Namespace: ns, Name: ref.Name}, &sp); err != nil {
-			return nil, fmt.Errorf("resolving servicePricingRef %s/%s: %w", ns, ref.Name, err)
+		if err := r.client.Get(ctx, key, &sp); err != nil {
+			return nil, fmt.Errorf("resolving servicePricingRef %s: %w", key, err)
 		}
 		var discount *billingv1alpha1.Discount
 		if ref.Discount != nil {
@@ -178,6 +196,14 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 		})
 	}
 	return snapshots, nil
+}
+
+func meterPricedTwiceMessage(dups []validation.MeterPricedTwice) string {
+	parts := make([]string, 0, len(dups))
+	for _, d := range dups {
+		parts = append(parts, fmt.Sprintf("meter %q by %s", d.Metric, strings.Join(d.Pricings, ", ")))
+	}
+	return "Each meter may be priced once per Offer; priced more than once: " + strings.Join(parts, "; ")
 }
 
 func chargeTypesMissingFromSnapshot(offer *billingv1alpha1.Offer) []billingv1alpha1.ChargeType {

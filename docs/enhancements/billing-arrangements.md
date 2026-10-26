@@ -579,8 +579,12 @@ Phase 2's billing resources are implemented in this repository:
 - **`PaymentReady`** gains the reason `ApplicationPending` (False) while an
   application awaits review and there's no working card or active terms. It
   ranks below `ArrangementScheduled` and above a failed card or ended terms,
-  so the portal shows the review holding page, and milo keeps project
-  creation blocked until there's a decision.
+  so the portal shows the review holding page and keeps the org behind its
+  setup gate until there's a decision. Milo's `OnboardingComplete` stays
+  `False` (reason `PaymentMethodNotReady`), which datumctl reads to send
+  users back to the portal. Nothing on the server rejects requests on this
+  condition, so the API doesn't block project creation for an org with a
+  pending application, just as it doesn't for an org with no card.
 - **Permissions.** Billing Admin can create applications and withdraw them,
   but not delete them. Billing Viewer can read them. Declines are readable
   only through `billing-arrangement-viewer`, and `billing-arrangement-admin`
@@ -597,18 +601,50 @@ application without changing the API (see Still Open).
 
 Follow-ups in other repos:
 
-- **cloud-portal:** leave "Sponsored access" off the application form for
-  now; create applications from the payment choice, the
-  older-account screen and billing settings; show the holding page while
-  `PaymentReady` is `ApplicationPending`; show the approved or declined
-  screen from the application's status; withdraw with "Add a card instead";
-  and show the member page from the `ApplicationPending` reason.
+- **cloud-portal** ([cloud-portal#1695][portal-1695]): the application form
+  and its review, approved and declined pages in the onboarding layout; a
+  "Can't pay by card? Apply for payment terms" line under the payment method
+  field in onboarding, when finishing an older org's setup, and in the
+  create-organization dialog; the member page from the `ApplicationPending`
+  reason; and a payment terms section in billing settings. "Sponsored
+  access" is left off the form, and the credit limit isn't shown to
+  customers, since nothing enforces or alerts on it yet.
 - **staff-portal:** the applications queue, approving by granting terms
   with `applicationRef` set, and declining.
-- **milo:** the application, approval and decline emails, and the Help
-  Scout ticket. Send the decision emails from the application's settled
-  status, not when a decision is created, so a decline that races an
-  approval doesn't also send a "declined" email.
+- **milo:** the emails and the Help Scout ticket. Today nothing reacts to
+  an application: no email is sent, no ticket is opened, and staff aren't
+  told. See [Notifying people about applications](#notifying-people-about-applications).
+
+### Notifying people about applications
+
+Milo sends email by creating a notification `Email` from an
+`EmailTemplate`, as the invitation, waitlist and suspension controllers do.
+An `Email` can go to any address, not only a user. The plan is one milo
+controller that watches `BillingArrangementApplication`:
+
+- **When an application is created:**
+  - "We've received your application" to the applicant (`spec.applicant`).
+  - "New payment terms application: {Org}" to the support mailbox in Help
+    Scout, which turns it into a conversation. That is the ticket for
+    confirmation and follow-up. It needs no Help Scout API or credentials,
+    and changing support systems means changing an address (decision 6).
+- **When the application's status settles** on `Approved` or `Declined`:
+  the approval or decline email to the applicant and the org's owners. Send
+  from the settled status, not when a decision is created, so a decline
+  that races an approval doesn't also send a "declined" email.
+- **Name each `Email` from the application and the event**, so a re-run of
+  the reconcile doesn't send twice, as the other controllers already do.
+
+Two gaps to close along the way:
+
+- **Reply-to.** `EmailSpec` has a recipient, CC, BCC and variables, but no
+  reply-to. Help Scout would show the conversation as from Datum's sending
+  address, so replying to the customer isn't automatic. Add a reply-to to
+  `Email`, or put the applicant's address in the message.
+- **Telling "under review" apart.** Milo's `OnboardingComplete` reports
+  `PaymentMethodNotReady` whether or not the customer has applied. Mapping
+  billing's `ApplicationPending` to its own reason would let datumctl say
+  the organization is waiting on review rather than asking for a card.
 
 | Repo | What changes |
 |---|---|
@@ -684,6 +720,9 @@ Follow-ups in other repos:
 - 2026-10-23: From review: owner references on applications are fixed,
   applying needs a billing address and is blocked while open-ended or
   scheduled terms exist, and deleting an approval reopens the application.
+- 2026-10-25: Corrected what blocks an org with a pending application (the
+  portal's setup gate and datumctl, not milo). Recorded the cloud-portal
+  work and the plan for milo's emails and the Help Scout ticket.
 
 ## Future Work
 
@@ -731,3 +770,4 @@ Follow-ups in other repos:
 
 [issue-1501]: https://github.com/datum-cloud/cloud-portal/issues/1501
 [issue-1501-paths]: https://github.com/datum-cloud/cloud-portal/issues/1501#issuecomment-5737118432
+[portal-1695]: https://github.com/datum-cloud/cloud-portal/pull/1695

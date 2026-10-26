@@ -85,3 +85,10 @@ rules:
   - get
   - list
   - watch
+- apiGroups:
+  - services.miloapis.com
+  resources:
+  - services
+  verbs:
+  - get
+  - list
