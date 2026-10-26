@@ -1,0 +1,15 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-offer-cpu-allocated
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  serviceRef: compute.datumapis.com
+  currency: USD
+  displayName: E2E Offer CPU Allocated
+  metric: e2e.billing.miloapis.com/offer/cpu-allocated
+  pricingUnit: vcpu
+  # A new rate is a new ServicePricing; changing this one must be rejected.
+  rates:
+    - flat: "0.045"

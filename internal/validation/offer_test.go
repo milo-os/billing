@@ -3,9 +3,12 @@
 package validation
 
 import (
+	"context"
+	"reflect"
 	"testing"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -228,5 +231,87 @@ func TestOfferIsAssignable(t *testing.T) {
 	gaReady.Spec.ServicePricings = sampleSnapshot()
 	if !OfferIsAssignable(gaReady) {
 		t.Fatal("GA with snapshot should be assignable")
+	}
+}
+
+func cpuPricing(name, flat string) *billingv1alpha1.ServicePricing {
+	return &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeUsage,
+			ServiceRef:  "compute.datumapis.com",
+			Currency:    "USD",
+			Metric:      "compute.datumapis.com/instance/cpu-allocated",
+			PricingUnit: "vcpu",
+			Rates:       []billingv1alpha1.PricingRate{{Flat: flat}},
+		},
+	}
+}
+
+func TestValidateOfferServicePricingRefs(t *testing.T) {
+	cl := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(
+		cpuPricing("compute-cpu-allocated-v1", "0.025"),
+		cpuPricing("compute-cpu-allocated-pro-v1", "0.020"),
+	).Build()
+
+	t.Run("one price per meter ok", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-pro-v1"},
+			{Name: "not-applied-yet"},
+		}
+		if errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer); len(errs) != 0 {
+			t.Errorf("unexpected errors: %v", errs)
+		}
+	})
+
+	t.Run("two prices on one meter rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1"},
+			{Name: "compute-cpu-allocated-pro-v1"},
+		}
+		if errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer); len(errs) != 1 {
+			t.Errorf("got %d errors, want 1: %v", len(errs), errs)
+		}
+	})
+}
+
+func TestValidateOfferUpdate_SnapshotPricesMeterOnce(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	for _, sp := range []*billingv1alpha1.ServicePricing{
+		cpuPricing("compute-cpu-allocated-v1", "0.025"),
+		cpuPricing("compute-cpu-allocated-pro-v1", "0.020"),
+	} {
+		newOffer.Spec.ServicePricings = append(newOffer.Spec.ServicePricings,
+			billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 {
+		t.Errorf("got %d errors, want 1: %v", len(errs), errs)
+	}
+}
+
+func TestUsageMetersPricedTwice(t *testing.T) {
+	snap := func(name, metric string, ct billingv1alpha1.ChargeType) billingv1alpha1.ServicePricingSnapshot {
+		return billingv1alpha1.ServicePricingSnapshot{
+			Name: name,
+			Spec: billingv1alpha1.ServicePricingSpec{ChargeType: ct, Metric: metric},
+		}
+	}
+
+	got := UsageMetersPricedTwice([]billingv1alpha1.ServicePricingSnapshot{
+		snap("cpu-v1", "cpu", billingv1alpha1.ChargeTypeUsage),
+		snap("mem-v1", "mem", billingv1alpha1.ChargeTypeUsage),
+		snap("setup-fee-v1", "", billingv1alpha1.ChargeTypeOneTime),
+		snap("platform-fee-v1", "", billingv1alpha1.ChargeTypeRecurring),
+		snap("cpu-pro-v1", "cpu", billingv1alpha1.ChargeTypeUsage),
+	})
+	want := []MeterPricedTwice{{Metric: "cpu", Pricings: []string{"cpu-v1", "cpu-pro-v1"}}}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v, want %v", got, want)
 	}
 }

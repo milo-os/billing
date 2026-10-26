@@ -17,6 +17,25 @@ spec:
             content: |
               kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
 
+    - name: create-meter
+      description: |
+        Create the MeterDefinition the ServicePricing selects. Waiting for
+        Ready means the operator's cache, which the webhook reads, has it.
+      try:
+        - create:
+            file: 01-create-meter.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-be-cpu-allocated
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+
     - name: create-prerequisites
       description: Create ServicePricing, Draft Offer, and BillingAccount.
       try:
@@ -96,3 +115,8 @@ spec:
               kind: ServicePricing
               name: e2e-be-cpu-allocated
               namespace: milo-system
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              name: e2e-be-cpu-allocated

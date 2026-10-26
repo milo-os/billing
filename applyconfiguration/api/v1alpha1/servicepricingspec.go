@@ -13,10 +13,14 @@ import (
 //
 // ServicePricingSpec defines the desired state of a ServicePricing.
 //
-// ServicePricing resources are emitted by service-catalog fan-out
-// controllers (PricingFanOut / ChargeFanOut) and must not be authored by
-// hand. Providers watch this single shape — distinguished by chargeType —
-// rather than parsing ServiceConfiguration.
+// A ServicePricing is a price the platform sets, authored as a manifest
+// next to the service's meters. A Usage pricing selects one meter by name;
+// any number of pricings may select the same meter, and each Offer picks the
+// one it bills. OneTime and Recurring pricings name a service and carry a
+// fixed amount. Providers read the Offer's snapshot of this shape,
+// distinguished by chargeType.
+//
+// The spec is immutable: a new price is a new ServicePricing.
 type ServicePricingSpecApplyConfiguration struct {
 	// ChargeType distinguishes Usage, OneTime, and Recurring pricing.
 	ChargeType *apiv1alpha1.ChargeType `json:"chargeType,omitempty"`
@@ -27,9 +31,10 @@ type ServicePricingSpecApplyConfiguration struct {
 	Currency *string `json:"currency,omitempty"`
 	// DisplayName is a human-readable label for invoices and portals.
 	DisplayName *string `json:"displayName,omitempty"`
-	// Metric is the full metric name for Usage charges (e.g.
-	// "compute.datumapis.com/instance/cpu-allocated"). Required when
-	// chargeType is Usage.
+	// Metric is the meterName of the MeterDefinition a Usage pricing
+	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
+	// Required when chargeType is Usage. The meter must exist and not be
+	// Retired, and serviceRef must name the service that owns it.
 	Metric *string `json:"metric,omitempty"`
 	// PricingUnit is a human-readable billing unit label (e.g. "vcpu",
 	// "gib"). Required when chargeType is Usage. Does not need to be the

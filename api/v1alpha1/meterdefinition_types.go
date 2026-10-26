@@ -13,6 +13,12 @@ import (
 // downstream metering systems (e.g. Amberflo).
 const SystemDimensionProjectName = "project_name"
 
+// MeterServiceLabel names the service that owns a MeterDefinition, by its
+// canonical serviceName (e.g. "compute.datumapis.com"). service-catalog sets
+// it when it fans a ServiceConfiguration's metrics out to meters, and a Usage
+// ServicePricing's serviceRef must equal it.
+const MeterServiceLabel = "services.miloapis.com/service"
+
 // MeterAggregation describes how usage samples for a meter roll up over
 // a billing period.
 // +kubebuilder:validation:Enum=Sum;Max;Min;Count;UniqueCount;Latest;Average

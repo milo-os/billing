@@ -19,7 +19,7 @@ spec:
         serviceRef: compute.datumapis.com
         currency: USD
         displayName: E2E Offer CPU Allocated
-        metric: compute.datumapis.com/instance/cpu-allocated
+        metric: e2e.billing.miloapis.com/offer/cpu-allocated
         pricingUnit: vcpu
         rates:
           - flat: "9.99"

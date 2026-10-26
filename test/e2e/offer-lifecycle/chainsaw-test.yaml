@@ -8,6 +8,9 @@ spec:
     - Creating a Draft Offer with a ServicePricing reference
     - Publishing (launchStage=GA) snapshots rates and becomes Ready/Published
     - Webhook rejects mutations to GA Offer rates/spec
+    - Webhook rejects a ServicePricing for a meter that doesn't exist
+    - Webhook rejects changes to a ServicePricing's spec
+    - Webhook rejects an Offer that prices one meter twice
 
   steps:
     - name: ensure-milo-system
@@ -16,6 +19,25 @@ spec:
         - script:
             content: |
               kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: create-meter
+      description: |
+        Create the MeterDefinition the ServicePricing selects. Waiting for
+        Ready means the operator's cache, which the webhook reads, has it.
+      try:
+        - create:
+            file: 01-create-meter.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-offer-cpu-allocated
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
 
     - name: create-servicepricing
       description: Create a ServicePricing without managed-by so e2e can author it.
@@ -32,6 +54,26 @@ spec:
                 namespace: milo-system
               spec:
                 chargeType: Usage
+
+    - name: reject-pricing-for-unknown-meter
+      description: Verify that a Usage ServicePricing must select an existing meter.
+      try:
+        - create:
+            file: test-data/pricing-unknown-meter.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'no MeterDefinition')): true
+
+    - name: reject-pricing-rate-change
+      description: Verify that a ServicePricing's spec can't change after create.
+      try:
+        - apply:
+            file: test-data/change-pricing-rate.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'immutable')): true
 
     - name: create-draft-offer
       description: Create a Draft Offer referencing the ServicePricing.
@@ -79,8 +121,22 @@ spec:
                   ($error != null): true
                   (contains($error, 'immutable')): true
 
+    - name: reject-meter-priced-twice
+      description: |
+        Verify that an Offer can't reference two pricings for the same meter,
+        though two pricings for one meter can exist.
+      try:
+        - create:
+            file: test-data/pricing-same-meter.yaml
+        - create:
+            file: test-data/offer-meter-priced-twice.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'only once')): true
+
     - name: cleanup
-      description: Delete cluster-scoped Offer and milo-system ServicePricing.
+      description: Delete the Offer, its ServicePricings, and their meter.
       try:
         - delete:
             ref:
@@ -93,3 +149,14 @@ spec:
               kind: ServicePricing
               name: e2e-offer-cpu-allocated
               namespace: milo-system
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: ServicePricing
+              name: e2e-offer-cpu-allocated-pro
+              namespace: milo-system
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              name: e2e-offer-cpu-allocated
