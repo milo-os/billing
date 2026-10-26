@@ -8,7 +8,7 @@ spec:
   serviceRef: compute.datumapis.com
   currency: USD
   displayName: E2E BillingEntitlement CPU Allocated
-  metric: compute.datumapis.com/instance/cpu-allocated
+  metric: e2e.billing.miloapis.com/billingentitlement/cpu-allocated
   pricingUnit: vcpu
   rates:
     - flat: "0.025"

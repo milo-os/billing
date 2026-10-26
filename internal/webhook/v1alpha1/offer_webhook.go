@@ -8,6 +8,7 @@ import (
 
 	authenticationv1 "k8s.io/api/authentication/v1"
 	authorizationv1 "k8s.io/api/authorization/v1"
+	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -28,6 +29,8 @@ func SetupOfferWebhookWithManager(mgr ctrl.Manager) error {
 		WithValidator(webhook).
 		Complete()
 }
+
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=servicepricings,verbs=get;list;watch
 
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-offer,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=offers,verbs=create;update,versions=v1alpha1,name=voffer.kb.io,admissionReviewVersions=v1
 
@@ -75,10 +78,12 @@ func convertAuthExtra(in map[string]authenticationv1.ExtraValue) map[string]auth
 }
 
 // ValidateCreate implements admission.Validator.
-func (r *offerWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.Offer) (admission.Warnings, error) {
+func (r *offerWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.Offer) (admission.Warnings, error) {
 	offerLog.Info("validating create", "name", obj.GetName())
 
-	if errs := validation.ValidateOfferCreate(obj); len(errs) > 0 {
+	errs := validation.ValidateOfferCreate(obj)
+	errs = append(errs, validation.ValidateOfferServicePricingRefs(ctx, r.Client, obj)...)
+	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
 			obj.Name,
@@ -113,7 +118,11 @@ func (r *offerWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billi
 		}
 	}
 
-	if errs := validation.ValidateOfferUpdate(oldObj, newObj, opts); len(errs) > 0 {
+	errs := validation.ValidateOfferUpdate(oldObj, newObj, opts)
+	if refsNeedCheck(oldObj, newObj) {
+		errs = append(errs, validation.ValidateOfferServicePricingRefs(ctx, r.Client, newObj)...)
+	}
+	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
 			newObj.Name,
@@ -122,6 +131,17 @@ func (r *offerWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billi
 	}
 
 	return nil, nil
+}
+
+// refsNeedCheck reports whether an update changes which pricings an
+// unpublished Offer would snapshot: its refs, or its launch stage (the
+// publish). Once the snapshot is written, the refs no longer matter.
+func refsNeedCheck(oldObj, newObj *billingv1alpha1.Offer) bool {
+	if len(newObj.Spec.ServicePricings) > 0 {
+		return false
+	}
+	return oldObj.Spec.LaunchStage != newObj.Spec.LaunchStage ||
+		!apiequality.Semantic.DeepEqual(oldObj.Spec.ServicePricingRefs, newObj.Spec.ServicePricingRefs)
 }
 
 // ValidateDelete implements admission.Validator.

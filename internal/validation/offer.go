@@ -3,11 +3,15 @@
 package validation
 
 import (
+	"context"
 	"fmt"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
@@ -41,9 +45,96 @@ func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUp
 
 	allErrs = append(allErrs, validateOfferChargeTypes(newOffer)...)
 	allErrs = append(allErrs, validateOfferChargeTypesCoverSnapshot(newOffer)...)
+	allErrs = append(allErrs, validateOfferSnapshotMetersPricedOnce(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAHasRefs(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer, opts)...)
 
+	return allErrs
+}
+
+// ValidateOfferServicePricingRefs resolves an Offer's servicePricingRefs
+// and rejects two Usage pricings on the same meter, which would bill the
+// same usage twice. A ref that doesn't resolve is left to the Offer
+// controller, which reports it on publish.
+func ValidateOfferServicePricingRefs(
+	ctx context.Context,
+	c client.Client,
+	offer *billingv1alpha1.Offer,
+) field.ErrorList {
+	var allErrs field.ErrorList
+	fldPath := field.NewPath("spec", "servicePricingRefs")
+
+	pricings := make([]billingv1alpha1.ServicePricingSnapshot, 0, len(offer.Spec.ServicePricingRefs))
+	for i, ref := range offer.Spec.ServicePricingRefs {
+		var sp billingv1alpha1.ServicePricing
+		if err := c.Get(ctx, ServicePricingRefKey(ref), &sp); err != nil {
+			if apierrors.IsNotFound(err) {
+				continue
+			}
+			return append(allErrs, field.InternalError(fldPath.Index(i), fmt.Errorf("reading ServicePricing: %w", err)))
+		}
+		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
+	}
+
+	for _, dup := range UsageMetersPricedTwice(pricings) {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath,
+			dup.Pricings,
+			fmt.Sprintf("an Offer may price meter %q only once", dup.Metric),
+		))
+	}
+	return allErrs
+}
+
+// ServicePricingRefKey returns the key of the ServicePricing a ref names,
+// defaulting the namespace to milo-system.
+func ServicePricingRefKey(ref billingv1alpha1.ServicePricingRef) types.NamespacedName {
+	ns := ref.Namespace
+	if ns == "" {
+		ns = billingv1alpha1.DefaultServicePricingNamespace
+	}
+	return types.NamespacedName{Namespace: ns, Name: ref.Name}
+}
+
+// MeterPricedTwice is a meter that more than one Usage pricing selects.
+type MeterPricedTwice struct {
+	Metric   string
+	Pricings []string
+}
+
+// UsageMetersPricedTwice returns each meter that more than one Usage
+// pricing selects, in the order the meters first appear.
+func UsageMetersPricedTwice(pricings []billingv1alpha1.ServicePricingSnapshot) []MeterPricedTwice {
+	byMetric := make(map[string][]string)
+	var order []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeUsage || p.Spec.Metric == "" {
+			continue
+		}
+		if _, seen := byMetric[p.Spec.Metric]; !seen {
+			order = append(order, p.Spec.Metric)
+		}
+		byMetric[p.Spec.Metric] = append(byMetric[p.Spec.Metric], p.Name)
+	}
+
+	var dups []MeterPricedTwice
+	for _, metric := range order {
+		if names := byMetric[metric]; len(names) > 1 {
+			dups = append(dups, MeterPricedTwice{Metric: metric, Pricings: names})
+		}
+	}
+	return dups
+}
+
+func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.ErrorList {
+	var allErrs field.ErrorList
+	for _, dup := range UsageMetersPricedTwice(offer.Spec.ServicePricings) {
+		allErrs = append(allErrs, field.Invalid(
+			field.NewPath("spec", "servicePricings"),
+			dup.Pricings,
+			fmt.Sprintf("an Offer may price meter %q only once", dup.Metric),
+		))
+	}
 	return allErrs
 }
 

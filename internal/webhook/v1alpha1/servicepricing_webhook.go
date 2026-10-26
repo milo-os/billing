@@ -7,6 +7,7 @@ import (
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
@@ -19,7 +20,9 @@ var servicePricingLog = logf.Log.WithName("servicepricing-webhook")
 // SetupServicePricingWebhookWithManager registers the ServicePricing webhook
 // with the manager.
 func SetupServicePricingWebhookWithManager(mgr ctrl.Manager) error {
-	webhook := &servicePricingWebhook{}
+	webhook := &servicePricingWebhook{
+		client: mgr.GetClient(),
+	}
 
 	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.ServicePricing{}).
 		WithValidator(webhook).
@@ -28,15 +31,20 @@ func SetupServicePricingWebhookWithManager(mgr ctrl.Manager) error {
 
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-servicepricing,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=servicepricings,verbs=create;update,versions=v1alpha1,name=vservicepricing.kb.io,admissionReviewVersions=v1
 
-type servicePricingWebhook struct{}
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=meterdefinitions,verbs=get;list;watch
+// +kubebuilder:rbac:groups=services.miloapis.com,resources=services,verbs=get;list
+
+type servicePricingWebhook struct {
+	client client.Client
+}
 
 var _ admission.Validator[*billingv1alpha1.ServicePricing] = &servicePricingWebhook{}
 
 // ValidateCreate implements admission.Validator.
-func (r *servicePricingWebhook) ValidateCreate(_ context.Context, obj *billingv1alpha1.ServicePricing) (admission.Warnings, error) {
+func (r *servicePricingWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.ServicePricing) (admission.Warnings, error) {
 	servicePricingLog.Info("validating create", "name", obj.GetName(), "namespace", obj.GetNamespace())
 
-	if errs := validation.ValidateServicePricingCreate(obj); len(errs) > 0 {
+	if errs := validation.ValidateServicePricingCreate(ctx, r.client, obj); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
 			obj.Name,

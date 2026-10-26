@@ -1,0 +1,13 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-offer-unknown-meter
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  serviceRef: compute.datumapis.com
+  currency: USD
+  metric: e2e.billing.miloapis.com/offer/does-not-exist
+  pricingUnit: vcpu
+  rates:
+    - flat: "0.01"

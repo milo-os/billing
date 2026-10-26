@@ -9,3 +9,8 @@ rules:
 - apiGroups: ["billing.miloapis.com"]
   resources: ["offers/status", "billingentitlements/status", "servicepricings/status"]
   verbs: ["get", "update", "patch"]
+# The ServicePricing webhook checks that a fixed charge names an existing
+# Service.
+- apiGroups: ["services.miloapis.com"]
+  resources: ["services"]
+  verbs: ["get", "list"]
