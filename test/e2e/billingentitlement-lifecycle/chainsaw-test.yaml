@@ -35,6 +35,8 @@ spec:
                 conditions:
                   - type: Ready
                     status: "True"
+                  - type: Published
+                    status: "True"
 
     - name: create-prerequisites
       description: Create ServicePricing, Draft Offer, and BillingAccount.

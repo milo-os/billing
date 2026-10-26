@@ -38,6 +38,8 @@ spec:
                 conditions:
                   - type: Ready
                     status: "True"
+                  - type: Published
+                    status: "True"
 
     - name: create-servicepricing
       description: Create a ServicePricing without managed-by so e2e can author it.
