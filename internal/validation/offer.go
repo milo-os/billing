@@ -35,6 +35,7 @@ func ValidateOfferCreate(offer *billingv1alpha1.Offer) field.ErrorList {
 	allErrs = append(allErrs, validateOfferChargeTypes(offer)...)
 	allErrs = append(allErrs, validateOfferClientSnapshotEmpty(offer)...)
 	allErrs = append(allErrs, validateOfferGAHasRefs(offer)...)
+	allErrs = append(allErrs, validateOfferDiscounts(offer)...)
 
 	return allErrs
 }
@@ -47,6 +48,7 @@ func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUp
 	allErrs = append(allErrs, validateOfferChargeTypesCoverSnapshot(newOffer)...)
 	allErrs = append(allErrs, validateOfferSnapshotMetersPricedOnce(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAHasRefs(newOffer)...)
+	allErrs = append(allErrs, validateOfferDiscounts(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer, opts)...)
 
 	return allErrs
@@ -342,4 +344,47 @@ func clearOfferMetadataNoise(offer *billingv1alpha1.Offer) {
 	offer.Finalizers = nil
 	offer.Status = billingv1alpha1.OfferStatus{}
 	offer.TypeMeta = metav1.TypeMeta{}
+}
+
+func validateOfferDiscounts(offer *billingv1alpha1.Offer) field.ErrorList {
+	var allErrs field.ErrorList
+
+	if offer.Spec.Discount != nil {
+		fldPath := field.NewPath("spec", "discount")
+		if offer.Spec.Discount.Percentage < 0 || offer.Spec.Discount.Percentage > 100 {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Child("percentage"),
+				offer.Spec.Discount.Percentage,
+				"percentage must be between 0 and 100",
+			))
+		}
+	}
+
+	for i, ref := range offer.Spec.ServicePricingRefs {
+		if ref.Discount != nil {
+			fldPath := field.NewPath("spec", "servicePricingRefs").Index(i).Child("discount")
+			if ref.Discount.Percentage < 0 || ref.Discount.Percentage > 100 {
+				allErrs = append(allErrs, field.Invalid(
+					fldPath.Child("percentage"),
+					ref.Discount.Percentage,
+					"percentage must be between 0 and 100",
+				))
+			}
+		}
+	}
+
+	for i, snap := range offer.Spec.ServicePricings {
+		if snap.Discount != nil {
+			fldPath := field.NewPath("spec", "servicePricings").Index(i).Child("discount")
+			if snap.Discount.Percentage < 0 || snap.Discount.Percentage > 100 {
+				allErrs = append(allErrs, field.Invalid(
+					fldPath.Child("percentage"),
+					snap.Discount.Percentage,
+					"percentage must be between 0 and 100",
+				))
+			}
+		}
+	}
+
+	return allErrs
 }

@@ -112,6 +112,24 @@ func TestValidateOfferUpdate_GAImmutability(t *testing.T) {
 			},
 			wantErrs: 1,
 		},
+		{
+			name: "spec discount change rejected while GA",
+			mutate: func(old *billingv1alpha1.Offer) *billingv1alpha1.Offer {
+				c := old.DeepCopy()
+				c.Spec.Discount = &billingv1alpha1.Discount{Percentage: 50}
+				return c
+			},
+			wantErrs: 1,
+		},
+		{
+			name: "snapshot discount change rejected while GA",
+			mutate: func(old *billingv1alpha1.Offer) *billingv1alpha1.Offer {
+				c := old.DeepCopy()
+				c.Spec.ServicePricings[0].Discount = &billingv1alpha1.Discount{Percentage: 99}
+				return c
+			},
+			wantErrs: 1,
+		},
 	}
 
 	for _, tc := range tests {
@@ -232,6 +250,90 @@ func TestOfferIsAssignable(t *testing.T) {
 	if !OfferIsAssignable(gaReady) {
 		t.Fatal("GA with snapshot should be assignable")
 	}
+}
+
+func TestValidateOffer_Discounts(t *testing.T) {
+	t.Run("valid offer-level discount", func(t *testing.T) {
+		offer := newDraftOffer("valid-disc")
+		offer.Spec.Discount = &billingv1alpha1.Discount{Percentage: 20}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) > 0 {
+			t.Fatalf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("rejects discount percentage out of range", func(t *testing.T) {
+		offer := newDraftOffer("invalid-perc")
+		offer.Spec.Discount = &billingv1alpha1.Discount{Percentage: 150}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error for percentage > 100, got: %v", errs)
+		}
+
+		offer.Spec.Discount.Percentage = -5
+		errs = ValidateOfferCreate(offer)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error for percentage < 0, got: %v", errs)
+		}
+	})
+
+	t.Run("allows offer discount on non-Usage chargeTypes", func(t *testing.T) {
+		offer := newDraftOffer("one-time-offer")
+		offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeOneTime}
+		offer.Spec.Discount = &billingv1alpha1.Discount{Percentage: 50}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) > 0 {
+			t.Fatalf("expected no errors for discount on OneTime offer, got: %v", errs)
+		}
+	})
+
+	t.Run("valid ref discount override", func(t *testing.T) {
+		offer := newDraftOffer("ref-disc")
+		offer.Spec.ServicePricingRefs[0].Discount = &billingv1alpha1.Discount{Percentage: 100}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) > 0 {
+			t.Fatalf("expected no errors, got: %v", errs)
+		}
+	})
+
+	t.Run("rejects ref discount percentage out of range", func(t *testing.T) {
+		offer := newDraftOffer("ref-disc-invalid")
+		offer.Spec.ServicePricingRefs[0].Discount = &billingv1alpha1.Discount{Percentage: 101}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) != 1 {
+			t.Fatalf("expected 1 error, got: %v", errs)
+		}
+	})
+
+	t.Run("valid snapshot discount on OneTime charge", func(t *testing.T) {
+		old := newDraftOffer("pro-v1")
+		old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+		old.Spec.ChargeTypes = []billingv1alpha1.ChargeType{
+			billingv1alpha1.ChargeTypeUsage,
+			billingv1alpha1.ChargeTypeOneTime,
+		}
+		newOffer := old.DeepCopy()
+		newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+			{
+				Name: "setup-fee",
+				Discount: &billingv1alpha1.Discount{
+					Percentage: 50,
+				},
+				Spec: billingv1alpha1.ServicePricingSpec{
+					ChargeType: billingv1alpha1.ChargeTypeOneTime,
+					ServiceRef: "compute.datumapis.com",
+					Currency:   "USD",
+					Amount:     "10",
+					Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+				},
+			},
+		}
+
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+		if len(errs) > 0 {
+			t.Fatalf("expected no error for valid snapshot discount on OneTime charge, got: %v", errs)
+		}
+	})
 }
 
 func cpuPricing(name, flat string) *billingv1alpha1.ServicePricing {

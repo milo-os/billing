@@ -15,6 +15,8 @@ type ServicePricingRefApplyConfiguration struct {
 	// Namespace is the namespace of the ServicePricing. Defaults to
 	// milo-system when empty.
 	Namespace *string `json:"namespace,omitempty"`
+	// Discount specifies an optional discount override for this service pricing.
+	Discount *DiscountApplyConfiguration `json:"discount,omitempty"`
 }
 
 // ServicePricingRefApplyConfiguration constructs a declarative configuration of the ServicePricingRef type for use with
@@ -36,5 +38,13 @@ func (b *ServicePricingRefApplyConfiguration) WithName(value string) *ServicePri
 // If called multiple times, the Namespace field is set to the value of the last call.
 func (b *ServicePricingRefApplyConfiguration) WithNamespace(value string) *ServicePricingRefApplyConfiguration {
 	b.Namespace = &value
+	return b
+}
+
+// WithDiscount sets the Discount field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Discount field is set to the value of the last call.
+func (b *ServicePricingRefApplyConfiguration) WithDiscount(value *DiscountApplyConfiguration) *ServicePricingRefApplyConfiguration {
+	b.Discount = value
 	return b
 }

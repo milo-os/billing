@@ -80,6 +80,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.DefaultPaymentMethodRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DimensionMatch"):
 		return &apiv1alpha1.DimensionMatchApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("Discount"):
+		return &apiv1alpha1.DiscountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Invoice"):
 		return &apiv1alpha1.InvoiceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceArrangementTerms"):

@@ -27,6 +27,9 @@ type OfferSpecApplyConfiguration struct {
 	// and not assignable; GA Offers are published and immutable except for
 	// the display-name annotation.
 	LaunchStage *apiv1alpha1.OfferLaunchStage `json:"launchStage,omitempty"`
+	// Discount specifies an optional default discount applied to all
+	// services in this Offer that do not specify their own discount override.
+	Discount *DiscountApplyConfiguration `json:"discount,omitempty"`
 	// ServicePricingRefs names the ServicePricing resources to include.
 	// Authored while Draft; retained for audit after publish. Runtime
 	// rating uses servicePricings only.
@@ -58,6 +61,14 @@ func (b *OfferSpecApplyConfiguration) WithChargeTypes(values ...apiv1alpha1.Char
 // If called multiple times, the LaunchStage field is set to the value of the last call.
 func (b *OfferSpecApplyConfiguration) WithLaunchStage(value apiv1alpha1.OfferLaunchStage) *OfferSpecApplyConfiguration {
 	b.LaunchStage = &value
+	return b
+}
+
+// WithDiscount sets the Discount field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Discount field is set to the value of the last call.
+func (b *OfferSpecApplyConfiguration) WithDiscount(value *DiscountApplyConfiguration) *OfferSpecApplyConfiguration {
+	b.Discount = value
 	return b
 }
 
