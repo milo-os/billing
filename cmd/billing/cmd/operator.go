@@ -305,6 +305,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				if err = billingwebhooks.SetupBillingEntitlementWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating BillingEntitlement webhook: %w", err)
 				}
+				if err = billingwebhooks.SetupCreditGrantWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating CreditGrant webhook: %w", err)
+				}
 			}
 
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
