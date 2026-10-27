@@ -9,6 +9,7 @@ spec:
   launchStage: Alpha
   includedPermissions:
     - billing.miloapis.com/creditgrants.create
+    - billing.miloapis.com/creditgrants.delete
     - billing.miloapis.com/creditgrants.get
     - billing.miloapis.com/creditgrants.list
     - billing.miloapis.com/creditgrants.patch

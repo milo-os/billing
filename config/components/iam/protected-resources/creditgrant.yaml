@@ -14,6 +14,7 @@ spec:
     - create
     - update
     - patch
+    - delete
     - watch
   subresources:
     - name: status
