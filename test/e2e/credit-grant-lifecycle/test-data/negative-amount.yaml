@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-negative-amount
+  namespace: default
+spec:
+  billingAccountRef:
+    name: cg-e2e-acct
+  amount: "-50.00"
+  currency: USD
+  reason: Promotional
+  description: "Invalid grant with negative amount"

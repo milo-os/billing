@@ -1,0 +1,13 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-voided-on-create
+  namespace: default
+spec:
+  billingAccountRef:
+    name: cg-e2e-acct
+  amount: "100.00"
+  currency: USD
+  reason: Promotional
+  description: "Invalid grant created as voided"
+  voided: true

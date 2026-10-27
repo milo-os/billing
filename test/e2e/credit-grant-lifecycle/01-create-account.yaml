@@ -1,0 +1,7 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: cg-e2e-acct
+  namespace: default
+spec:
+  currencyCode: USD

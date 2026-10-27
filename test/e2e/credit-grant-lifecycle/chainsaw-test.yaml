@@ -1,0 +1,313 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: credit-grant-lifecycle
+spec:
+  description: |
+    Comprehensive E2E tests for CreditGrant mutating and validating webhooks:
+    1. Defaulting: Mutating webhook adds ownerReferences pointing to parent BillingAccount.
+    2. Fractional Amounts: Accepts positive fractional decimal amounts (e.g. 0.50).
+    3. Cross-Namespace Isolation: Rejects referencing an account in another namespace.
+    4. Validation on Create: Rejects missing account, zero (0, 0.00), negative (-50.00),
+       exponential (1e3), unit suffix (5k), invalid currency, invalid reason, and voided=true.
+    5. Spec Immutability: Rejects updates to amount, billingAccountRef, currency, reason, description, and expiresAfter.
+    6. State Machine: Allows voiding (false -> true), rejects unvoiding (true -> false).
+    7. Direct Delete Rejection: Refuses direct delete of both active and voided grants when account is active.
+    8. Direct Delete Allowance on Account Deletion: Allows direct delete when parent account has deletionTimestamp.
+    9. Cascading Garbage Collection: Automatically deletes remaining grants when parent BillingAccount is deleted.
+  steps:
+    - name: create-account
+      description: Create the parent BillingAccount for the credit grant tests.
+      try:
+        - create:
+            file: 01-create-account.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: cg-e2e-acct
+                namespace: default
+
+    - name: create-grant-with-defaulting
+      description: Create a CreditGrant and verify that mutating webhook defaults ownerReferences.
+      try:
+        - create:
+            file: 02-create-grant.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              metadata:
+                name: cg-e2e-grant
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingAccount
+                    name: cg-e2e-acct
+              spec:
+                amount: "500.00"
+                currency: USD
+                reason: Promotional
+                description: "E2E promotional credit grant"
+                voided: false
+
+    - name: create-second-fractional-grant
+      description: Create a second grant with fractional amount (0.50) and Goodwill reason.
+      try:
+        - create:
+            file: 03-create-second-grant.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              metadata:
+                name: cg-e2e-grant-2
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingAccount
+                    name: cg-e2e-acct
+              spec:
+                amount: "0.50"
+                currency: USD
+                reason: Goodwill
+                voided: false
+
+    - name: reject-missing-billing-account
+      description: Verify that creating a CreditGrant referencing a non-existent BillingAccount is rejected.
+      try:
+        - create:
+            file: test-data/missing-account.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.billingAccountRef.name') || contains($error, 'non-existent-acct')): true
+
+    - name: reject-cross-namespace-account
+      description: Verify that a CreditGrant cannot reference a BillingAccount residing in a different namespace.
+      try:
+        - script:
+            content: |
+              kubectl apply -f - <<EOF
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: other-ns-account
+                namespace: kube-system
+              spec:
+                currencyCode: USD
+              EOF
+        - create:
+            file: test-data/cross-namespace-account.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.billingAccountRef.name') || contains($error, 'other-ns-account')): true
+        - script:
+            content: |
+              kubectl delete billingaccount other-ns-account -n kube-system
+
+    - name: reject-zero-decimal-amount
+      description: Verify that creating a CreditGrant with zero decimal amount (0.00) is rejected.
+      try:
+        - create:
+            file: test-data/zero-amount.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'amount must be a positive decimal amount') || contains($error, 'spec.amount')): true
+
+    - name: reject-integer-zero-amount
+      description: Verify that creating a CreditGrant with integer zero (0) is rejected.
+      try:
+        - create:
+            file: test-data/zero-integer-amount.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'amount must be a positive decimal amount') || contains($error, 'spec.amount')): true
+
+    - name: reject-negative-amount
+      description: Verify that creating a CreditGrant with negative amount (-50.00) is rejected.
+      try:
+        - create:
+            file: test-data/negative-amount.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'amount must be a positive decimal amount') || contains($error, 'spec.amount')): true
+
+    - name: reject-exponential-amount
+      description: Verify that creating a CreditGrant with exponential notation (1e3) is rejected.
+      try:
+        - create:
+            file: test-data/exponential-amount.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.amount') || contains($error, 'amount must be a positive decimal amount')): true
+
+    - name: reject-unit-suffix-amount
+      description: Verify that creating a CreditGrant with unit suffix notation (5k) is rejected.
+      try:
+        - create:
+            file: test-data/unit-suffix-amount.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'spec.amount') || contains($error, 'amount must be a positive decimal amount')): true
+
+    - name: reject-invalid-currency
+      description: Verify that creating a CreditGrant with non-USD currency is rejected.
+      try:
+        - create:
+            file: test-data/invalid-currency.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'currency must be USD') || contains($error, 'spec.currency')): true
+
+    - name: reject-invalid-reason
+      description: Verify that creating a CreditGrant with an unsupported reason is rejected.
+      try:
+        - create:
+            file: test-data/invalid-reason.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'reason') || contains($error, 'Promotional')): true
+
+    - name: reject-voided-on-create
+      description: Verify that creating a CreditGrant with voided=true is rejected.
+      try:
+        - create:
+            file: test-data/voided-on-create.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'a new credit grant cannot be created as voided')): true
+
+    - name: reject-spec-immutability
+      description: Verify that updating immutable spec fields is rejected by CEL and validation webhook.
+      try:
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"amount":"600.00"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'amount is immutable')): true
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"billingAccountRef":{"name":"someone-else"}}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'billingAccountRef is immutable')): true
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"currency":"EUR"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'currency is immutable')): true
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"reason":"Goodwill"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'reason is immutable')): true
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"description":"New description"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'description is immutable')): true
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"expiresAfter":"100h"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'expiresAfter is immutable')): true
+
+    - name: allow-voiding
+      description: Verify that voiding a grant (setting voided to true) is permitted.
+      try:
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"voided":true}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              metadata:
+                name: cg-e2e-grant
+                namespace: default
+              spec:
+                voided: true
+
+    - name: reject-unvoiding
+      description: Verify that unvoiding a voided grant (setting voided back to false) is rejected.
+      try:
+        - script:
+            content: |
+              kubectl patch creditgrant cg-e2e-grant -n default --type=merge --patch '{"spec":{"voided":false}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'a voided credit grant cannot be unvoided')): true
+
+    - name: reject-direct-delete-when-account-healthy
+      description: Verify that direct deletion of both active and voided grants is refused while the account is active.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              name: cg-e2e-grant
+              namespace: default
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'credit grants cannot be deleted; void the grant instead')): true
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              name: cg-e2e-grant-2
+              namespace: default
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'credit grants cannot be deleted; void the grant instead')): true
+
+    - name: allow-direct-delete-when-account-deleting
+      description: Verify that when the parent BillingAccount is in deleting state (has deletionTimestamp), direct grant deletion is allowed.
+      try:
+        - script:
+            content: |
+              # Add finalizer to prevent immediate account cleanup so it enters deleting state
+              kubectl patch billingaccount cg-e2e-acct -n default --type=merge -p '{"metadata":{"finalizers":["billing.miloapis.com/e2e-test-hold"]}}'
+              # Request account deletion in background
+              kubectl delete billingaccount cg-e2e-acct -n default --wait=false
+              # Wait until deletionTimestamp is set
+              until kubectl get billingaccount cg-e2e-acct -n default -o jsonpath='{.metadata.deletionTimestamp}' | grep -q 'T'; do
+                sleep 0.5
+              done
+              # Now directly delete cg-e2e-grant-2; webhook should allow it because account is deleting!
+              kubectl delete creditgrant cg-e2e-grant-2 -n default
+              # Wait for cg-e2e-grant-2 to be gone
+              kubectl wait --for=delete creditgrant/cg-e2e-grant-2 -n default --timeout=30s
+
+    - name: cascade-garbage-collection-on-account-removal
+      description: Verify that removing the finalizer completes account deletion and automatically garbage-collects remaining grants.
+      try:
+        - script:
+            content: |
+              # Remove the test finalizer from BillingAccount to allow complete deletion
+              kubectl patch billingaccount cg-e2e-acct -n default --type=json -p='[{"op":"remove","path":"/metadata/finalizers"}]' || true
+              # Verify parent account is deleted
+              kubectl wait --for=delete billingaccount/cg-e2e-acct -n default --timeout=30s
+              # Verify the remaining grant (cg-e2e-grant) is automatically deleted by Kubernetes GC
+              kubectl wait --for=delete creditgrant/cg-e2e-grant -n default --timeout=30s

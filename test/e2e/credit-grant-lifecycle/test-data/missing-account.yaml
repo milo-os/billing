@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-missing-acct
+  namespace: default
+spec:
+  billingAccountRef:
+    name: non-existent-acct
+  amount: "100.00"
+  currency: USD
+  reason: Promotional
+  description: "Invalid grant with missing account"
