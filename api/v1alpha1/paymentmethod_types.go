@@ -186,6 +186,13 @@ type PaymentMethodCardDetails struct {
 	//
 	// +kubebuilder:validation:Optional
 	BillingAddress *CardBillingAddress `json:"billingAddress,omitempty"`
+
+	// Fingerprint is an opaque unique identifier for the card number,
+	// consistent across customers and organizations for the same physical card.
+	// Used for signup fraud prevention and deduplication.
+	//
+	// +kubebuilder:validation:Optional
+	Fingerprint string `json:"fingerprint,omitempty"`
 }
 
 // CardBillingAddress is the cardholder address attached to a confirmed

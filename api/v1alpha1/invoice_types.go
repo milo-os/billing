@@ -104,6 +104,13 @@ type InvoiceStatus struct {
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	AmountDue string `json:"amountDue,omitempty"`
 
+	// CreditsApplied is the total amount of credits applied to this invoice,
+	// expressed as a decimal string (e.g. "50.00").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	CreditsApplied string `json:"creditsApplied,omitempty"`
+
 	// DueDate is when payment is due.
 	//
 	// +kubebuilder:validation:Optional

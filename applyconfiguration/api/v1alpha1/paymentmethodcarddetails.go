@@ -49,6 +49,10 @@ type PaymentMethodCardDetailsApplyConfiguration struct {
 	// consumers (the portal for display, fraud for mismatch
 	// detection).
 	BillingAddress *CardBillingAddressApplyConfiguration `json:"billingAddress,omitempty"`
+	// Fingerprint is an opaque unique identifier for the card number,
+	// consistent across customers and organizations for the same physical card.
+	// Used for signup fraud prevention and deduplication.
+	Fingerprint *string `json:"fingerprint,omitempty"`
 }
 
 // PaymentMethodCardDetailsApplyConfiguration constructs a declarative configuration of the PaymentMethodCardDetails type for use with
@@ -126,5 +130,13 @@ func (b *PaymentMethodCardDetailsApplyConfiguration) WithCVCResult(value string)
 // If called multiple times, the BillingAddress field is set to the value of the last call.
 func (b *PaymentMethodCardDetailsApplyConfiguration) WithBillingAddress(value *CardBillingAddressApplyConfiguration) *PaymentMethodCardDetailsApplyConfiguration {
 	b.BillingAddress = value
+	return b
+}
+
+// WithFingerprint sets the Fingerprint field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Fingerprint field is set to the value of the last call.
+func (b *PaymentMethodCardDetailsApplyConfiguration) WithFingerprint(value string) *PaymentMethodCardDetailsApplyConfiguration {
+	b.Fingerprint = &value
 	return b
 }

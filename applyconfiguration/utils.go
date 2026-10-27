@@ -76,6 +76,12 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CardBillingAddressApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CatalogStatus"):
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrant"):
+		return &apiv1alpha1.CreditGrantApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrantSpec"):
+		return &apiv1alpha1.CreditGrantSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrantStatus"):
+		return &apiv1alpha1.CreditGrantStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DefaultPaymentMethodRef"):
 		return &apiv1alpha1.DefaultPaymentMethodRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("DimensionMatch"):
