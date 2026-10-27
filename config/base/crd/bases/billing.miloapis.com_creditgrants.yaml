@@ -1,0 +1,267 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: creditgrants.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: CreditGrant
+    listKind: CreditGrantList
+    plural: creditgrants
+    singular: creditgrant
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.amount
+      name: Amount
+      type: string
+    - jsonPath: .spec.currency
+      name: Currency
+      type: string
+    - jsonPath: .spec.reason
+      name: Reason
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .spec.voided
+      name: Voided
+      type: boolean
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          CreditGrant is the Schema for the creditgrants API.
+
+          A CreditGrant represents a dollar amount of credit given to a billing
+          account. Usage draws down credits before anything is charged to a payment
+          method. The billing provider maintains the balance in its ledger; Milo
+          holds no balance on the CreditGrant resource.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              CreditGrantSpec defines the desired state of a CreditGrant.
+
+              A CreditGrant is mostly immutable once created. Only voided may change,
+              and only from false to true. To change a grant, void it and create a new one.
+            properties:
+              amount:
+                description: |-
+                  Amount is the dollar amount of credit granted, expressed as a positive
+                  decimal string (e.g. "500.00"). Immutable once set.
+                minLength: 1
+                pattern: ^([1-9][0-9]*(\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$
+                type: string
+                x-kubernetes-validations:
+                - message: amount is immutable
+                  rule: self == oldSelf
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef references the BillingAccount this credit grant
+                  belongs to. The BillingAccount must reside in the same namespace.
+                  Immutable once set.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: billingAccountRef is immutable
+                  rule: self == oldSelf
+              currency:
+                default: USD
+                description: |-
+                  Currency is the ISO 4217 currency code for the grant. USD only.
+                  Immutable once set.
+                pattern: ^USD$
+                type: string
+                x-kubernetes-validations:
+                - message: currency is immutable
+                  rule: self == oldSelf
+              description:
+                description: |-
+                  Description explains why the credit was granted. Free text, required.
+                  Immutable once set.
+                minLength: 1
+                type: string
+                x-kubernetes-validations:
+                - message: description is immutable
+                  rule: self == oldSelf
+              expiresAfter:
+                description: |-
+                  ExpiresAfter is an optional duration after the effective time when
+                  the grant expires. Omitted means the grant never expires.
+                  Immutable once set.
+                type: string
+                x-kubernetes-validations:
+                - message: expiresAfter is immutable
+                  rule: self == oldSelf
+              reason:
+                allOf:
+                - enum:
+                  - Promotional
+                  - Sponsorship
+                  - Goodwill
+                - enum:
+                  - Promotional
+                  - Sponsorship
+                  - Goodwill
+                description: Reason is the business reason for the grant. Immutable
+                  once set.
+                type: string
+                x-kubernetes-validations:
+                - message: reason is immutable
+                  rule: self == oldSelf
+              voided:
+                default: false
+                description: |-
+                  Voided marks the grant as voided. One-way: changing from false to
+                  true voids what is left of the credit in the billing provider's ledger.
+                  Credit already used stays used. A voided grant cannot be unvoided.
+                type: boolean
+            required:
+            - amount
+            - billingAccountRef
+            - currency
+            - description
+            - reason
+            type: object
+            x-kubernetes-validations:
+            - message: credit grant spec is immutable except voided
+              rule: self.billingAccountRef == oldSelf.billingAccountRef && self.amount
+                == oldSelf.amount && self.currency == oldSelf.currency && self.reason
+                == oldSelf.reason && self.description == oldSelf.description && has(self.expiresAfter)
+                == has(oldSelf.expiresAfter) && (!has(self.expiresAfter) || self.expiresAfter
+                == oldSelf.expiresAfter)
+            - message: a voided credit grant cannot be unvoided
+              rule: '!oldSelf.voided || self.voided'
+          status:
+            description: |-
+              CreditGrantStatus defines the observed state of a CreditGrant.
+              Populated exclusively by the billing provider.
+            properties:
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the grant's state.
+                  See CreditGrantConditionReady.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              effectiveAt:
+                description: EffectiveAt is when the grant became active in the billing
+                  provider's ledger.
+                format: date-time
+                type: string
+              expiresAt:
+                description: ExpiresAt is when the grant expires, computed from effectiveAt
+                  and spec.expiresAfter.
+                format: date-time
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  reconciling provider controller.
+                format: int64
+                type: integer
+              phase:
+                description: Phase represents the current lifecycle phase of the grant.
+                enum:
+                - Pending
+                - Active
+                - Expired
+                - Voided
+                - Failed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

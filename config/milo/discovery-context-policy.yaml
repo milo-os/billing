@@ -1,6 +1,7 @@
-# UsageQuery is served by an aggregated API server, so Milo cannot read its
-# parent contexts from a CRD annotation. It can be used on the platform
-# (staff), in an organization, and in a project, but not in a user's context.
+# UsageQuery and BillingAccountBalance are served by an aggregated API server, so Milo cannot read their
+# parent contexts from a CRD annotation.
+# - UsageQuery can be used on the platform (staff), in an organization, and in a project, but not in a user's context.
+# - BillingAccountBalance is namespaced under an organization and can be used on the platform and in an organization.
 apiVersion: discovery.miloapis.com/v1alpha1
 kind: DiscoveryContextPolicy
 metadata:
@@ -10,3 +11,6 @@ spec:
     - group: usage.billing.miloapis.com
       resources: ["usagequeries"]
       contexts: ["Platform", "Organization", "Project"]
+    - group: usage.billing.miloapis.com
+      resources: ["billingaccountbalances"]
+      contexts: ["Platform", "Organization"]

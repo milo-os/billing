@@ -1,0 +1,18 @@
+# BillingAccountBalance (usage.billing.miloapis.com) is served by the usage provider's
+# aggregated API server, not by a CRD. It is namespaced and read-only.
+apiVersion: iam.miloapis.com/v1alpha1
+kind: ProtectedResource
+metadata:
+  name: usage.billing.miloapis.com-billingaccountbalance
+spec:
+  serviceRef:
+    name: "usage.billing.miloapis.com"
+  kind: BillingAccountBalance
+  plural: billingaccountbalances
+  singular: billingaccountbalance
+  permissions:
+    - get
+    - list
+  parentResources:
+    - apiGroup: resourcemanager.miloapis.com
+      kind: Organization

@@ -17,6 +17,7 @@ rules:
   - billingaccountbindings
   - billingaccounts
   - billingentitlements
+  - creditgrants
   - meterdefinitions
   - monitoredresourcetypes
   - offers
@@ -47,6 +48,7 @@ rules:
   - billingarrangementapplications/status
   - billingarrangements/status
   - billingentitlements/status
+  - creditgrants/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
   - offers/status
