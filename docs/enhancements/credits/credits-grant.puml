@@ -35,8 +35,14 @@ Provider -> Backend : grant state (resync)
 Backend --> Provider : expired
 Provider -> Milo : status.phase: Expired
 
-== Delete ==
+== Delete (Disallowed) ==
 Staff -> Milo : delete CreditGrant
+Milo -> Webhook : validate delete
+Webhook --> Milo : refused (cannot delete; void instead)
+
+== Garbage Collection (Account Deleted) ==
+Milo -> Webhook : delete CreditGrant (parent BillingAccount deleting/gone)
+Webhook --> Milo : ok
 Milo -> Provider : deletionTimestamp set (finalizer)
 Provider -> Backend : void (if still active)
 Provider -> Milo : remove finalizer
