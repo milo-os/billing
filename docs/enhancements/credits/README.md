@@ -212,9 +212,11 @@ status:
 - **Immutable except `voided`,** enforced by billing's webhook. `voided`
   only goes from `false` to `true`.
 - **Voiding forfeits what's left.** Credit already used stays used.
-- **Deleting a CreditGrant voids it too,** through the provider's finalizer.
-  The grant and its use stay in the provider's history. Prefer
-  `voided: true` so the record stays in Milo.
+- **Deleting a CreditGrant is refused by billing's webhook.** Voiding (`voided: true`)
+  is the only mechanism to cancel or forfeit a grant, keeping an immutable audit
+  trail in Milo. Kubernetes garbage collection deletes grants when the parent
+  BillingAccount is deleting or deleted; the provider voids any active balance during
+  cascade delete before removing its finalizer.
 - **The provider links the CreditGrant to its own grant** however it links
   other resources (for example, an annotation in its own domain), and uses
   the CreditGrant UID so a retry never grants twice.
@@ -298,41 +300,21 @@ billing account whose default payment method is a ready card, so the fraud
 checks at signup apply first.
 
 The grant is named `signup-credit` in the organization's namespace, with
-reason `Promotional` and two labels:
-`services.miloapis.com/credit-grant-default=true`, and
-`services.miloapis.com/signup-card=<card fingerprint>`.
+reason `Promotional` and the label:
+`services.miloapis.com/credit-grant-default=true`.
 
 - **One per organization, guaranteed by its name.** A namespace can only
   hold one `signup-credit`, so a second billing account, or the same
   organization reconciled twice, can't get another.
-- **One per payment card.** One person can create several organizations,
-  so the card is what's checked. Before granting, the controller reads the
-  card's fingerprint (`PaymentMethod.status.details.card.fingerprint`, see
-  below). If any signup grant in any organization already carries it, no
-  grant is made. Five organizations paid with the same card get one signup
-  credit between them.
 - **Only accounts paying by card.** An account on an approved arrangement
   (invoice terms) has no card to check, so it gets no automatic signup
   credit. Staff reviewed it anyway and can grant one by hand.
 - **Only for organizations whose first billing account is set up after the
   setting exists.** Existing organizations get nothing retroactively.
-- **Void it rather than delete it.** A deleted `signup-credit` would let the
-  controller grant a new one, so billing's webhook refuses deleting a grant
-  with that label; void it instead.
+- **Void it rather than delete it.** Deleting CreditGrants is refused by billing's
+  webhook (voiding is the only mechanism), preventing a deleted `signup-credit` from
+  re-triggering automatic grants.
 - **Removing the setting stops new grants;** existing ones are untouched.
-
-**Card fingerprint.** `PaymentMethodCardDetails` gets an opaque
-`fingerprint`: the same value for the same card number, whichever customer
-or organization adds it, and different for different cards. The
-payment-method provider sets it; card processors provide one. billing
-doesn't interpret it. It's a hash, not the card number, and the label
-holds it as is (or a hash of it, if a processor's value doesn't fit a label
-value). A provider that can't supply one leaves it empty, and an empty
-fingerprint gets no automatic signup credit.
-
-The controller checks and grants one account at a time, so two
-organizations paid with the same card at the same moment can't both pass
-the check.
 
 This keeps every credit a `CreditGrant`: one way to audit, void and display
 them, whoever created them.
@@ -355,9 +337,8 @@ them, whoever created them.
 | `CreditGrant` type, webhook (immutability, billing account, amount), RBAC roles | billing |
 | `BillingAccountBalance` type and validation (`api/usage/v1alpha1`), `ProtectedResource`, discovery | billing |
 | `Invoice.status.creditsApplied` | billing |
-| `PaymentMethod.status.details.card.fingerprint` | billing (type), payment-method provider (sets it) |
 | `signupCredit` on ServiceConfiguration, grant creation for new accounts | service-catalog |
-| Grant sync, void on `voided`/delete, `BillingAccountBalance` serving, invoice credits projection | billing provider |
+| Grant sync, void on `voided` or cascade delete, `BillingAccountBalance` serving, invoice credits projection | billing provider |
 | Billing page: balance, credits, invoice credit line | cloud-portal |
 | Grant and void credits for an account | staff-portal |
 
@@ -369,7 +350,7 @@ provider's own design.
 | Requirement | Detail |
 | --- | --- |
 | Grant | Create a grant of a USD amount for the billing account, with an optional expiry, idempotently (a retried grant never grants twice) |
-| Void | Forfeit what's left of a grant; credit already used stays used. Idempotent |
+| Void | Forfeit what's left of a grant when `voided: true` or during cascade delete; credit already used stays used. Idempotent |
 | State | Report a grant as pending, active, expired or voided |
 | Order of use | Use the grant expiring first first; forfeit expired credit |
 | Live balance | Report the balance after the usage metered so far, before it is invoiced, priced as the invoice will price it |
@@ -382,8 +363,8 @@ credits.
 
 ### IAM
 
-- `CreditGrant`: create, update (void) and delete for staff only, through a
-  new `billing.miloapis.com-credit-admin` role bound to staff in infra.
+- `CreditGrant`: create and update (void) for staff only (direct deletion is refused),
+  through a new `billing.miloapis.com-credit-admin` role bound to staff in infra.
   Organization members with billing view access can `get` and `list` them
   (`billing.miloapis.com-viewer`).
 - `BillingAccountBalance`: `ProtectedResource` with permission `get`, parent
@@ -421,8 +402,9 @@ docker run --rm -v "$PWD":/data plantuml/plantuml -tpng '/data/*.puml'
    Product decides whether to set it, the amount and the expiry.
 2. **Who can grant?** Staff only in v0. Should support be capped (for
    example, grants over $1,000 need a second approver)?
-3. **Delete or void.** Should deleting a `CreditGrant` be refused, so
-   voiding is the only way and the record always stays in Milo?
+3. **Delete or void.** Resolved: deleting a `CreditGrant` is refused by the webhook.
+   Voiding is the only mechanism to cancel a credit, preserving an immutable audit trail in Milo.
+   (The only exception is cascading deletion when the parent `BillingAccount` is deleted/gone).
 4. **Shown on invoices how?** One "Credit applied" line, or the credit
    spread over the lines it paid for? Providers may only support one of
    them.

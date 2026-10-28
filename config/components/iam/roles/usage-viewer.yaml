@@ -10,3 +10,5 @@ spec:
   includedPermissions:
     # Creating a UsageQuery only reads usage; nothing is stored or changed.
     - usage.billing.miloapis.com/usagequeries.create
+    - usage.billing.miloapis.com/billingaccountbalances.get
+    - usage.billing.miloapis.com/billingaccountbalances.list

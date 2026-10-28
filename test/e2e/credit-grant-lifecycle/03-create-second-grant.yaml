@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-grant-2
+  namespace: default
+spec:
+  billingAccountRef:
+    name: cg-e2e-acct
+  amount: "0.50"
+  currency: USD
+  reason: Goodwill
+  description: "E2E goodwill fractional credit grant"

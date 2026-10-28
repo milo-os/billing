@@ -22,3 +22,4 @@ resources:
   - service-pricing-admin.yaml
   - service-pricing-viewer.yaml
   - usage-viewer.yaml
+  - billing-credit-admin.yaml

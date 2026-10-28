@@ -1,0 +1,17 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-credit-admin
+  annotations:
+    kubernetes.io/display-name: Credit Admin
+    kubernetes.io/description: "Grant and void credits on billing accounts"
+spec:
+  launchStage: Alpha
+  includedPermissions:
+    - billing.miloapis.com/creditgrants.create
+    - billing.miloapis.com/creditgrants.get
+    - billing.miloapis.com/creditgrants.list
+    - billing.miloapis.com/creditgrants.patch
+    - billing.miloapis.com/creditgrants.update
+    - billing.miloapis.com/creditgrants.watch
+    - billing.miloapis.com/creditgrants/status.get

@@ -30,3 +30,7 @@ spec:
     - billing.miloapis.com/billingarrangementapplications.get
     - billing.miloapis.com/billingarrangementapplications/status.get
     - billing.miloapis.com/billingarrangementapplications.watch
+    - billing.miloapis.com/creditgrants.list
+    - billing.miloapis.com/creditgrants.get
+    - billing.miloapis.com/creditgrants/status.get
+    - billing.miloapis.com/creditgrants.watch

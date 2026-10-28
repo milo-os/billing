@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-zero-int
+  namespace: default
+spec:
+  billingAccountRef:
+    name: cg-e2e-acct
+  amount: "0"
+  currency: USD
+  reason: Promotional
+  description: "Invalid grant with integer zero"

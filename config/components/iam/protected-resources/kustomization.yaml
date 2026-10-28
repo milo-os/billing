@@ -20,4 +20,6 @@ resources:
   - invoice.yaml
   - servicepricing.yaml
   - usagequery.yaml
+  - billingaccountbalance.yaml
+  - creditgrant.yaml
 

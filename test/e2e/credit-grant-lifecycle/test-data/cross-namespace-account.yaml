@@ -1,0 +1,12 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: CreditGrant
+metadata:
+  name: cg-e2e-cross-ns
+  namespace: default
+spec:
+  billingAccountRef:
+    name: other-ns-account
+  amount: "100.00"
+  currency: USD
+  reason: Promotional
+  description: "Cross namespace account reference"

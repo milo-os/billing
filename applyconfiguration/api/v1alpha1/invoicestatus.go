@@ -30,6 +30,9 @@ type InvoiceStatusApplyConfiguration struct {
 	// AmountDue is the remaining balance. Provider-authoritative — not
 	// derived client-side from total and amountPaid.
 	AmountDue *string `json:"amountDue,omitempty"`
+	// CreditsApplied is the total amount of credits applied to this invoice,
+	// expressed as a decimal string (e.g. "50.00").
+	CreditsApplied *string `json:"creditsApplied,omitempty"`
 	// DueDate is when payment is due.
 	DueDate *v1.Time `json:"dueDate,omitempty"`
 	// PaidAt is set once amountDue reaches zero.
@@ -88,6 +91,14 @@ func (b *InvoiceStatusApplyConfiguration) WithAmountPaid(value string) *InvoiceS
 // If called multiple times, the AmountDue field is set to the value of the last call.
 func (b *InvoiceStatusApplyConfiguration) WithAmountDue(value string) *InvoiceStatusApplyConfiguration {
 	b.AmountDue = &value
+	return b
+}
+
+// WithCreditsApplied sets the CreditsApplied field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the CreditsApplied field is set to the value of the last call.
+func (b *InvoiceStatusApplyConfiguration) WithCreditsApplied(value string) *InvoiceStatusApplyConfiguration {
+	b.CreditsApplied = &value
 	return b
 }
 
