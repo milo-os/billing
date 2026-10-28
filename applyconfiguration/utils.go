@@ -124,6 +124,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.OfferApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OfferReference"):
 		return &apiv1alpha1.OfferReferenceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("OfferSignupCredit"):
+		return &apiv1alpha1.OfferSignupCreditApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OfferSpec"):
 		return &apiv1alpha1.OfferSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("OfferStatus"):

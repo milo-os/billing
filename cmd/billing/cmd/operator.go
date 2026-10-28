@@ -172,6 +172,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.BillingArrangementApplicationReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating BillingArrangementApplication controller: %w", err)
 			}
+			if err = (&controller.SignupCreditReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating SignupCredit controller: %w", err)
+			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)

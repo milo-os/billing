@@ -1,0 +1,18 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: MeterDefinition
+metadata:
+  name: e2e-signup-cpu-allocated
+  labels:
+    services.miloapis.com/service: compute.datumapis.com
+spec:
+  meterName: e2e.billing.miloapis.com/signup/cpu-allocated
+  displayName: E2E Signup Credit CPU Allocated
+  description: E2E fixture for meter used by offer.
+  phase: Published
+  measurement:
+    aggregation: Average
+    unit: "{vcpu}"
+  billing:
+    consumedUnit: "{vcpu}"
+  monitoredResourceTypes:
+    - instance

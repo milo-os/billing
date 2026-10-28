@@ -1,0 +1,30 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: signup-e2e-second-acct
+  namespace: default
+spec:
+  currencyCode: USD
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingEntitlement
+metadata:
+  name: signup-e2e-second-entitlement
+  namespace: default
+spec:
+  billingAccountRef:
+    name: signup-e2e-second-acct
+  offerRef:
+    name: e2e-signup-offer
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: PaymentMethod
+metadata:
+  name: signup-e2e-second-card
+  namespace: default
+spec:
+  billingAccountRef:
+    name: signup-e2e-second-acct
+  displayName: "E2E Second Card"
+  paymentMethodClassRef:
+    name: stripe-default

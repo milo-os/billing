@@ -1,0 +1,16 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-signup-offer
+spec:
+  chargeTypes:
+    - Usage
+  launchStage: Draft
+  servicePricingRefs:
+    - name: e2e-signup-cpu-allocated
+      namespace: milo-system
+  signupCredit:
+    amount: "50.00"
+    currency: USD
+    expiresAfter: 720h
+    description: "E2E Signup Welcome Credit"

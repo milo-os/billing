@@ -3,26 +3,27 @@ title Signup credit (optional, one per organization)
 
 actor Operator as Op
 participant "Milo API server" as Milo
-participant "service-catalog\nbilling defaults controller" as SC
+participant "billing\nsignup credit controller" as BC
 participant "Billing provider\ncontrollers" as Provider
 
-Op -> Milo : billing ServiceConfiguration\nspec.signupCredit: {amount 50.00,\nexpiresAfter 720h, description}
+Op -> Milo : Offer payg-v1\nspec.signupCredit: {amount 50.00,\nexpiresAfter 720h, description}
 
 == For each organization ==
-Milo -> SC : BillingAccount acme-main changed
-SC -> SC : organization-acme already has\nCreditGrant signup-credit? → stop\n(one per organization, whichever account)
-SC -> SC : acme-main's default payment method\na ready card? → else no signup credit
-SC -> Milo : create CreditGrant signup-credit\nin organization-acme, for acme-main,\nreason Promotional,\nlabels credit-grant-default
-note right of SC : the name makes it one per organization
+Milo -> BC : BillingAccount acme-main changed
+BC -> BC : organization-acme already has\nCreditGrant signup-credit? → stop\n(one per organization, whichever account)
+BC -> BC : acme-main's default payment method\na ready card? → else no signup credit
+BC -> BC : read Offer payg-v1 spec.signupCredit
+BC -> Milo : create CreditGrant signup-credit\nin organization-acme, for acme-main,\nreason Promotional,\nlabels credit-grant-default
+note right of BC : the name makes it one per organization
 Milo -> Provider : watch event
 Provider -> Provider : grant it (as any CreditGrant)
 Provider -> Milo : status.phase: Active
 
 == Later billing accounts ==
-Milo -> SC : BillingAccount acme-eu created
-SC -> SC : signup-credit exists → nothing
+Milo -> BC : BillingAccount acme-eu created
+BC -> BC : signup-credit exists → nothing
 
-== Setting removed ==
-Op -> Milo : remove spec.signupCredit
-note right of SC : new organizations get no grant;\nexisting grants are untouched
+== Offer without signup credit ==
+Op -> Milo : publish Offer without spec.signupCredit
+note right of BC : new accounts on this offer get no grant;\nexisting grants are untouched
 @enduml

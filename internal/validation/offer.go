@@ -36,6 +36,7 @@ func ValidateOfferCreate(offer *billingv1alpha1.Offer) field.ErrorList {
 	allErrs = append(allErrs, validateOfferClientSnapshotEmpty(offer)...)
 	allErrs = append(allErrs, validateOfferGAHasRefs(offer)...)
 	allErrs = append(allErrs, validateOfferDiscounts(offer)...)
+	allErrs = append(allErrs, validateOfferSignupCredit(offer)...)
 
 	return allErrs
 }
@@ -49,6 +50,7 @@ func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUp
 	allErrs = append(allErrs, validateOfferSnapshotMetersPricedOnce(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAHasRefs(newOffer)...)
 	allErrs = append(allErrs, validateOfferDiscounts(newOffer)...)
+	allErrs = append(allErrs, validateOfferSignupCredit(newOffer)...)
 	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer, opts)...)
 
 	return allErrs
@@ -384,6 +386,58 @@ func validateOfferDiscounts(offer *billingv1alpha1.Offer) field.ErrorList {
 				))
 			}
 		}
+	}
+
+	return allErrs
+}
+
+func validateOfferSignupCredit(offer *billingv1alpha1.Offer) field.ErrorList {
+	if offer.Spec.SignupCredit == nil {
+		return nil
+	}
+	var allErrs field.ErrorList
+	fldPath := field.NewPath("spec", "signupCredit")
+
+	if offer.Spec.SignupCredit.Amount == "" {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("amount"),
+			"amount is required",
+		))
+	} else if len(offer.Spec.SignupCredit.Amount) > maxAmountLength {
+		allErrs = append(allErrs, field.TooLong(
+			fldPath.Child("amount"),
+			offer.Spec.SignupCredit.Amount,
+			maxAmountLength,
+		))
+	} else if !amountPattern.MatchString(offer.Spec.SignupCredit.Amount) {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("amount"),
+			offer.Spec.SignupCredit.Amount,
+			"amount must be a positive decimal amount with at most 2 decimal places",
+		))
+	}
+
+	if offer.Spec.SignupCredit.Currency != "" && offer.Spec.SignupCredit.Currency != "USD" {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("currency"),
+			offer.Spec.SignupCredit.Currency,
+			"currency must be USD",
+		))
+	}
+
+	if offer.Spec.SignupCredit.Description == "" {
+		allErrs = append(allErrs, field.Required(
+			fldPath.Child("description"),
+			"description is required",
+		))
+	}
+
+	if offer.Spec.SignupCredit.ExpiresAfter != nil && offer.Spec.SignupCredit.ExpiresAfter.Duration <= 0 {
+		allErrs = append(allErrs, field.Invalid(
+			fldPath.Child("expiresAfter"),
+			offer.Spec.SignupCredit.ExpiresAfter.Duration.String(),
+			"expiresAfter must be greater than zero",
+		))
 	}
 
 	return allErrs

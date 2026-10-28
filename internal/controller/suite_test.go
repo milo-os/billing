@@ -222,6 +222,9 @@ var _ = BeforeSuite(func() {
 	err = (&BillingArrangementApplicationReconciler{}).SetupWithManager(mgr)
 	Expect(err).NotTo(HaveOccurred())
 
+	err = (&SignupCreditReconciler{}).SetupWithManager(mgr)
+	Expect(err).NotTo(HaveOccurred())
+
 	// Get the cached client from the manager (supports field indexers)
 	cachedClient = mgr.GetClient()
 
