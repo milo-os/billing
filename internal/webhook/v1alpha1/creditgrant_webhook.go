@@ -38,6 +38,7 @@ func SetupCreditGrantWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=creditgrants,verbs=get;list;watch;create;update;patch;delete
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=creditgrants/status,verbs=get;update;patch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups="",resources=namespaces,verbs=get
 
 type creditGrantWebhook struct {
 	reader client.Reader

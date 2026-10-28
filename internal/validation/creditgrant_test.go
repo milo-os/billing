@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -397,6 +398,43 @@ func TestValidateCreditGrantDelete(t *testing.T) {
 		want := "credit grants cannot be deleted; void the grant instead"
 		if !strings.Contains(errs[0].Error(), want) {
 			t.Fatalf("got %v, wanted match for %q", errs[0], want)
+		}
+	})
+
+	t.Run("deletion allowed when enclosing namespace is terminating", func(t *testing.T) {
+		now := metav1.Now()
+		ns := &corev1.Namespace{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:              "org-acme",
+				DeletionTimestamp: &now,
+				Finalizers:        []string{"kubernetes"},
+			},
+		}
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "acme",
+				Namespace: "org-acme",
+				UID:       "current-account-uid",
+			},
+			Spec: billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		scheme := runtime.NewScheme()
+		_ = billingv1alpha1.AddToScheme(scheme)
+		_ = corev1.AddToScheme(scheme)
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(ns, account).Build()
+
+		grant := validCreditGrant()
+		grant.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: billingv1alpha1.GroupVersion.String(),
+			Kind:       "BillingAccount",
+			Name:       "acme",
+			UID:        "current-account-uid",
+		}}
+
+		// Account is healthy, but namespace is terminating -> deletion must be allowed
+		errs := ValidateCreditGrantDelete(ctx, c, grant)
+		if len(errs) > 0 {
+			t.Fatalf("unexpected error when namespace is terminating: %v", errs)
 		}
 	})
 }

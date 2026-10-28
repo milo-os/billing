@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"regexp"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -100,13 +101,22 @@ func ValidateCreditGrantUpdate(
 // Credit grants cannot be deleted so that an immutable audit trail is preserved.
 // To revoke or cancel a credit grant, void it by setting spec.voided: true.
 //
-// Deletion is only permitted when the parent BillingAccount is being deleted
-// or is already gone, allowing Kubernetes garbage collection to clean up the account.
+// Deletion is permitted when the enclosing namespace is terminating, or when the
+// parent BillingAccount is being deleted or already gone.
 func ValidateCreditGrantDelete(
 	ctx context.Context,
 	c client.Reader,
 	grant *billingv1alpha1.CreditGrant,
 ) field.ErrorList {
+	if c != nil && grant.Namespace != "" {
+		var ns corev1.Namespace
+		if err := c.Get(ctx, client.ObjectKey{Name: grant.Namespace}, &ns); err == nil {
+			if !ns.DeletionTimestamp.IsZero() {
+				return nil
+			}
+		}
+	}
+
 	if c != nil && grant.Spec.BillingAccountRef.Name != "" {
 		var account billingv1alpha1.BillingAccount
 		key := client.ObjectKey{Namespace: grant.Namespace, Name: grant.Spec.BillingAccountRef.Name}
