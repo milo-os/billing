@@ -251,7 +251,7 @@ One page, with fields that appear depending on the choice at the top.
 | Field | Required | Input | Help text |
 |---|---|---|---|
 | Estimated monthly spend | Yes | Select: Under $500 · $500–$2,500 · $2,500–$10,000 · Over $10,000 · Not sure yet | Helps us set your credit limit. |
-| Accounts payable email | Yes | Email | We'll send invoices here as well as to your billing contact. |
+| Accounts payable email | Yes | Email | Invoices are emailed here. Submitting makes this the billing account's invoice email straight away, for card payments too. |
 | Purchase order number | No | Text | Printed on your invoices. |
 | Agreement reference | No | Text | If you've signed an MSA or order form with Datum, enter its reference. |
 
@@ -408,8 +408,8 @@ not stopped automatically.
 |---|---|---|---|
 | Application submitted | Applicant | We've received your application | What they sent, expected turnaround, how to add a card instead |
 | Application submitted | Reviewers | New payment terms application: {Org} | Link to the queue |
-| Approved | Applicant, org owners | You're approved for payment terms | The terms granted, and a link back to the portal |
-| Not approved | Applicant, org owners | About your payment terms application | The reviewer's message, and how to add a card or apply again |
+| Approved | Applicant (org owners later) | You're approved for payment terms | The terms granted, and a link back to the portal |
+| Not approved | Applicant (org owners later) | About your payment terms application | The reviewer's message, and how to add a card or apply again |
 | Ending in 30 and 7 days | Owners, billing contact | Your {sponsored access / payment terms} end on {date} | What happens next, how to renew or add a card |
 | Ended or withdrawn by staff | Owners, billing contact | Your payment terms have ended | What they need to do to keep using Datum Cloud |
 | Nearing credit limit (80% and 100%) | Staff (owners at 100%) | {Org} is at 80% of its credit limit | Usage and limit |
@@ -611,36 +611,46 @@ Follow-ups in other repos:
   customers, since nothing enforces or alerts on it yet.
 - **staff-portal:** the applications queue, approving by granting terms
   with `applicationRef` set, and declining.
-- **milo:** the emails and the Help Scout ticket. Today nothing reacts to
-  an application: no email is sent, no ticket is opened, and staff aren't
-  told. See [Notifying people about applications](#notifying-people-about-applications).
+- **milo:** the emails and the Help Scout ticket, from
+  `PaymentTermsApplicationEmailController`. See
+  [Notifying people about applications](#notifying-people-about-applications).
+- **email-templates:** the four templates the milo controller sends.
 
 ### Notifying people about applications
 
 Milo sends email by creating a notification `Email` from an
 `EmailTemplate`, as the invitation, waitlist and suspension controllers do.
-An `Email` can go to any address, not only a user. The plan is one milo
-controller that watches `BillingArrangementApplication`:
+An `Email` can go to any address, not only a user. One milo controller,
+`PaymentTermsApplicationEmailController`, watches
+`BillingArrangementApplication`:
 
 - **When an application is created:**
   - "We've received your application" to the applicant (`spec.applicant`).
   - "New payment terms application: {Org}" to the support mailbox in Help
-    Scout, which turns it into a conversation. That is the ticket for
-    confirmation and follow-up. It needs no Help Scout API or credentials,
-    and changing support systems means changing an address (decision 6).
+    Scout (`support@datum.net`, milo's
+    `--payment-terms-application-support-email`), which turns it into a
+    conversation. That is the ticket for confirmation and follow-up. It
+    needs no Help Scout API or credentials, and changing support systems
+    means changing an address (decision 6).
 - **When the application's status settles** on `Approved` or `Declined`:
-  the approval or decline email to the applicant and the org's owners. Send
+  the approval or decline email to the applicant. The org's owners are left
+  out for now: milo has no lookup for an organization's owners yet. Send
   from the settled status, not when a decision is created, so a decline
   that races an approval doesn't also send a "declined" email.
 - **Name each `Email` from the application and the event**, so a re-run of
   the reconcile doesn't send twice, as the other controllers already do.
+- **Skip old events.** An application submitted or decided more than 72
+  hours ago (`--payment-terms-application-email-max-age`) gets no email, so
+  the first rollout doesn't mail people about applications decided long
+  ago.
 
 Two gaps to close along the way:
 
 - **Reply-to.** `EmailSpec` has a recipient, CC, BCC and variables, but no
-  reply-to. Help Scout would show the conversation as from Datum's sending
-  address, so replying to the customer isn't automatic. Add a reply-to to
-  `Email`, or put the applicant's address in the message.
+  reply-to. Help Scout shows the conversation as from Datum's sending
+  address, so replying to the customer isn't automatic. For now the
+  notice gives the applicant's address and says replies don't reach them;
+  adding a reply-to to `Email` would fix it properly.
 - **Telling "under review" apart.** Milo's `OnboardingComplete` reports
   `PaymentMethodNotReady` whether or not the customer has applied. Mapping
   billing's `ApplicationPending` to its own reason would let datumctl say
