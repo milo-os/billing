@@ -124,6 +124,27 @@ func TestValidateCreditGrantCreate(t *testing.T) {
 			wantErr: "amount is required",
 		},
 		{
+			name: "amount with three decimal places rejected",
+			mutate: func(g *billingv1alpha1.CreditGrant) {
+				g.Spec.Amount = "10.005"
+			},
+			wantErr: "amount must be a positive decimal amount",
+		},
+		{
+			name: "tiny sub-cent amount rejected",
+			mutate: func(g *billingv1alpha1.CreditGrant) {
+				g.Spec.Amount = "0.0000001"
+			},
+			wantErr: "amount must be a positive decimal amount",
+		},
+		{
+			name: "amount exceeding max length",
+			mutate: func(g *billingv1alpha1.CreditGrant) {
+				g.Spec.Amount = "1234567890123456789.00"
+			},
+			wantErr: "Too long: may not be more than 18 bytes",
+		},
+		{
 			name: "invalid currency",
 			mutate: func(g *billingv1alpha1.CreditGrant) {
 				g.Spec.Currency = "EUR"
@@ -185,6 +206,19 @@ func TestValidateCreditGrantCreate(t *testing.T) {
 			}
 			t.Fatalf("got %v, wanted match for %q", errs, tt.wantErr)
 		})
+	}
+}
+
+func TestValidateCreditGrantCreate_EmptyBillingAccountRef_SingleError(t *testing.T) {
+	c := creditGrantTestClient(t)
+	grant := validCreditGrant()
+	grant.Spec.BillingAccountRef.Name = ""
+	errs := ValidateCreditGrantCreate(context.Background(), c, grant)
+	if len(errs) != 1 {
+		t.Fatalf("expected exactly 1 error for empty billingAccountRef.name, got %d: %v", len(errs), errs)
+	}
+	if !strings.Contains(errs[0].Error(), "billingAccountRef.name is required") {
+		t.Fatalf("unexpected error message: %v", errs[0])
 	}
 }
 
@@ -250,6 +284,62 @@ func TestValidateCreditGrantUpdate(t *testing.T) {
 				newG.Spec.ExpiresAfter = &d
 			},
 			wantErr: "expiresAfter is immutable",
+		},
+		{
+			name: "modifying default label value is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.Labels = map[string]string{billingv1alpha1.CreditGrantDefaultLabel: "true"}
+				newG.Labels = map[string]string{billingv1alpha1.CreditGrantDefaultLabel: "false"}
+			},
+			wantErr: `metadata.labels[services.miloapis.com/credit-grant-default]: Forbidden: label "services.miloapis.com/credit-grant-default" is immutable`,
+		},
+		{
+			name: "removing default label is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.Labels = map[string]string{billingv1alpha1.CreditGrantDefaultLabel: "true"}
+				newG.Labels = map[string]string{}
+			},
+			wantErr: `metadata.labels[services.miloapis.com/credit-grant-default]: Forbidden: label "services.miloapis.com/credit-grant-default" is immutable`,
+		},
+		{
+			name: "adding default label on update is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.Labels = nil
+				newG.Labels = map[string]string{billingv1alpha1.CreditGrantDefaultLabel: "true"}
+			},
+			wantErr: `metadata.labels[services.miloapis.com/credit-grant-default]: Forbidden: label "services.miloapis.com/credit-grant-default" is immutable`,
+		},
+		{
+			name: "removing billing account owner reference is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.OwnerReferences = []metav1.OwnerReference{
+					{Kind: "BillingAccount", Name: "acme", UID: "uid-123"},
+				}
+				newG.OwnerReferences = nil
+			},
+			wantErr: "billing account owner reference cannot be removed",
+		},
+		{
+			name: "modifying billing account owner reference is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.OwnerReferences = []metav1.OwnerReference{
+					{Kind: "BillingAccount", Name: "acme", UID: "uid-123"},
+				}
+				newG.OwnerReferences = []metav1.OwnerReference{
+					{Kind: "BillingAccount", Name: "other-acme", UID: "uid-456"},
+				}
+			},
+			wantErr: "billing account owner reference is immutable",
+		},
+		{
+			name: "adding billing account owner reference on update is forbidden",
+			mutate: func(oldG, newG *billingv1alpha1.CreditGrant) {
+				oldG.OwnerReferences = nil
+				newG.OwnerReferences = []metav1.OwnerReference{
+					{Kind: "BillingAccount", Name: "acme", UID: "uid-123"},
+				}
+			},
+			wantErr: "billing account owner reference cannot be added after creation",
 		},
 	}
 

@@ -22,7 +22,7 @@ type CreditGrantSpecApplyConfiguration struct {
 	// Immutable once set.
 	BillingAccountRef *BillingAccountRefApplyConfiguration `json:"billingAccountRef,omitempty"`
 	// Amount is the dollar amount of credit granted, expressed as a positive
-	// decimal string (e.g. "500.00"). Immutable once set.
+	// decimal string with at most 2 decimal places (e.g. "500.00"). Immutable once set.
 	Amount *string `json:"amount,omitempty"`
 	// Currency is the ISO 4217 currency code for the grant. USD only.
 	// Immutable once set.

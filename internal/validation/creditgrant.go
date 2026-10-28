@@ -5,11 +5,11 @@ package validation
 import (
 	"context"
 	"fmt"
+	"reflect"
 	"regexp"
 
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
-	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -17,7 +17,9 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-var amountPattern = regexp.MustCompile(`^([1-9][0-9]*(\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$`)
+var amountPattern = regexp.MustCompile(`^([1-9][0-9]*(\.[0-9]{1,2})?|0\.(0[1-9]|[1-9][0-9]?))$`)
+
+const maxAmountLength = 18
 
 // ValidateCreditGrantCreate validates a CreditGrant on creation.
 func ValidateCreditGrantCreate(
@@ -94,6 +96,36 @@ func ValidateCreditGrantUpdate(
 		))
 	}
 
+	oldDefaultVal, oldHasDefault := oldGrant.Labels[billingv1alpha1.CreditGrantDefaultLabel]
+	newDefaultVal, newHasDefault := newGrant.Labels[billingv1alpha1.CreditGrantDefaultLabel]
+	if oldHasDefault != newHasDefault || oldDefaultVal != newDefaultVal {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("metadata", "labels").Key(billingv1alpha1.CreditGrantDefaultLabel),
+			fmt.Sprintf("label %q is immutable", billingv1alpha1.CreditGrantDefaultLabel),
+		))
+	}
+
+	oldOwnerRef := findBillingAccountOwnerRef(oldGrant.GetOwnerReferences())
+	newOwnerRef := findBillingAccountOwnerRef(newGrant.GetOwnerReferences())
+	if oldOwnerRef != nil {
+		if newOwnerRef == nil {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("metadata", "ownerReferences"),
+				"billing account owner reference cannot be removed",
+			))
+		} else if !reflect.DeepEqual(oldOwnerRef, newOwnerRef) {
+			allErrs = append(allErrs, field.Forbidden(
+				field.NewPath("metadata", "ownerReferences"),
+				"billing account owner reference is immutable",
+			))
+		}
+	} else if newOwnerRef != nil {
+		allErrs = append(allErrs, field.Forbidden(
+			field.NewPath("metadata", "ownerReferences"),
+			"billing account owner reference cannot be added after creation",
+		))
+	}
+
 	return allErrs
 }
 
@@ -161,33 +193,23 @@ func validateCreditGrantBillingAccountRef(
 func validateCreditGrantSpec(spec *billingv1alpha1.CreditGrantSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 
-	if spec.BillingAccountRef.Name == "" {
-		allErrs = append(allErrs, field.Required(
-			fldPath.Child("billingAccountRef", "name"),
-			"billingAccountRef.name is required",
-		))
-	}
-
 	if spec.Amount == "" {
 		allErrs = append(allErrs, field.Required(
 			fldPath.Child("amount"),
 			"amount is required",
 		))
+	} else if len(spec.Amount) > maxAmountLength {
+		allErrs = append(allErrs, field.TooLong(
+			fldPath.Child("amount"),
+			spec.Amount,
+			maxAmountLength,
+		))
 	} else if !amountPattern.MatchString(spec.Amount) {
 		allErrs = append(allErrs, field.Invalid(
 			fldPath.Child("amount"),
 			spec.Amount,
-			"amount must be a positive decimal amount",
+			"amount must be a positive decimal amount with at most 2 decimal places",
 		))
-	} else {
-		q, err := resource.ParseQuantity(spec.Amount)
-		if err != nil || q.Sign() <= 0 {
-			allErrs = append(allErrs, field.Invalid(
-				fldPath.Child("amount"),
-				spec.Amount,
-				"amount must be a positive decimal amount",
-			))
-		}
 	}
 
 	if spec.Currency != "USD" {
@@ -241,4 +263,13 @@ func durationEqual(a, b *metav1.Duration) bool {
 		return false
 	}
 	return a.Duration == b.Duration
+}
+
+func findBillingAccountOwnerRef(refs []metav1.OwnerReference) *metav1.OwnerReference {
+	for i := range refs {
+		if refs[i].Kind == "BillingAccount" {
+			return &refs[i]
+		}
+	}
+	return nil
 }

@@ -73,11 +73,12 @@ type CreditGrantSpec struct {
 	BillingAccountRef BillingAccountRef `json:"billingAccountRef"`
 
 	// Amount is the dollar amount of credit granted, expressed as a positive
-	// decimal string (e.g. "500.00"). Immutable once set.
+	// decimal string with at most 2 decimal places (e.g. "500.00"). Immutable once set.
 	//
 	// +kubebuilder:validation:Required
-	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*(\.[0-9]+)?|0\.[0-9]*[1-9][0-9]*)$`
+	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*(\.[0-9]{1,2})?|0\.(0[1-9]|[1-9][0-9]?))$`
 	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=18
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="amount is immutable"
 	Amount string `json:"amount"`
 
