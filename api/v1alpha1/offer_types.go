@@ -55,6 +55,46 @@ type OfferSpec struct {
 	// +listType=map
 	// +listMapKey=name
 	ServicePricings []ServicePricingSnapshot `json:"servicePricings,omitempty"`
+
+	// SignupCredit defines an optional promotional credit awarded to an
+	// organization's first billing account entitled to this Offer once a valid
+	// payment card is attached.
+	//
+	// +kubebuilder:validation:Optional
+	SignupCredit *OfferSignupCredit `json:"signupCredit,omitempty"`
+}
+
+// OfferSignupCredit specifies the promotional welcome credit awarded to an
+// organization when its first billing account on this Offer attaches a valid payment card.
+type OfferSignupCredit struct {
+	// Amount is the positive decimal dollar amount granted (e.g. "50.00").
+	// Must have at most 2 decimal places.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^([1-9][0-9]*(\.[0-9]{1,2})?|0\.(0[1-9]|[1-9][0-9]?))$`
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=18
+	Amount string `json:"amount"`
+
+	// Currency is the ISO 4217 currency code for the grant. USD only.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^USD$`
+	// +kubebuilder:default=USD
+	Currency string `json:"currency,omitempty"`
+
+	// ExpiresAfter is an optional duration after the grant's effective time
+	// when any remaining credit expires (e.g. "720h"). Omitted means the grant never expires.
+	//
+	// +kubebuilder:validation:Optional
+	ExpiresAfter *metav1.Duration `json:"expiresAfter,omitempty"`
+
+	// Description explains why the credit was granted, recorded on the resulting CreditGrant.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=256
+	Description string `json:"description"`
 }
 
 // OfferStatus defines the observed state of an Offer.

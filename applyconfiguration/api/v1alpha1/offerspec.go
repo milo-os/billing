@@ -38,6 +38,10 @@ type OfferSpecApplyConfiguration struct {
 	// ServicePricing specs, written by the controller when launchStage
 	// first becomes GA. Empty while Draft.
 	ServicePricings []ServicePricingSnapshotApplyConfiguration `json:"servicePricings,omitempty"`
+	// SignupCredit defines an optional promotional credit awarded to an
+	// organization's first billing account entitled to this Offer once a valid
+	// payment card is attached.
+	SignupCredit *OfferSignupCreditApplyConfiguration `json:"signupCredit,omitempty"`
 }
 
 // OfferSpecApplyConfiguration constructs a declarative configuration of the OfferSpec type for use with
@@ -95,5 +99,13 @@ func (b *OfferSpecApplyConfiguration) WithServicePricings(values ...*ServicePric
 		}
 		b.ServicePricings = append(b.ServicePricings, *values[i])
 	}
+	return b
+}
+
+// WithSignupCredit sets the SignupCredit field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SignupCredit field is set to the value of the last call.
+func (b *OfferSpecApplyConfiguration) WithSignupCredit(value *OfferSignupCreditApplyConfiguration) *OfferSpecApplyConfiguration {
+	b.SignupCredit = value
 	return b
 }

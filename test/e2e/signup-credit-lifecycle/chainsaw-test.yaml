@@ -1,0 +1,165 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: signup-credit-lifecycle
+spec:
+  description: |
+    Tests the SignupCreditReconciler lifecycle:
+    1. Sets up GA Offer with signupCredit.
+    2. Creates BillingAccount, BillingEntitlement, and PaymentMethod (Pending).
+    3. Confirms no CreditGrant is created while payment card is Pending.
+    4. Confirms first card becoming Active triggers default payment method assignment.
+    5. Confirms CreditGrant signup-credit is automatically created with correct amount, currency, reason, and label.
+    6. Confirms a second BillingAccount in the same organization does not receive a second signup credit.
+  steps:
+    - name: ensure-milo-system
+      description: Ensure milo-system namespace exists.
+      try:
+        - script:
+            content: |
+              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: create-meter
+      description: Create MeterDefinition and wait for Published.
+      try:
+        - create:
+            file: 01-meter.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-signup-cpu-allocated
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: Published
+                    status: "True"
+
+    - name: create-servicepricing-and-offer
+      description: Create ServicePricing and Draft Offer.
+      try:
+        - create:
+            file: 02-servicepricing.yaml
+        - create:
+            file: 03-offer.yaml
+
+    - name: publish-offer
+      description: Patch Offer to GA and wait for OfferReady.
+      try:
+        - script:
+            content: |
+              kubectl patch offer e2e-signup-offer --type=merge --patch '{"spec":{"launchStage":"GA"}}'
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-signup-offer
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                    reason: OfferReady
+                  - type: Published
+                    status: "True"
+                    reason: OfferPublished
+
+    - name: create-account-and-card
+      description: Create BillingAccount, BillingEntitlement, and PaymentMethod.
+      try:
+        - create:
+            file: 04-account.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: PaymentMethod
+              metadata:
+                name: signup-e2e-card
+                namespace: default
+              status:
+                phase: Pending
+
+    - name: verify-no-grant-while-card-pending
+      description: No signup-credit grant should exist while card is Pending.
+      try:
+        - sleep:
+            duration: 2s
+        - script:
+            content: |
+              kubectl get creditgrant signup-credit -n default
+            check:
+              ($error != null): true
+              (contains($stderr, 'NotFound') || contains($stderr, 'not found')): true
+
+    - name: activate-card
+      description: Simulate provider confirming the card; controller sets it as default and creates signup-credit.
+      try:
+        - script:
+            content: |
+              kubectl patch paymentmethod signup-e2e-card -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active","details":{"type":"card","card":{"brand":"visa","last4":"4242","country":"US","expiryMonth":12,"expiryYear":2030}}}}'
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: signup-e2e-acct
+                namespace: default
+              spec:
+                defaultPaymentMethodRef:
+                  name: signup-e2e-card
+
+    - name: assert-signup-credit-created
+      description: Verify CreditGrant named signup-credit was automatically created.
+      try:
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: CreditGrant
+              metadata:
+                name: signup-credit
+                namespace: default
+                labels:
+                  services.miloapis.com/credit-grant-default: "true"
+              spec:
+                billingAccountRef:
+                  name: signup-e2e-acct
+                amount: "50.00"
+                currency: USD
+                reason: Promotional
+                description: "E2E Signup Welcome Credit"
+                voided: false
+
+    - name: second-account-no-duplicate-grant
+      description: Adding a second account with an active card in the same org does not create a duplicate grant.
+      try:
+        - create:
+            file: 05-second-account.yaml
+        - script:
+            content: |
+              kubectl wait paymentmethod signup-e2e-second-card -n default --for=jsonpath='{.status.phase}'=Pending --timeout=30s
+              kubectl patch paymentmethod signup-e2e-second-card -n default --type=merge --subresource=status --patch '{"status":{"phase":"Active","details":{"type":"card","card":{"brand":"visa","last4":"1111","country":"US","expiryMonth":12,"expiryYear":2030}}}}'
+        - sleep:
+            duration: 3s
+        - script:
+            content: |
+              kubectl get creditgrant signup-credit -n default -o jsonpath='{.spec.billingAccountRef.name}'
+            check:
+              ($stdout): signup-e2e-acct
+
+    - name: cleanup
+      description: Clean up test resources.
+      try:
+        - script:
+            content: |
+              kubectl delete billingaccount signup-e2e-acct -n default --ignore-not-found --wait=true --timeout=30s
+              kubectl delete billingaccount signup-e2e-second-acct -n default --ignore-not-found --wait=true --timeout=30s
+              kubectl delete offer e2e-signup-offer --ignore-not-found --wait=true --timeout=30s
+              kubectl delete servicepricing e2e-signup-cpu-allocated -n milo-system --ignore-not-found --wait=true --timeout=30s
+              kubectl delete meterdefinition e2e-signup-cpu-allocated --ignore-not-found --wait=true --timeout=30s

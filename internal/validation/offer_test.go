@@ -5,7 +5,9 @@ package validation
 import (
 	"context"
 	"reflect"
+	"strings"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
@@ -416,4 +418,98 @@ func TestUsageMetersPricedTwice(t *testing.T) {
 	if !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v, want %v", got, want)
 	}
+}
+
+func TestValidateOffer_SignupCredit(t *testing.T) {
+	t.Run("valid signup credit", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		d := metav1.Duration{Duration: 720 * time.Hour}
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:       "50.00",
+			Currency:     "USD",
+			ExpiresAfter: &d,
+			Description:  "Welcome credit",
+		}
+		if errs := ValidateOfferCreate(offer); len(errs) != 0 {
+			t.Fatalf("expected no error, got: %v", errs)
+		}
+	})
+
+	t.Run("invalid amount format and precision", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:      "10.005",
+			Description: "Welcome credit",
+		}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "amount must be a positive decimal amount") {
+			t.Fatalf("expected error for >2 decimal places, got: %v", errs)
+		}
+	})
+
+	t.Run("negative amount", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:      "-50.00",
+			Description: "Welcome credit",
+		}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "amount must be a positive decimal amount") {
+			t.Fatalf("expected error for negative amount, got: %v", errs)
+		}
+	})
+
+	t.Run("invalid currency", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:      "50.00",
+			Currency:    "EUR",
+			Description: "Welcome credit",
+		}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "currency must be USD") {
+			t.Fatalf("expected error for non-USD currency, got: %v", errs)
+		}
+	})
+
+	t.Run("missing description", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount: "50.00",
+		}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "description is required") {
+			t.Fatalf("expected error for missing description, got: %v", errs)
+		}
+	})
+
+	t.Run("zero or negative expiresAfter", func(t *testing.T) {
+		offer := newDraftOffer("test-offer")
+		d := metav1.Duration{Duration: 0}
+		offer.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:       "50.00",
+			ExpiresAfter: &d,
+			Description:  "Welcome credit",
+		}
+		errs := ValidateOfferCreate(offer)
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "expiresAfter must be greater than zero") {
+			t.Fatalf("expected error for 0 duration, got: %v", errs)
+		}
+	})
+
+	t.Run("GA immutability forbids modifying signup credit", func(t *testing.T) {
+		old := newDraftOffer("test-offer")
+		old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+		old.Spec.SignupCredit = &billingv1alpha1.OfferSignupCredit{
+			Amount:      "50.00",
+			Description: "Welcome credit",
+		}
+		newOffer := old.DeepCopy()
+		newOffer.Spec.SignupCredit.Amount = "100.00"
+
+		errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{})
+		if len(errs) == 0 || !strings.Contains(errs[0].Error(), "Offer is immutable once launchStage is GA") {
+			t.Fatalf("expected GA immutability error, got: %v", errs)
+		}
+	})
 }

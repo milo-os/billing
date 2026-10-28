@@ -120,10 +120,10 @@ The API has three pieces:
 2. **`BillingAccountBalance`** is read-only and never stored, like
    `UsageQuery`. A `GET` returns the account's credit balance and what it
    owes this period, computed by the provider at that moment.
-3. **Signup credit** is an optional setting on the billing
-   ServiceConfiguration. service-catalog creates one `CreditGrant` per
-   organization, the same way it creates the default `BillingEntitlement`
-   from `defaultOffer`.
+3. **Signup credit** is an optional setting on the commercial `Offer`
+   (`billing.miloapis.com/v1alpha1`). billing's signup credit controller creates one
+   `CreditGrant` per organization when an entitled billing account attaches a ready
+   payment card.
 
 > [!NOTE]
 > Credits are used automatically. All of a billing account's usage draws
@@ -156,9 +156,8 @@ The API has three pieces:
   several billing accounts, and a credit only pays for the usage of the
   projects bound to its own billing account. Projects billed to another of
   the organization's accounts are charged as usual.
-- **One signup credit per organization and per payment card,** so creating
-  more billing accounts, or more organizations paid with the same card,
-  doesn't earn more credit.
+- **One signup credit per organization,** so creating more billing accounts
+  in the same organization doesn't earn more credit.
 - **USD only,** like every price today.
 - **Order of use:** the grant expiring first is used first. Expired credit
   is forfeited.
@@ -281,23 +280,24 @@ status:
 
 ![Signup credit](./credits-signup.png)
 
-A field on the billing.miloapis.com ServiceConfiguration, next to
-`defaultOffer`. Manual credit granting is the primary mechanism for MVP (e.g. promotional grants for trusted accounts); automated signup credit delivery is optional and intended for when automated fraud prevention is ready.
+An optional `signupCredit` field on the commercial `Offer` (`billing.miloapis.com/v1alpha1`), allowing each commercial plan/tier to specify welcome credits awarded upon account onboarding. Manual credit granting is the primary mechanism for MVP (e.g. promotional grants for trusted accounts); automated signup credit delivery is optional and configured per Offer.
 
 ```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: payg-v1
 spec:
-  defaultOffer: payg-4
+  launchStage: GA
+  chargeTypes: [Usage]
   signupCredit:
     amount: "50.00"
+    currency: USD
     expiresAfter: 720h
     description: "Welcome credit"
 ```
 
-When enabled, service-catalog's billing defaults controller, which already creates each
-new account's default `BillingEntitlement`, creates **one `CreditGrant` per
-organization and per payment card**. It goes to the organization's first
-billing account whose default payment method is a ready card, so the fraud
-checks at signup apply first.
+When an Offer specifies `signupCredit`, billing's signup credit controller creates **one `CreditGrant` per organization**. It goes to whichever of the organization's billing accounts entitled to that GA Offer is first to have a ready card as its default payment method.
 
 The grant is named `signup-credit` in the organization's namespace, with
 reason `Promotional` and the label:
