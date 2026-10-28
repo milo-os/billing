@@ -120,7 +120,13 @@ func ValidateCreditGrantDelete(
 					fmt.Errorf("reading billing account: %w", err),
 				),
 			}
-		} else if !account.DeletionTimestamp.IsZero() {
+		}
+		for _, ref := range grant.GetOwnerReferences() {
+			if ref.Kind == "BillingAccount" && ref.UID != "" && ref.UID != account.UID {
+				return nil
+			}
+		}
+		if !account.DeletionTimestamp.IsZero() {
 			return nil
 		}
 	}

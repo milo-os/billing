@@ -341,6 +341,64 @@ func TestValidateCreditGrantDelete(t *testing.T) {
 			t.Fatalf("expected internal error, got type %v (%v)", errs[0].Type, errs[0])
 		}
 	})
+
+	t.Run("deletion allowed when owner reference UID mismatches existing account (account was recreated)", func(t *testing.T) {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "acme",
+				Namespace: "org-acme",
+				UID:       "new-account-uid",
+			},
+			Spec: billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		scheme := runtime.NewScheme()
+		_ = billingv1alpha1.AddToScheme(scheme)
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(account).Build()
+
+		grant := validCreditGrant()
+		grant.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: billingv1alpha1.GroupVersion.String(),
+			Kind:       "BillingAccount",
+			Name:       "acme",
+			UID:        "old-deleted-account-uid",
+		}}
+
+		errs := ValidateCreditGrantDelete(ctx, c, grant)
+		if len(errs) > 0 {
+			t.Fatalf("unexpected error when owner reference UID mismatches: %v", errs)
+		}
+	})
+
+	t.Run("direct deletion forbidden when owner reference UID matches healthy account", func(t *testing.T) {
+		account := &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "acme",
+				Namespace: "org-acme",
+				UID:       "current-account-uid",
+			},
+			Spec: billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD"},
+		}
+		scheme := runtime.NewScheme()
+		_ = billingv1alpha1.AddToScheme(scheme)
+		c := fake.NewClientBuilder().WithScheme(scheme).WithObjects(account).Build()
+
+		grant := validCreditGrant()
+		grant.OwnerReferences = []metav1.OwnerReference{{
+			APIVersion: billingv1alpha1.GroupVersion.String(),
+			Kind:       "BillingAccount",
+			Name:       "acme",
+			UID:        "current-account-uid",
+		}}
+
+		errs := ValidateCreditGrantDelete(ctx, c, grant)
+		if len(errs) == 0 {
+			t.Fatal("expected error, got none")
+		}
+		want := "credit grants cannot be deleted; void the grant instead"
+		if !strings.Contains(errs[0].Error(), want) {
+			t.Fatalf("got %v, wanted match for %q", errs[0], want)
+		}
+	})
 }
 
 type testErrorReader struct {
