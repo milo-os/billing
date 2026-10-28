@@ -10,7 +10,7 @@ on:
 jobs:
   test:
     name: Test
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && vars.MILO_LINUX_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: cmd/milo-billing
@@ -31,7 +31,7 @@ jobs:
 
   lint:
     name: Lint
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && vars.MILO_LINUX_RUNNER || 'ubuntu-latest' }}
     steps:
       - name: Clone the code
         uses: actions/checkout@v4
