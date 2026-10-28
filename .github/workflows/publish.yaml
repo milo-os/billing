@@ -18,7 +18,11 @@ jobs:
       platforms: linux/amd64,linux/arm64
     secrets: inherit
 
+  # The bundle pins the image tag, and Flux rolls out new bundles within a
+  # minute of publishing. Publish it only after the image exists so pods never
+  # roll out against a tag that has not been pushed yet.
   publish-kustomize-bundles:
+    needs: publish-container-image
     permissions:
       id-token: write
       contents: read
