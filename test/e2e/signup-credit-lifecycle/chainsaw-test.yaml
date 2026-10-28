@@ -91,9 +91,10 @@ spec:
             duration: 2s
         - script:
             content: |
-              kubectl get creditgrant signup-credit -n default 2>&1 || true
+              kubectl get creditgrant signup-credit -n default
             check:
-              ($stdout): Error from server (NotFound)
+              ($error != null): true
+              (contains($stderr, 'NotFound') || contains($stderr, 'not found')): true
 
     - name: activate-card
       description: Simulate provider confirming the card; controller sets it as default and creates signup-credit.
