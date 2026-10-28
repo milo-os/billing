@@ -273,16 +273,11 @@ type BillingContactInfo struct {
 	// +kubebuilder:validation:MaxLength=256
 	BusinessName string `json:"businessName,omitempty"`
 
-	// InvoiceEmails is the list of recipients that invoices and
-	// receipts are sent to. The first entry is the primary recipient;
-	// subsequent entries are CC'd. When the list is empty, Email is
-	// used as a single primary recipient.
-	//
-	// Provider support for multiple recipients varies: Stripe
-	// Customer.email is single-valued, so the stripe-provider maps
-	// the first entry onto it and CC's the rest via its own
-	// invoice-sent webhook (when configured). Consumers should treat
-	// the entire list as authoritative; the provider handles fan-out.
+	// InvoiceEmails is where invoices and receipts are emailed. Only the
+	// first entry receives them: Stripe emails each invoice to a single
+	// address, Customer.email, and the stripe-provider sets that to the
+	// first entry, or to Email when the list is empty. No provider sends
+	// to later entries, so clients should keep the list to one entry.
 	//
 	// Duplicate entries are rejected. Maximum 10 entries.
 	//
