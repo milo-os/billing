@@ -300,19 +300,12 @@ billing account whose default payment method is a ready card, so the fraud
 checks at signup apply first.
 
 The grant is named `signup-credit` in the organization's namespace, with
-reason `Promotional` and two labels:
-`services.miloapis.com/credit-grant-default=true`, and
-`services.miloapis.com/signup-card=<card fingerprint>`.
+reason `Promotional` and the label:
+`services.miloapis.com/credit-grant-default=true`.
 
 - **One per organization, guaranteed by its name.** A namespace can only
   hold one `signup-credit`, so a second billing account, or the same
   organization reconciled twice, can't get another.
-- **One per payment card.** One person can create several organizations,
-  so the card is what's checked. Before granting, the controller reads the
-  card's fingerprint (`PaymentMethod.status.details.card.fingerprint`, see
-  below). If any signup grant in any organization already carries it, no
-  grant is made. Five organizations paid with the same card get one signup
-  credit between them.
 - **Only accounts paying by card.** An account on an approved arrangement
   (invoice terms) has no card to check, so it gets no automatic signup
   credit. Staff reviewed it anyway and can grant one by hand.
@@ -322,19 +315,6 @@ reason `Promotional` and two labels:
   webhook (voiding is the only mechanism), preventing a deleted `signup-credit` from
   re-triggering automatic grants.
 - **Removing the setting stops new grants;** existing ones are untouched.
-
-**Card fingerprint.** `PaymentMethodCardDetails` gets an opaque
-`fingerprint`: the same value for the same card number, whichever customer
-or organization adds it, and different for different cards. The
-payment-method provider sets it; card processors provide one. billing
-doesn't interpret it. It's a hash, not the card number, and the label
-holds it as is (or a hash of it, if a processor's value doesn't fit a label
-value). A provider that can't supply one leaves it empty, and an empty
-fingerprint gets no automatic signup credit.
-
-The controller checks and grants one account at a time, so two
-organizations paid with the same card at the same moment can't both pass
-the check.
 
 This keeps every credit a `CreditGrant`: one way to audit, void and display
 them, whoever created them.
@@ -357,7 +337,6 @@ them, whoever created them.
 | `CreditGrant` type, webhook (immutability, billing account, amount), RBAC roles | billing |
 | `BillingAccountBalance` type and validation (`api/usage/v1alpha1`), `ProtectedResource`, discovery | billing |
 | `Invoice.status.creditsApplied` | billing |
-| `PaymentMethod.status.details.card.fingerprint` | billing (type), payment-method provider (sets it) |
 | `signupCredit` on ServiceConfiguration, grant creation for new accounts | service-catalog |
 | Grant sync, void on `voided` or cascade delete, `BillingAccountBalance` serving, invoice credits projection | billing provider |
 | Billing page: balance, credits, invoice credit line | cloud-portal |

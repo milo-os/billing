@@ -255,12 +255,6 @@ spec:
                         maximum: 2100
                         minimum: 2000
                         type: integer
-                      fingerprint:
-                        description: |-
-                          Fingerprint is an opaque unique identifier for the card number,
-                          consistent across customers and organizations for the same physical card.
-                          Used for signup fraud prevention and deduplication.
-                        type: string
                       issuerIdentificationNumber:
                         description: |-
                           IssuerIdentificationNumber is the BIN (first 6-8 digits) of the

@@ -54,9 +54,6 @@ const (
 
 	// CreditGrantDefaultLabel marks signup credit grants created by service defaults.
 	CreditGrantDefaultLabel = "services.miloapis.com/credit-grant-default"
-
-	// CreditGrantSignupCardLabel carries the card fingerprint of the card used for signup.
-	CreditGrantSignupCardLabel = "services.miloapis.com/signup-card"
 )
 
 // CreditGrantSpec defines the desired state of a CreditGrant.
