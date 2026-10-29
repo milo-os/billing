@@ -10,11 +10,14 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/pkg/features"
 )
 
 func setupTestScheme(t *testing.T) *runtime.Scheme {
@@ -27,6 +30,7 @@ func setupTestScheme(t *testing.T) *runtime.Scheme {
 }
 
 func TestSignupCreditReconciler_EnsureSignupCredit(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, true)
 	scheme := setupTestScheme(t)
 	const (
 		orgNamespace = "org-test"
@@ -365,9 +369,34 @@ func TestSignupCreditReconciler_EnsureSignupCredit(t *testing.T) {
 			t.Errorf("existing grant was overwritten: billingAccountRef %q", grant.Spec.BillingAccountRef.Name)
 		}
 	})
+
+	t.Run("skips when CreditGrants feature gate is disabled", func(t *testing.T) {
+		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, false)
+
+		fc := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(validAccount, validCard, validOfferWithCredit, validEntitlement).
+			WithIndex(&billingv1alpha1.BillingEntitlement{}, BillingEntitlementBillingAccountRefField, func(obj client.Object) []string {
+				be := obj.(*billingv1alpha1.BillingEntitlement)
+				return []string{be.Spec.BillingAccountRef.Name}
+			}).
+			Build()
+
+		r := &SignupCreditReconciler{client: fc}
+		if err := r.EnsureSignupCredit(context.Background(), validAccount); err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+
+		var grant billingv1alpha1.CreditGrant
+		err := fc.Get(context.Background(), types.NamespacedName{Namespace: orgNamespace, Name: SignupCreditGrantName}, &grant)
+		if err == nil {
+			t.Errorf("expected no grant to be created when CreditGrants feature gate is disabled")
+		}
+	})
 }
 
 func TestSignupCreditReconciler_Reconcile(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, true)
 	scheme := setupTestScheme(t)
 	const (
 		orgNamespace = "org-test-reconcile"
@@ -496,6 +525,35 @@ func TestSignupCreditReconciler_Reconcile(t *testing.T) {
 		}
 		if grant.Spec.Amount != "50.00" {
 			t.Errorf("got amount %q, want 50.00", grant.Spec.Amount)
+		}
+	})
+
+	t.Run("skips reconciliation when CreditGrants feature gate is disabled", func(t *testing.T) {
+		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, false)
+
+		fc := fake.NewClientBuilder().
+			WithScheme(scheme).
+			WithObjects(validAccount, validCard, validOffer, validEntitlement).
+			WithIndex(&billingv1alpha1.BillingEntitlement{}, BillingEntitlementBillingAccountRefField, func(obj client.Object) []string {
+				be := obj.(*billingv1alpha1.BillingEntitlement)
+				return []string{be.Spec.BillingAccountRef.Name}
+			}).
+			Build()
+
+		r := &SignupCreditReconciler{client: fc}
+		res, err := r.Reconcile(context.Background(), reconcile.Request{
+			NamespacedName: types.NamespacedName{Namespace: orgNamespace, Name: accountName},
+		})
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+		if res.RequeueAfter != 0 {
+			t.Errorf("expected zero result")
+		}
+
+		var grant billingv1alpha1.CreditGrant
+		if err := fc.Get(context.Background(), types.NamespacedName{Namespace: orgNamespace, Name: SignupCreditGrantName}, &grant); err == nil {
+			t.Errorf("expected no grant to be created when CreditGrants feature gate is disabled")
 		}
 	})
 }

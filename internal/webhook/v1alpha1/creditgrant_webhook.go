@@ -4,9 +4,11 @@ package webhook
 
 import (
 	"context"
+	"fmt"
 
 	admissionv1 "k8s.io/api/admission/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -14,6 +16,7 @@ import (
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/validation"
+	"go.miloapis.com/billing/pkg/features"
 )
 
 var creditGrantLog = logf.Log.WithName("creditgrant-webhook")
@@ -52,6 +55,9 @@ var (
 // Default sets an owner reference to the BillingAccount so credit grants
 // are garbage collected with their account.
 func (r *creditGrantWebhook) Default(ctx context.Context, grant *billingv1alpha1.CreditGrant) error {
+	if !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		return nil
+	}
 	if req, err := admission.RequestFromContext(ctx); err == nil && req.Operation != admissionv1.Create {
 		return nil
 	}
@@ -62,6 +68,14 @@ func (r *creditGrantWebhook) Default(ctx context.Context, grant *billingv1alpha1
 // ValidateCreate validates a CreditGrant on creation.
 func (r *creditGrantWebhook) ValidateCreate(ctx context.Context, grant *billingv1alpha1.CreditGrant) (admission.Warnings, error) {
 	creditGrantLog.Info("validating create", "name", grant.GetName(), "namespace", grant.GetNamespace())
+
+	if !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		return nil, errors.NewForbidden(
+			billingv1alpha1.GroupVersion.WithResource("creditgrants").GroupResource(),
+			grant.Name,
+			fmt.Errorf("credit grants feature gate is not enabled"),
+		)
+	}
 
 	if errs := validation.ValidateCreditGrantCreate(ctx, r.reader, grant); len(errs) > 0 {
 		return nil, errors.NewInvalid(

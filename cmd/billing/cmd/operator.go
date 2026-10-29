@@ -19,6 +19,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	clientgoscheme "k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,6 +34,7 @@ import (
 	"go.miloapis.com/billing/internal/controller"
 	"go.miloapis.com/billing/internal/controller/consumer"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
+	"go.miloapis.com/billing/pkg/features"
 	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
@@ -75,11 +77,19 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			ctrl.SetLogger(zap.New(zap.UseFlagOptions(&opts)))
 
 			setupLog := ctrl.Log.WithName("setup")
+			if !cmd.Flags().Changed("feature-gates") {
+				if envGates := os.Getenv("FEATURE_GATES"); envGates != "" {
+					if err := utilfeature.DefaultMutableFeatureGate.Set(envGates); err != nil {
+						return fmt.Errorf("setting feature gates from FEATURE_GATES: %w", err)
+					}
+				}
+			}
 			setupLog.Info("starting billing operator",
 				"version", info.Version,
 				"gitCommit", info.GitCommit,
 				"gitTreeState", info.GitTreeState,
 				"buildDate", info.BuildDate,
+				"creditGrantsEnabled", utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants),
 			)
 
 			var serverConfig config.BillingOperator
@@ -172,8 +182,12 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.BillingArrangementApplicationReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating BillingArrangementApplication controller: %w", err)
 			}
-			if err = (&controller.SignupCreditReconciler{}).SetupWithManager(mgr); err != nil {
-				return fmt.Errorf("creating SignupCredit controller: %w", err)
+			if utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+				if err = (&controller.SignupCreditReconciler{}).SetupWithManager(mgr); err != nil {
+					return fmt.Errorf("creating SignupCredit controller: %w", err)
+				}
+			} else {
+				setupLog.Info("CreditGrants feature gate disabled; skipping SignupCredit controller")
 			}
 
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
@@ -334,6 +348,7 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			"Enabling this will ensure there is only one active controller manager.")
 	cmd.Flags().StringVar(&leaderElectionNamespace, "leader-elect-namespace", "", "The namespace to use for leader election.")
 	cmd.Flags().StringVar(&serverConfigFile, "server-config", "", "Path to the server config file.")
+	utilfeature.DefaultMutableFeatureGate.AddFlag(cmd.Flags())
 
 	// zap.Options.BindFlags accepts *flag.FlagSet (stdlib). Bridge via pflag's
 	// AddGoFlagSet so the zap flags are surfaced on the cobra command.

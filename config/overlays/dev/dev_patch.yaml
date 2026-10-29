@@ -11,6 +11,9 @@ spec:
       containers:
         - name: manager
           imagePullPolicy: Never
+          env:
+            - name: FEATURE_GATES
+              value: "CreditGrants=true"
 ---
 apiVersion: apps/v1
 kind: Deployment

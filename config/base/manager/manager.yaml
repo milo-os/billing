@@ -46,6 +46,12 @@ spec:
           - --leader-elect-namespace=kube-system
           - --health-probe-bind-address=:8081
           - --server-config=/config/config.yaml
+          # Feature gates controlled via FEATURE_GATES env var.
+          # Enable credit grants: FEATURE_GATES=CreditGrants=true
+          - --feature-gates=$(FEATURE_GATES)
+        env:
+          - name: FEATURE_GATES
+            value: "CreditGrants=false"
         image: ghcr.io/milo-os/billing:dev
         name: manager
         ports:
