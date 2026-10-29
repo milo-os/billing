@@ -29,6 +29,12 @@ type BillingAccountStatusApplyConfiguration struct {
 	// effect for this account, if any. Cleared when no arrangement is
 	// active.
 	PaymentArrangement *BillingAccountPaymentArrangementApplyConfiguration `json:"paymentArrangement,omitempty"`
+	// Discounts lists the discount on each service pricing in the account's
+	// Offer, copied from the Offer's published snapshot so customers can see
+	// their discounts without reading the Offer. Set only while at least one
+	// pricing has a discount above 0%; the others are listed at 0%. Cleared
+	// when the account has no discount.
+	Discounts []BillingAccountDiscountApplyConfiguration `json:"discounts,omitempty"`
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
@@ -81,6 +87,19 @@ func (b *BillingAccountStatusApplyConfiguration) WithLatestInvoiceRef(value *Lat
 // If called multiple times, the PaymentArrangement field is set to the value of the last call.
 func (b *BillingAccountStatusApplyConfiguration) WithPaymentArrangement(value *BillingAccountPaymentArrangementApplyConfiguration) *BillingAccountStatusApplyConfiguration {
 	b.PaymentArrangement = value
+	return b
+}
+
+// WithDiscounts adds the given value to the Discounts field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Discounts field.
+func (b *BillingAccountStatusApplyConfiguration) WithDiscounts(values ...*BillingAccountDiscountApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithDiscounts")
+		}
+		b.Discounts = append(b.Discounts, *values[i])
+	}
 	return b
 }
 

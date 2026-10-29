@@ -328,6 +328,17 @@ type BillingAccountStatus struct {
 	// +kubebuilder:validation:Optional
 	PaymentArrangement *BillingAccountPaymentArrangement `json:"paymentArrangement,omitempty"`
 
+	// Discounts lists the discount on each service pricing in the account's
+	// Offer, copied from the Offer's published snapshot so customers can see
+	// their discounts without reading the Offer. Set only while at least one
+	// pricing has a discount above 0%; the others are listed at 0%. Cleared
+	// when the account has no discount.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
+	Discounts []BillingAccountDiscount `json:"discounts,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed by the controller.
 	//
 	// +kubebuilder:validation:Optional
@@ -363,6 +374,40 @@ type BillingAccountPaymentArrangement struct {
 	//
 	// +kubebuilder:validation:Optional
 	Invoice *InvoiceArrangementTerms `json:"invoice,omitempty"`
+}
+
+// BillingAccountDiscount is one service pricing's resolved discount,
+// published on the account from its Offer's snapshot. It deliberately
+// doesn't name the Offer or say whether staff set the discount for the
+// whole Offer or for this pricing.
+type BillingAccountDiscount struct {
+	// Name is the metadata.name of the ServicePricing the discount applies
+	// to.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// ServiceRef is the service the pricing belongs to (e.g.
+	// "networking.datumapis.com").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	ServiceRef string `json:"serviceRef,omitempty"`
+
+	// DisplayName is the pricing's human-readable label (e.g. "ALB
+	// Requests").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	DisplayName string `json:"displayName,omitempty"`
+
+	// Percentage is a whole number from 0 to 100.
+	//
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	Percentage int32 `json:"percentage"`
 }
 
 // BillingAccount is the Schema for the billingaccounts API. It represents a
