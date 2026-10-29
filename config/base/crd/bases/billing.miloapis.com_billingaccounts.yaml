@@ -314,6 +314,53 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              discounts:
+                description: |-
+                  Discounts lists the discount on each service pricing in the account's
+                  Offer, copied from the Offer's published snapshot so customers can see
+                  their discounts without reading the Offer. Set only while at least one
+                  pricing has a discount above 0%; the others are listed at 0%. Cleared
+                  when the account has no discount.
+                items:
+                  description: |-
+                    BillingAccountDiscount is one service pricing's resolved discount,
+                    published on the account from its Offer's snapshot. It deliberately
+                    doesn't name the Offer or say whether staff set the discount for the
+                    whole Offer or for this pricing.
+                  properties:
+                    displayName:
+                      description: |-
+                        DisplayName is the pricing's human-readable label (e.g. "ALB
+                        Requests").
+                      maxLength: 128
+                      type: string
+                    name:
+                      description: |-
+                        Name is the metadata.name of the ServicePricing the discount applies
+                        to.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    percentage:
+                      description: Percentage is a whole number from 0 to 100.
+                      format: int32
+                      maximum: 100
+                      minimum: 0
+                      type: integer
+                    serviceRef:
+                      description: |-
+                        ServiceRef is the service the pricing belongs to (e.g.
+                        "networking.datumapis.com").
+                      maxLength: 253
+                      type: string
+                  required:
+                  - name
+                  - percentage
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
               latestInvoiceRef:
                 description: |-
                   LatestInvoiceRef references the most recently created Invoice for

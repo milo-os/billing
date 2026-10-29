@@ -15,6 +15,7 @@ latest-milestone: "v0"
   - [API](#api)
   - [How It Works](#how-it-works)
   - [Per-Customer Discounts and Lifecycle](#per-customer-discounts-and-lifecycle)
+  - [What Customers See](#what-customers-see)
 - [Design Details](#design-details)
   - [Validation](#validation)
   - [Provider Requirements](#provider-requirements)
@@ -167,6 +168,35 @@ Managing discounts for an account:
    standard Offer.
 
 Accounts that stay on an older Offer keep their existing terms.
+
+### What Customers See
+
+Customers can't read `Offer`s or `BillingEntitlement`s: Offers are
+cluster-scoped and staff-authored, and an entitlement names its Offer. The
+BillingAccount controller copies the snapshot's discounts onto
+`BillingAccount.status.discounts`, which the Billing Viewer role already
+reads:
+
+```yaml
+status:
+  discounts:
+    - name: networking-alb-requests-v1
+      serviceRef: networking.datumapis.com
+      displayName: ALB Requests
+      percentage: 20
+    - name: networking-alb-egress-v1
+      serviceRef: networking.datumapis.com
+      displayName: ALB Egress
+      percentage: 0
+```
+
+- It lists every pricing in the Offer's snapshot, including those at `0`,
+  so the portal can tell when one discount covers all usage.
+- It is set only while at least one pricing has a discount above `0`, and
+  cleared otherwise, including while the account has no entitlement or its
+  Offer has no snapshot yet.
+- It doesn't name the Offer or say whether a discount was set for the whole
+  Offer or for one service.
 
 ## Design Details
 

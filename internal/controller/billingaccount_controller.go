@@ -51,6 +51,8 @@ type BillingAccountReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=invoices,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangementapplications,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingentitlements,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=offers,verbs=get;list;watch
 
 func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	logger := log.FromContext(ctx)
@@ -142,6 +144,12 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 	nextBoundary, err := r.reconcilePaymentReadyCondition(ctx, &account, now)
 	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling payment ready condition: %w", err)
+	}
+
+	// Publish the Offer's discounts so customers can see them without
+	// reading the Offer.
+	if err := r.reconcileDiscounts(ctx, &account); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling discounts: %w", err)
 	}
 
 	if err := r.client.Status().Update(ctx, &account); err != nil {
@@ -330,6 +338,86 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 	}
 
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+}
+
+// reconcileDiscounts publishes the discounts of the Offer the account is
+// entitled to on status.discounts. An account without a BillingEntitlement,
+// or whose Offer isn't published yet, has none.
+func (r *BillingAccountReconciler) reconcileDiscounts(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+) error {
+	offer, err := r.entitledOffer(ctx, account)
+	if err != nil {
+		return err
+	}
+	account.Status.Discounts = accountDiscounts(offer)
+	return nil
+}
+
+// entitledOffer returns the published Offer the account's BillingEntitlement
+// references, or nil when there is no entitlement or the Offer isn't
+// assignable.
+func (r *BillingAccountReconciler) entitledOffer(
+	ctx context.Context,
+	account *billingv1alpha1.BillingAccount,
+) (*billingv1alpha1.Offer, error) {
+	var entitlements billingv1alpha1.BillingEntitlementList
+	if err := r.client.List(ctx, &entitlements,
+		client.InNamespace(account.Namespace),
+		client.MatchingFields{BillingEntitlementBillingAccountRefField: account.Name},
+	); err != nil {
+		return nil, fmt.Errorf("listing billing entitlements: %w", err)
+	}
+
+	for i := range entitlements.Items {
+		be := &entitlements.Items[i]
+		if !be.DeletionTimestamp.IsZero() || be.Spec.OfferRef.Name == "" {
+			continue
+		}
+		var offer billingv1alpha1.Offer
+		if err := r.client.Get(ctx, types.NamespacedName{Name: be.Spec.OfferRef.Name}, &offer); err != nil {
+			if apierrors.IsNotFound(err) {
+				return nil, nil
+			}
+			return nil, fmt.Errorf("getting offer %q: %w", be.Spec.OfferRef.Name, err)
+		}
+		if !validation.OfferIsAssignable(&offer) {
+			return nil, nil
+		}
+		return &offer, nil
+	}
+	return nil, nil
+}
+
+// accountDiscounts lists every pricing in the Offer's snapshot with its
+// resolved discount, or nil when none has a discount above 0%. Only the
+// snapshot is read: it is what the provider bills, and it doesn't say
+// whether a discount was set for the whole Offer or for one pricing.
+func accountDiscounts(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAccountDiscount {
+	if offer == nil {
+		return nil
+	}
+
+	discounts := make([]billingv1alpha1.BillingAccountDiscount, 0, len(offer.Spec.ServicePricings))
+	discounted := false
+	for _, sp := range offer.Spec.ServicePricings {
+		var percentage int32
+		if sp.Discount != nil {
+			percentage = sp.Discount.Percentage
+		}
+		discounted = discounted || percentage > 0
+		discounts = append(discounts, billingv1alpha1.BillingAccountDiscount{
+			Name:        sp.Name,
+			ServiceRef:  sp.Spec.ServiceRef,
+			DisplayName: sp.Spec.DisplayName,
+			Percentage:  percentage,
+		})
+	}
+	if !discounted {
+		return nil
+	}
+	return discounts
 }
 
 // reconcilePaymentReadyCondition publishes the active BillingArrangement
@@ -658,6 +746,30 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 				},
 			),
 		).
+		// An account's discounts come from the Offer its entitlement
+		// references, so a new or repointed entitlement changes them.
+		Watches(&billingv1alpha1.BillingEntitlement{},
+			handler.EnqueueRequestsFromMapFunc(
+				func(ctx context.Context, obj client.Object) []reconcile.Request {
+					be, ok := obj.(*billingv1alpha1.BillingEntitlement)
+					if !ok {
+						return nil
+					}
+					return []reconcile.Request{{
+						NamespacedName: client.ObjectKey{
+							Name:      be.Spec.BillingAccountRef.Name,
+							Namespace: be.Namespace,
+						},
+					}}
+				},
+			),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		// Publishing an Offer writes its snapshot, discounts included.
+		Watches(&billingv1alpha1.Offer{},
+			handler.EnqueueRequestsFromMapFunc(r.mapOfferToBillingAccounts),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Watches(&billingv1alpha1.Invoice{},
 			handler.EnqueueRequestsFromMapFunc(
 				func(ctx context.Context, obj client.Object) []reconcile.Request {
@@ -675,4 +787,30 @@ func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 			),
 		).
 		Complete(r)
+}
+
+// mapOfferToBillingAccounts enqueues every billing account entitled to the
+// Offer.
+func (r *BillingAccountReconciler) mapOfferToBillingAccounts(ctx context.Context, obj client.Object) []reconcile.Request {
+	offer, ok := obj.(*billingv1alpha1.Offer)
+	if !ok {
+		return nil
+	}
+	var list billingv1alpha1.BillingEntitlementList
+	if err := r.client.List(ctx, &list,
+		client.MatchingFields{BillingEntitlementOfferRefField: offer.Name},
+	); err != nil {
+		log.FromContext(ctx).Error(err, "listing BillingEntitlements for Offer", "offer", offer.Name)
+		return nil
+	}
+	reqs := make([]reconcile.Request, 0, len(list.Items))
+	for i := range list.Items {
+		reqs = append(reqs, reconcile.Request{
+			NamespacedName: types.NamespacedName{
+				Namespace: list.Items[i].Namespace,
+				Name:      list.Items[i].Spec.BillingAccountRef.Name,
+			},
+		})
+	}
+	return reqs
 }
