@@ -9,16 +9,21 @@ import (
 	"time"
 
 	admissionv1 "k8s.io/api/admission/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
+	featuregatetesting "k8s.io/component-base/featuregate/testing"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 	"sigs.k8s.io/controller-runtime/pkg/webhook/admission"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/pkg/features"
 )
 
 func TestCreditGrantWebhook_Default(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, true)
 	scheme := runtime.NewScheme()
 	if err := billingv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -90,9 +95,20 @@ func TestCreditGrantWebhook_Default(t *testing.T) {
 	if len(grant.OwnerReferences) != 0 {
 		t.Errorf("update was defaulted: %+v", grant)
 	}
+
+	// When CreditGrants feature gate is disabled, Default is a no-op
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, false)
+	grant = newGrant()
+	if err := w.Default(request(admissionv1.Create), grant); err != nil {
+		t.Fatal(err)
+	}
+	if len(grant.OwnerReferences) != 0 {
+		t.Errorf("expected no ownerReferences when CreditGrants feature gate is disabled, got %+v", grant.OwnerReferences)
+	}
 }
 
 func TestCreditGrantWebhook_Validation(t *testing.T) {
+	featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, true)
 	scheme := runtime.NewScheme()
 	if err := billingv1alpha1.AddToScheme(scheme); err != nil {
 		t.Fatal(err)
@@ -121,6 +137,15 @@ func TestCreditGrantWebhook_Validation(t *testing.T) {
 	if _, err := w.ValidateCreate(ctx, grant); err != nil {
 		t.Fatalf("unexpected error on valid create: %v", err)
 	}
+
+	// ValidateCreate failure when CreditGrants feature gate is disabled
+	t.Run("ValidateCreate forbidden when CreditGrants feature gate is disabled", func(t *testing.T) {
+		featuregatetesting.SetFeatureGateDuringTest(t, utilfeature.DefaultFeatureGate, features.CreditGrants, false)
+		_, err := w.ValidateCreate(ctx, grant)
+		if !apierrors.IsForbidden(err) {
+			t.Fatalf("expected Forbidden error when CreditGrants feature gate is disabled, got: %v", err)
+		}
+	})
 
 	// ValidateCreate failure (missing account)
 	invalidGrant := grant.DeepCopy()
