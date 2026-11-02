@@ -9,6 +9,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -16,6 +17,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/pkg/features"
 )
 
 const (
@@ -38,6 +40,10 @@ type SignupCreditReconciler struct {
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=creditgrants,verbs=get;list;watch;create
 
 func (r *SignupCreditReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
+	if !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		return ctrl.Result{}, nil
+	}
+
 	logger := log.FromContext(ctx)
 
 	var account billingv1alpha1.BillingAccount
@@ -69,6 +75,10 @@ func (r *SignupCreditReconciler) EnsureSignupCredit(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
 ) error {
+	if !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		return nil
+	}
+
 	logger := log.FromContext(ctx)
 
 	// 1. One signup credit per organization namespace.

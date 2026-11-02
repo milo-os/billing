@@ -4,6 +4,7 @@ package webhook
 
 import (
 	"context"
+	"time"
 
 	"k8s.io/apimachinery/pkg/api/errors"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -33,6 +34,7 @@ func SetupBillingEntitlementWebhookWithManager(mgr ctrl.Manager) error {
 
 type billingEntitlementWebhook struct {
 	client client.Client
+	now    func() time.Time
 }
 
 var _ admission.Validator[*billingv1alpha1.BillingEntitlement] = &billingEntitlementWebhook{}
@@ -41,7 +43,7 @@ var _ admission.Validator[*billingv1alpha1.BillingEntitlement] = &billingEntitle
 func (r *billingEntitlementWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.BillingEntitlement) (admission.Warnings, error) {
 	billingEntitlementLog.Info("validating create", "name", obj.GetName(), "namespace", obj.GetNamespace())
 
-	if errs := validation.ValidateBillingEntitlementCreate(ctx, r.client, obj); len(errs) > 0 {
+	if errs := validation.ValidateBillingEntitlementCreate(ctx, r.client, obj, r.clock()); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
 			obj.Name,
@@ -70,4 +72,11 @@ func (r *billingEntitlementWebhook) ValidateUpdate(ctx context.Context, oldObj, 
 // ValidateDelete implements admission.Validator.
 func (r *billingEntitlementWebhook) ValidateDelete(_ context.Context, _ *billingv1alpha1.BillingEntitlement) (admission.Warnings, error) {
 	return nil, nil
+}
+
+func (r *billingEntitlementWebhook) clock() time.Time {
+	if r.now != nil {
+		return r.now()
+	}
+	return time.Now()
 }

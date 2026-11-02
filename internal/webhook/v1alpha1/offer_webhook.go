@@ -10,6 +10,8 @@ import (
 	authorizationv1 "k8s.io/api/authorization/v1"
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/util/validation/field"
+	utilfeature "k8s.io/apiserver/pkg/util/feature"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	logf "sigs.k8s.io/controller-runtime/pkg/log"
@@ -17,6 +19,7 @@ import (
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	"go.miloapis.com/billing/internal/validation"
+	"go.miloapis.com/billing/pkg/features"
 )
 
 var offerLog = logf.Log.WithName("offer-webhook")
@@ -82,6 +85,12 @@ func (r *offerWebhook) ValidateCreate(ctx context.Context, obj *billingv1alpha1.
 	offerLog.Info("validating create", "name", obj.GetName())
 
 	errs := validation.ValidateOfferCreate(obj)
+	if obj.Spec.SignupCredit != nil && !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		errs = append(errs, field.Forbidden(
+			field.NewPath("spec", "signupCredit"),
+			"signupCredit cannot be set when the CreditGrants feature gate is disabled",
+		))
+	}
 	errs = append(errs, validation.ValidateOfferServicePricingRefs(ctx, r.Client, obj)...)
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
@@ -119,6 +128,12 @@ func (r *offerWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billi
 	}
 
 	errs := validation.ValidateOfferUpdate(oldObj, newObj, opts)
+	if newObj.Spec.SignupCredit != nil && !utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
+		errs = append(errs, field.Forbidden(
+			field.NewPath("spec", "signupCredit"),
+			"signupCredit cannot be set when the CreditGrants feature gate is disabled",
+		))
+	}
 	if refsNeedCheck(oldObj, newObj) {
 		errs = append(errs, validation.ValidateOfferServicePricingRefs(ctx, r.Client, newObj)...)
 	}

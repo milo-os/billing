@@ -4,7 +4,7 @@ metadata:
   name: billing.miloapis.com-billing-entitlement-viewer
   annotations:
     kubernetes.io/display-name: Billing Entitlement Viewer
-    kubernetes.io/description: "View access to all billing entitlement resources"
+    kubernetes.io/description: "View billing entitlements and invoice requests"
 spec:
   launchStage: Alpha
   includedPermissions:
@@ -12,3 +12,7 @@ spec:
     - billing.miloapis.com/billingentitlements.get
     - billing.miloapis.com/billingentitlements/status.get
     - billing.miloapis.com/billingentitlements.watch
+    - billing.miloapis.com/invoicerequests.list
+    - billing.miloapis.com/invoicerequests.get
+    - billing.miloapis.com/invoicerequests/status.get
+    - billing.miloapis.com/invoicerequests.watch
