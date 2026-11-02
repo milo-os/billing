@@ -25,4 +25,5 @@ func SetObjectDefaults_BillingOperator(in *BillingOperator) {
 		SetDefaults_WebhookServerConfig(in.WebhookServer)
 		SetDefaults_TLSConfig(&in.WebhookServer.TLS)
 	}
+	SetDefaults_PaymentTermsApplicationEmailsConfig(&in.PaymentTermsApplicationEmails)
 }

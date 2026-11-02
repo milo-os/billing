@@ -86,8 +86,26 @@ rules:
   - get
   - update
 - apiGroups:
+  - iam.miloapis.com
+  resources:
+  - users
+  verbs:
+  - get
+  - list
+  - watch
+- apiGroups:
+  - notification.miloapis.com
+  resources:
+  - emails
+  verbs:
+  - create
+  - get
+  - list
+  - watch
+- apiGroups:
   - resourcemanager.miloapis.com
   resources:
+  - organizations
   - projects
   verbs:
   - get

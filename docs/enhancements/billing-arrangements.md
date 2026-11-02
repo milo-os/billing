@@ -414,8 +414,8 @@ not stopped automatically.
 | Ended or withdrawn by staff | Owners, billing contact | Your payment terms have ended | What they need to do to keep using Datum Cloud |
 | Nearing credit limit (80% and 100%) | Staff (owners at 100%) | {Org} is at 80% of its credit limit | Usage and limit |
 
-These are sent by milo's existing email system, alongside the waitlist and
-invitation emails.
+Billing sends these through Milo's email system, the same way Milo sends the
+waitlist and invitation emails.
 
 ## The Staff Experience
 
@@ -611,38 +611,42 @@ Follow-ups in other repos:
   customers, since nothing enforces or alerts on it yet.
 - **staff-portal:** the applications queue, approving by granting terms
   with `applicationRef` set, and declining.
-- **milo:** the emails and the Help Scout ticket, from
-  `PaymentTermsApplicationEmailController`. See
+- **billing:** the emails and the Help Scout ticket, from
+  `PaymentTermsApplicationEmailReconciler`. See
   [Notifying people about applications](#notifying-people-about-applications).
-- **email-templates:** the four templates the milo controller sends.
+- **email-templates:** the four templates billing sends.
 
 ### Notifying people about applications
 
-Milo sends email by creating a notification `Email` from an
-`EmailTemplate`, as the invitation, waitlist and suspension controllers do.
-An `Email` can go to any address, not only a user. One milo controller,
-`PaymentTermsApplicationEmailController`, watches
-`BillingArrangementApplication`:
+Email goes out by creating a Milo notification `Email` from an
+`EmailTemplate`, as Milo's invitation, waitlist and suspension controllers
+do. An `Email` can go to any address, not only a user. Billing's
+`PaymentTermsApplicationEmailReconciler` watches
+`BillingArrangementApplication` and creates them. It lives in billing rather
+than Milo because billing owns applications and their decisions, and Milo
+doesn't depend on billing. Its settings are under
+`paymentTermsApplicationEmails` in billing's operator config:
 
 - **When an application is created:**
   - "We've received your application" to the applicant (`spec.applicant`).
   - "New payment terms application: {Org}" to the support mailbox in Help
-    Scout (`support@datum.net`, milo's
-    `--payment-terms-application-support-email`), which turns it into a
-    conversation. That is the ticket for confirmation and follow-up. It
+    Scout (`supportEmailAddress`, `support@datum.net` by default), which
+    turns it into a conversation. That is the ticket for confirmation and follow-up. It
     needs no Help Scout API or credentials, and changing support systems
     means changing an address (decision 6).
 - **When the application's status settles** on `Approved` or `Declined`:
   the approval or decline email to the applicant. The org's owners are left
-  out for now: milo has no lookup for an organization's owners yet. Send
+  out for now: there's no lookup for an organization's owners yet. Send
   from the settled status, not when a decision is created, so a decline
   that races an approval doesn't also send a "declined" email.
 - **Name each `Email` from the application and the event**, so a re-run of
   the reconcile doesn't send twice, as the other controllers already do.
 - **Skip old events.** An application submitted or decided more than 72
-  hours ago (`--payment-terms-application-email-max-age`) gets no email, so
-  the first rollout doesn't mail people about applications decided long
-  ago.
+  hours ago (`maxEventAge`) gets no email, so the first rollout doesn't mail
+  people about applications decided long ago.
+- **Skip where Milo's email isn't there.** A control plane that doesn't
+  serve notification `Email`s, such as billing's own e2e cluster, runs
+  without the controller.
 
 Two gaps to close along the way:
 
@@ -658,10 +662,10 @@ Two gaps to close along the way:
 
 | Repo | What changes |
 |---|---|
-| billing | New resources, the shared signal, reviewer permissions |
+| billing | New resources, the shared signal, reviewer permissions; application and terms emails |
 | cloud-portal | Payment choice, application form, review/approved/declined screens, older-account and member screens, billing settings card, ending-soon banner |
 | staff-portal | Applications queue, approve/decline, grant and end terms, finance worklist |
-| milo | Onboarding reads the shared signal; application and terms emails |
+| milo | Onboarding reads the shared signal |
 | infra | Reviewer role and staff alert channel |
 | OpenMeter pipeline | Later: automated invoices for invoice-terms accounts |
 
@@ -691,7 +695,7 @@ Two gaps to close along the way:
 | 2 | What does a customer get while their application is under review? | A holding page. They can't create projects until there's a decision |
 | 3 | How are older, locked-out accounts handled? | One application at a time through "Apply for payment terms". No bulk exemption |
 | 4 | Who raises invoices for invoice-terms customers? | Finance, by hand, in v0. Automated later through OpenMeter |
-| 5 | Who sends the emails? | milo's existing email system |
+| 5 | Who sends the emails? | Billing, through Milo's email system |
 | 6 | What review turnaround do we promise? | No fixed promise: the copy says "we'll get back to you soon". Each application is tracked in the platform for audit and also opens a Help Scout ticket for confirmation and follow-up. Keep the Help Scout integration thin, since we may change support systems |
 | 7 | What eligibility guidance do we show before someone applies? | For now, whether the organization uses a corporate domain rather than a personal email. Domain validation comes later. Applications must include the formal company name and billing contact details |
 | 8 | Default terms | No ad hoc negotiation. Terms reference our standard terms of service; paying by invoice is a convenience for customers who can't pay by card |
@@ -733,6 +737,8 @@ Two gaps to close along the way:
 - 2026-10-25: Corrected what blocks an org with a pending application (the
   portal's setup gate and datumctl, not milo). Recorded the cloud-portal
   work and the plan for milo's emails and the Help Scout ticket.
+- 2026-11-02: The application emails moved from milo to billing, which owns
+  applications and their decisions, so milo no longer depends on billing.
 
 ## Future Work
 

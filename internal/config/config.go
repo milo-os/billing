@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -53,6 +54,85 @@ type BillingOperator struct {
 	// events to NATS when attribution fails (e.g. no billing account/binding exists).
 	// TODO: Disable / remove this configuration once all projects have a billing account.
 	DisableQuarantineOnAttributionFailure bool `json:"disableQuarantineOnAttributionFailure,omitempty"`
+
+	// PaymentTermsApplicationEmails configures the emails sent about
+	// payment terms applications.
+	PaymentTermsApplicationEmails PaymentTermsApplicationEmailsConfig `json:"paymentTermsApplicationEmails"`
+}
+
+// +k8s:deepcopy-gen=true
+
+// PaymentTermsApplicationEmailsConfig configures the emails sent about
+// payment terms applications: a confirmation to the applicant and a notice
+// to support when one is submitted, and the decision to the applicant.
+// They're Milo notification Emails using the templates in
+// datum-cloud/email-templates.
+type PaymentTermsApplicationEmailsConfig struct {
+	// Disabled turns the emails off.
+	Disabled bool `json:"disabled,omitempty"`
+
+	// EmailNamespace is the Milo namespace Emails are created in, kept as a
+	// central audit trail. Defaults to milo-system.
+	EmailNamespace string `json:"emailNamespace,omitempty"`
+
+	// The EmailTemplates of each email. Default to the templates'
+	// published names.
+	ReceivedTemplate  string `json:"receivedTemplate,omitempty"`
+	SubmittedTemplate string `json:"submittedTemplate,omitempty"`
+	ApprovedTemplate  string `json:"approvedTemplate,omitempty"`
+	DeclinedTemplate  string `json:"declinedTemplate,omitempty"`
+
+	// SupportEmailAddress receives a notice of each new application, which
+	// Help Scout turns into a conversation. Defaults to support@datum.net;
+	// an empty string sends none.
+	SupportEmailAddress *string `json:"supportEmailAddress,omitempty"`
+
+	// PortalURL is the cloud portal base URL linked from the applicant's
+	// emails. Defaults to https://cloud.datum.net.
+	PortalURL string `json:"portalURL,omitempty"`
+
+	// StaffPortalURL is the staff portal base URL linked from the support
+	// notice. Defaults to https://staff.datum.net.
+	StaffPortalURL string `json:"staffPortalURL,omitempty"`
+
+	// MaxEventAge is how long after an application is submitted or decided
+	// its email may still be sent, so a first rollout, or catching up after
+	// an outage, doesn't email people about old applications. Defaults to
+	// 72h.
+	MaxEventAge metav1.Duration `json:"maxEventAge,omitempty"`
+}
+
+// SetDefaults_PaymentTermsApplicationEmailsConfig sets defaults for
+// PaymentTermsApplicationEmailsConfig.
+func SetDefaults_PaymentTermsApplicationEmailsConfig(obj *PaymentTermsApplicationEmailsConfig) {
+	if obj.EmailNamespace == "" {
+		obj.EmailNamespace = "milo-system"
+	}
+	if obj.ReceivedTemplate == "" {
+		obj.ReceivedTemplate = "emailtemplates.notification.miloapis.com-paymenttermsapplicationreceivedemailtemplate"
+	}
+	if obj.SubmittedTemplate == "" {
+		obj.SubmittedTemplate = "emailtemplates.notification.miloapis.com-paymenttermsapplicationsubmittedemailtemplate"
+	}
+	if obj.ApprovedTemplate == "" {
+		obj.ApprovedTemplate = "emailtemplates.notification.miloapis.com-paymenttermsapplicationapprovedemailtemplate"
+	}
+	if obj.DeclinedTemplate == "" {
+		obj.DeclinedTemplate = "emailtemplates.notification.miloapis.com-paymenttermsapplicationdeclinedemailtemplate"
+	}
+	if obj.SupportEmailAddress == nil {
+		support := "support@datum.net"
+		obj.SupportEmailAddress = &support
+	}
+	if obj.PortalURL == "" {
+		obj.PortalURL = "https://cloud.datum.net"
+	}
+	if obj.StaffPortalURL == "" {
+		obj.StaffPortalURL = "https://staff.datum.net"
+	}
+	if obj.MaxEventAge.Duration == 0 {
+		obj.MaxEventAge = metav1.Duration{Duration: 72 * time.Hour}
+	}
 }
 
 // +k8s:deepcopy-gen=true
