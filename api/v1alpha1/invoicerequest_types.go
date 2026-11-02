@@ -13,12 +13,17 @@ import (
 type InvoiceRequestMode string
 
 const (
-	// InvoiceRequestModePreview works out the invoice and reports its
-	// lines, without creating it. Nothing reaches the customer.
+	// InvoiceRequestModePreview reports what the account will be invoiced
+	// next for its fixed charges, without creating anything. Before a
+	// contract starts, that's its first invoice. Nothing reaches the
+	// customer.
 	InvoiceRequestModePreview InvoiceRequestMode = "Preview"
 
 	// InvoiceRequestModeIssue creates the invoice now and sends it to the
 	// customer, the same way as an invoice at the end of a billing cycle.
+	// Providers that invoice fixed charges as soon as they're due, as
+	// openmeter-provider does, have nothing to issue and fail it as
+	// Unsupported.
 	InvoiceRequestModeIssue InvoiceRequestMode = "Issue"
 )
 
@@ -159,12 +164,13 @@ type InvoiceRequestStatus struct {
 
 // InvoiceRequest is the Schema for the invoicerequests API.
 //
-// An InvoiceRequest asks the invoicing provider to invoice a billing
-// account's fixed charges now, instead of waiting for the end of the
-// billing cycle: the one-time and recurring charges of its Offer, such as
-// a contract's setup fee and first month. Usage stays on the normal
-// cycle. Staff use it to check a new contract's billing: a Preview shows
-// the lines without creating anything, and an Issue sends the invoice.
+// An InvoiceRequest asks the invoicing provider about a billing account's
+// fixed charges: the one-time and recurring charges of its Offer, such as
+// a contract's setup fee and monthly fee. Usage isn't covered. Staff use a
+// Preview to check a new contract's billing before it starts: it reports
+// the first invoice's lines without creating anything. An Issue asks the
+// provider to invoice the charges now, for providers that wait for the end
+// of the billing cycle.
 //
 // Invoices themselves stay provider-written: an Issue request leads the
 // provider to create one, which status.invoiceRef then names. Each
