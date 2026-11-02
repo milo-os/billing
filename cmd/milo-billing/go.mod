@@ -2,6 +2,8 @@ module go.miloapis.com/billing/cmd/milo-billing
 
 go 1.26.0
 
+toolchain go1.27.3
+
 // The plugin builds against this repo's API types. It is its own module so
 // the datumctl SDK's dependencies don't move the operator's.
 replace go.miloapis.com/billing => ../..

@@ -2,6 +2,8 @@ module go.miloapis.com/billing
 
 go 1.26.0
 
+toolchain go1.27.3
+
 require (
 	github.com/cloudevents/sdk-go/v2 v2.16.2
 	github.com/go-logr/logr v1.4.4
