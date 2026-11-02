@@ -183,8 +183,13 @@ spec:
               metadata:
                 name: e2e-be-contract
                 namespace: default
+              spec:
+                contract:
+                  (startsAt != null): true
               status:
                 conditions:
+                  - type: Ready
+                    status: "True"
                   - type: OfferAssigned
                     status: "True"
 
