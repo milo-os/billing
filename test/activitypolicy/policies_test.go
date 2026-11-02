@@ -541,3 +541,34 @@ func TestBillingArrangementDeclineSummaries(t *testing.T) {
 	checkSummary(t, policy, "delete returning Status", event("delete", nil, map[string]any{"kind": "Status", "status": "Success"}),
 		"alice@example.com deleted the payment terms decline acme-decline")
 }
+
+func TestInvoiceRequestSummaries(t *testing.T) {
+	policy := policyNamed(t, "billing.miloapis.com-invoicerequest")
+
+	stored := func(mode string) map[string]any {
+		return map[string]any{
+			"metadata": map[string]any{"name": "acme-first-invoice", "namespace": "organization-acme"},
+			"spec": map[string]any{
+				"billingAccountRef": map[string]any{"name": "acme"},
+				"mode":              mode,
+			},
+		}
+	}
+	event := func(verb string, request any, response map[string]any) map[string]any {
+		audit := auditEvent(verb, successCode(verb), "/apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice", request)
+		audit["objectRef"] = map[string]any{"name": "acme-first-invoice", "namespace": "organization-acme", "apiGroup": "billing.miloapis.com", "resource": "invoicerequests"}
+		if response != nil {
+			audit["responseObject"] = response
+		}
+		return audit
+	}
+
+	checkSummary(t, policy, "issue", event("create", stored("Issue"), stored("Issue")),
+		"alice@example.com issued an invoice to billing account acme")
+	checkSummary(t, policy, "preview", event("create", stored("Preview"), stored("Preview")),
+		"alice@example.com previewed the next invoice for billing account acme")
+	checkSummary(t, policy, "delete returning the object", event("delete", nil, stored("Issue")),
+		"alice@example.com deleted the invoice request acme-first-invoice for billing account acme")
+	checkSummary(t, policy, "delete returning Status", event("delete", nil, map[string]any{"kind": "Status", "status": "Success"}),
+		"alice@example.com deleted the invoice request acme-first-invoice")
+}

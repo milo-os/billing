@@ -463,6 +463,10 @@ their own schedule, and Milo has no way to force a provider to generate an
 invoice on demand. Provider-created, reactive to the provider's own signal,
 matches the actual control flow.
 
+Staff can ask for an invoice early with a separate `InvoiceRequest` (see
+[Contract Billing](./contract-billing.md)); the provider still creates the
+`Invoice`.
+
 ### BillingAccount Owns Invoice Line Items Directly
 
 Considered surfacing invoice totals/line items on `BillingAccount.status`

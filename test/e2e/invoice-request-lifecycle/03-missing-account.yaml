@@ -1,0 +1,9 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: InvoiceRequest
+metadata:
+  name: e2e-invoice-request-missing-account
+  namespace: default
+spec:
+  billingAccountRef:
+    name: e2e-invoice-request-no-such-account
+  mode: Issue

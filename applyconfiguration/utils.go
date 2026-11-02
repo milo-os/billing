@@ -66,6 +66,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingArrangementStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingContactInfo"):
 		return &apiv1alpha1.BillingContactInfoApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingContract"):
+		return &apiv1alpha1.BillingContractApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlement"):
 		return &apiv1alpha1.BillingEntitlementApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingEntitlementSpec"):
@@ -96,6 +98,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.InvoiceArrangementTermsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoicePeriod"):
 		return &apiv1alpha1.InvoicePeriodApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequest"):
+		return &apiv1alpha1.InvoiceRequestApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestInvoiceRef"):
+		return &apiv1alpha1.InvoiceRequestInvoiceRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestLine"):
+		return &apiv1alpha1.InvoiceRequestLineApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestSpec"):
+		return &apiv1alpha1.InvoiceRequestSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestStatus"):
+		return &apiv1alpha1.InvoiceRequestStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceSpec"):
 		return &apiv1alpha1.InvoiceSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceStatus"):

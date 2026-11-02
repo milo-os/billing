@@ -1,0 +1,257 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: invoicerequests.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: InvoiceRequest
+    listKind: InvoiceRequestList
+    plural: invoicerequests
+    singular: invoicerequest
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.mode
+      name: Mode
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .status.total
+      name: Total
+      type: string
+    - jsonPath: .status.invoiceRef.name
+      name: Invoice
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          InvoiceRequest is the Schema for the invoicerequests API.
+
+          An InvoiceRequest asks the invoicing provider to invoice a billing
+          account's fixed charges now, instead of waiting for the end of the
+          billing cycle: the one-time and recurring charges of its Offer, such as
+          a contract's setup fee and first month. Usage stays on the normal
+          cycle. Staff use it to check a new contract's billing: a Preview shows
+          the lines without creating anything, and an Issue sends the invoice.
+
+          Invoices themselves stay provider-written: an Issue request leads the
+          provider to create one, which status.invoiceRef then names. Each
+          request is owned by its billing account and is done once its phase is
+          Succeeded or Failed; create a new one to ask again.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: InvoiceRequestSpec defines the desired state of an InvoiceRequest.
+            properties:
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef references the BillingAccount to invoice, in the
+                  same namespace.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              mode:
+                description: |-
+                  Mode is Preview to work out the invoice without creating it, or
+                  Issue to create it and send it to the customer.
+                enum:
+                - Preview
+                - Issue
+                type: string
+            required:
+            - billingAccountRef
+            - mode
+            type: object
+            x-kubernetes-validations:
+            - message: spec is immutable
+              rule: self == oldSelf
+          status:
+            description: |-
+              InvoiceRequestStatus defines the observed state of an InvoiceRequest.
+              Written only by the invoicing provider.
+            properties:
+              completedAt:
+                description: CompletedAt is when the provider finished the request.
+                format: date-time
+                type: string
+              conditions:
+                description: |-
+                  Conditions represent the latest available observations of the
+                  request. See InvoiceRequestConditionCompleted.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              currencyCode:
+                description: CurrencyCode is the ISO 4217 currency of the amounts.
+                pattern: ^[A-Z]{3}$
+                type: string
+              invoiceRef:
+                description: |-
+                  InvoiceRef references the Invoice an Issue request created, once the
+                  provider has recorded it.
+                properties:
+                  name:
+                    description: Name is the name of the Invoice in the same namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              lines:
+                description: Lines are the invoice's charges.
+                items:
+                  description: InvoiceRequestLine is one charge on a requested invoice.
+                  properties:
+                    amount:
+                      description: |-
+                        Amount is the charge after discounts and before tax, as a decimal
+                        string (e.g. "1500.00").
+                      pattern: ^-?[0-9]+(\.[0-9]+)?$
+                      type: string
+                    description:
+                      description: Description names the charge, as it appears on
+                        the invoice.
+                      maxLength: 512
+                      type: string
+                    period:
+                      description: |-
+                        Period is the service period the charge covers. Unset for a one-time
+                        charge.
+                      properties:
+                        end:
+                          description: End is the inclusive end of the billing period.
+                          format: date-time
+                          type: string
+                        start:
+                          description: Start is the inclusive start of the billing
+                            period.
+                          format: date-time
+                          type: string
+                      required:
+                      - end
+                      - start
+                      type: object
+                      x-kubernetes-validations:
+                      - message: period.start must be less than or equal to period.end
+                        rule: self.start <= self.end
+                  required:
+                  - amount
+                  - description
+                  type: object
+                maxItems: 100
+                type: array
+                x-kubernetes-list-type: atomic
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the most recent generation observed by the
+                  invoicing provider.
+                format: int64
+                type: integer
+              phase:
+                description: |-
+                  Phase is Pending until the provider finishes the request, then
+                  Succeeded or Failed.
+                enum:
+                - Pending
+                - Succeeded
+                - Failed
+                type: string
+              total:
+                description: Total is the sum of the lines, before tax, as a decimal
+                  string.
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
+            type: object
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}

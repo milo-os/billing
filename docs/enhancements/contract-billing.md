@@ -1,0 +1,287 @@
+---
+status: provisional
+stage: alpha
+latest-milestone: "v0"
+---
+
+<!-- omit from toc -->
+# Contract Billing
+
+- [Summary](#summary)
+- [Motivation](#motivation)
+  - [Goals](#goals)
+  - [Non-Goals](#non-goals)
+- [Proposal](#proposal)
+  - [Contract Start Date](#contract-start-date)
+  - [Invoice Requests](#invoice-requests)
+  - [Setting Up a Contract](#setting-up-a-contract)
+- [Design Details](#design-details)
+  - [Validation](#validation)
+  - [Provider Requirements](#provider-requirements)
+  - [RBAC](#rbac)
+  - [Activity](#activity)
+- [Next Steps](#next-steps)
+  - [End of Term](#end-of-term)
+  - [Mid-Term Changes](#mid-term-changes)
+- [Alternatives](#alternatives)
+- [Implementation History](#implementation-history)
+
+Tracked in [#137](https://github.com/milo-os/billing/issues/137), part of
+[#134](https://github.com/milo-os/billing/issues/134).
+
+## Summary
+
+Bare metal customers sign contracts: a one-time setup fee, then a fixed monthly
+charge over a term such as 36 months, usually paid by invoice. Staff already
+build these as a customer's own `Offer` (a `OneTime` and a `Recurring`
+`ServicePricing`), assign it with a `BillingEntitlement`, and grant invoice
+terms with a `BillingArrangement`.
+
+Two things are missing, and this enhancement adds them:
+
+- **A contract start date.** `BillingEntitlement.spec.contract.startsAt` says
+  when the contract starts. The Offer's charges start then and bill on that day
+  of each month, instead of from the day the entitlement was created and on the
+  1st.
+- **Invoicing on request.** An `InvoiceRequest` asks the invoicing provider to
+  invoice an account's fixed charges now, instead of at the end of the billing
+  cycle. A `Preview` shows the lines without creating anything; an `Issue`
+  creates the invoice and sends it to the customer. Staff use it to check a new
+  contract's setup fee and first month are right.
+
+## Motivation
+
+Without a start date, a contract signed on 18 March but entered on 20 March
+bills from the 20th, and since
+[openmeter-provider#65](https://github.com/milo-os/openmeter-provider/pull/65)
+every new subscription bills on the 1st: the first invoice carries the setup fee
+and a part month, and each later invoice falls on the 1st rather than the
+contract's anniversary.
+
+Staff also have no way to see what a new contract will invoice short of waiting
+for the end of the first billing cycle, and no way to send the first invoice
+straight away. Doing either today means using the billing provider directly,
+which the epic rules out.
+
+### Goals
+
+- Let a contract set the day its charges start and bill on.
+- Let staff preview, and separately issue, an account's next invoice from the
+  staff portal, without access to the billing provider.
+- Keep `Invoice` provider-written: a request leads to an invoice, but only the
+  provider creates `Invoice` resources.
+
+### Non-Goals
+
+- Ending or renewing a contract at the end of its term. Decided below, built
+  next.
+- Changing when mid-term Offer changes take effect. Also described below.
+- Letting customers request invoices.
+- Invoicing usage on request. Usage stays on the normal cycle.
+
+## Proposal
+
+### Contract Start Date
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingEntitlement
+metadata:
+  name: acme
+  namespace: organization-acme
+spec:
+  billingAccountRef:
+    name: acme
+  offerRef:
+    name: acme-bare-metal-2026
+  contract:
+    startsAt: "2026-03-18T00:00:00Z"
+```
+
+`contract.startsAt` is when the contract starts, at midnight UTC:
+
+- The Offer's charges start then. A one-time setup fee is charged for that date.
+- Monthly charges bill on that day of each month. A contract starting on the
+  18th bills on the 18th; one starting on the 29th, 30th or 31st bills on the
+  last day of shorter months.
+- It can be backdated by up to 31 days, for a contract signed before it was
+  entered. The charges since then are billed straight away.
+- It can be up to a year ahead, for a contract that starts later.
+
+The contract is set when the entitlement is created and can't be added, moved
+or removed afterwards: the provider fixes the billing day when it subscribes the
+account, so a later change wouldn't take effect. Changing the Offer (`offerRef`)
+is still allowed and keeps the billing day. Entitlements without a contract are
+unchanged: charges start when the entitlement is created and bill on the 1st.
+
+`contract` is a struct so the term and what happens at its end can join it (see
+[End of Term](#end-of-term)).
+
+### Invoice Requests
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: InvoiceRequest
+metadata:
+  name: acme-first-invoice
+  namespace: organization-acme
+spec:
+  billingAccountRef:
+    name: acme
+  mode: Preview    # or Issue
+status:
+  phase: Succeeded
+  currencyCode: USD
+  lines:
+    - description: Server installation
+      amount: "1500.00"
+    - description: Dedicated server, monthly
+      period:
+        start: "2026-03-18T00:00:00Z"
+        end: "2026-04-18T00:00:00Z"
+      amount: "1000.00"
+  total: "2500.00"
+  completedAt: "2026-03-20T10:02:11Z"
+  conditions:
+    - type: Completed
+      status: "True"
+      reason: Succeeded
+```
+
+An `InvoiceRequest` covers the account's **fixed charges** waiting to be
+invoiced: the `OneTime` and `Recurring` pricings of its Offer, such as a
+contract's setup fee and first month. Usage stays on the normal cycle, so a
+request never cuts an early usage invoice.
+
+- **Preview** works out the invoice and reports its lines and total, before
+  tax. Nothing is created and nothing reaches the customer.
+- **Issue** creates the invoice now and sends it to the customer the same way
+  as an invoice at the end of a billing cycle: by email on the account's terms,
+  or charged to its card. The provider projects it to an `Invoice` as usual, and
+  `status.invoiceRef` names it.
+
+A request is done once its phase is `Succeeded` or `Failed`; to ask again,
+create a new one. The spec is immutable, so a preview can't be turned into an
+issue. The `Completed` condition gives the outcome: `Succeeded`,
+`NothingToInvoice` (an Issue with no fixed charges waiting, for example because
+they were already invoiced), `Unsupported` (the provider can't invoice on
+request) or `Failed`.
+
+Requests are owned by their billing account and are removed with it.
+
+### Setting Up a Contract
+
+In the staff portal, on the customer's billing account:
+
+1. **Payment terms.** Grant invoice terms with a `BillingArrangement`, with the
+   contract's PO number and agreement reference, which print on every invoice.
+2. **Offer.** Create the customer's Offer with the setup fee and the monthly
+   charge, publish it, and assign it with a `BillingEntitlement` carrying the
+   contract's start date.
+3. **Check.** Create a `Preview` request and compare its lines with the
+   contract.
+4. **First invoice.** Create an `Issue` request to send it now, or leave it to
+   the end of the first billing cycle.
+
+Later months are invoiced automatically each cycle.
+
+## Design Details
+
+### Validation
+
+The `BillingEntitlement` webhook checks, on create, that `contract.startsAt` is
+midnight UTC, no more than 31 days before now and no more than a year after it.
+CEL rules on the CRD keep the contract from being added or removed after
+creation and `startsAt` from changing, and the webhook repeats them.
+
+The `InvoiceRequest` webhook adds an owner reference to the billing account and
+checks it exists in the same namespace and isn't being deleted. A CEL rule makes
+the spec immutable; `mode` is an enum of `Preview` and `Issue`.
+
+### Provider Requirements
+
+An invoicing provider:
+
+- Starts an entitlement's subscription at `contract.startsAt` and bills it on
+  that day of each month, when set.
+- Fulfils `InvoiceRequest`s for accounts it invoices, writing status only:
+  - Lines and total cover the account's fixed charges waiting to be invoiced,
+    after discounts and before tax.
+  - A Preview creates nothing. An Issue creates the invoice from those charges
+    only, and records the projected `Invoice` in `status.invoiceRef`.
+  - An Issue with nothing to invoice fails with `NothingToInvoice` rather than
+    creating an empty invoice.
+- Marks requests it can't fulfil `Failed` with reason `Unsupported`, rather than
+  leaving them `Pending`.
+
+For openmeter-provider, the start date becomes the subscription's start and
+billing anchor; a Preview reads the customer's pending fixed-charge lines, and an
+Issue invoices those lines.
+
+### RBAC
+
+`InvoiceRequest` is a new protected resource. `Billing Entitlement Admin`, the
+staff role that assigns Offers, gains `create` and `delete`, and `Billing
+Entitlement Viewer` gains read access. As with the other staff roles, infra
+binds them to staff per resource kind, so `InvoiceRequest` needs its own
+binding. Customers aren't granted either. The invoicing provider needs read
+access to requests and write access to their status.
+
+### Activity
+
+Creating a request is recorded on the billing account's timeline: "Sam issued an
+invoice to billing account acme", or "Sam previewed the next invoice for billing
+account acme". Deleting one is recorded too. The provider's status writes are
+system actions and aren't shown.
+
+## Next Steps
+
+### End of Term
+
+A contract will carry its term and what happens when it ends. Billing tools
+handle this the same way: Stripe subscription schedules either release the
+subscription to carry on or cancel it; Chargebee contract terms renew, roll to
+month-to-month or cancel; Zuora and Recurly subscriptions either renew for
+another term or become evergreen. Bare metal and colocation contracts usually
+roll to month-to-month or renew unless notice is given, rather than stopping.
+
+So a contract will choose what happens at the end of its term, defaulting to
+**continuing month-to-month at the same price**, with renewing for another term
+and stopping as the other choices. Billing will flag the account for renewal 90
+days before the end, using the existing payment terms renewal flow, so staff can
+renegotiate in time. Stopping by default would stop charging for hardware that
+is still running, without anyone deciding to.
+
+Continuing past the term also needs the account to stay payable: if its invoice
+terms end with the contract, the renewal flag covers them too.
+
+### Mid-Term Changes
+
+Changing a contract's monthly charge means assigning a new Offer. Providers
+change the subscription immediately today, which bills a prorated adjustment
+partway through the month. For contract accounts the change should take effect
+from the next billing cycle, so each invoice carries one price.
+
+## Alternatives
+
+**Letting consumers create `Invoice`s.** [Invoicing](./invoicing.md) rejected
+modelling `Invoice` as a request, because providers run their own cycles and
+own the record. That still holds: `InvoiceRequest` is a separate resource, and
+`Invoice` stays provider-written. What has changed is that OpenMeter can invoice
+pending lines on demand, so a request can be honoured; providers that can't say
+so with `Unsupported`.
+
+**An annotation on `BillingAccount`.** An "invoice now" annotation would avoid
+a new resource, but it has nowhere to report the preview's lines or the
+outcome, gives no separate permission (anyone who can edit the account could
+send an invoice), and records nothing in the activity timeline.
+
+**A start date on the `BillingArrangement`.** The arrangement's `startsAt` is
+when payment terms apply, which needn't match when charges start: a contract
+customer might pay by card. The start date belongs with the Offer assignment
+that the charges come from.
+
+## Implementation History
+
+- 2026-11-02: Enhancement drafted, with the contract start date and
+  `InvoiceRequest`.

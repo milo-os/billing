@@ -1,0 +1,45 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for InvoiceRequest resources.
+# An InvoiceRequest asks the invoicing provider to preview or issue a
+# billing account's next invoice now.
+#
+# Design principles:
+# - Name the billing account (linked), and say whether the invoice was
+#   only previewed or actually sent to the customer.
+# - The spec is immutable, so there's nothing to say about updates; the
+#   provider's status writes are system actors and never shown.
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-invoicerequest
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: InvoiceRequest
+
+  auditRules:
+    # "Sam issued an invoice to billing account acme"
+    - name: create-issue
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.mode) && audit.responseObject.spec.mode == 'Issue' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} issued an invoice to billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    # "Sam previewed the next invoice for billing account acme"
+    - name: create-preview
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} previewed the next invoice for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: create-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} requested an invoice ({{ audit.objectRef.name }})"
+
+    # "Sam deleted the invoice request acme-first-invoice for billing account acme"
+    - name: delete-request
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the invoice request {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the invoice request {{ audit.objectRef.name }}"
