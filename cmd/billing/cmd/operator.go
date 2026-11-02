@@ -35,6 +35,8 @@ import (
 	"go.miloapis.com/billing/internal/controller/consumer"
 	billingwebhooks "go.miloapis.com/billing/internal/webhook/v1alpha1"
 	"go.miloapis.com/billing/pkg/features"
+	iamv1alpha1 "go.miloapis.com/milo/pkg/apis/iam/v1alpha1"
+	notificationv1alpha1 "go.miloapis.com/milo/pkg/apis/notification/v1alpha1"
 	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
@@ -56,6 +58,8 @@ func init() {
 	utilruntime.Must(config.RegisterDefaults(scheme))
 	utilruntime.Must(billingv1alpha1.AddToScheme(scheme))
 	utilruntime.Must(resourcemanagerv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(iamv1alpha1.AddToScheme(scheme))
+	utilruntime.Must(notificationv1alpha1.AddToScheme(scheme))
 }
 
 func newOperatorCommand(info BuildInfo) *cobra.Command {
@@ -181,6 +185,21 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			}
 			if err = (&controller.BillingArrangementApplicationReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating BillingArrangementApplication controller: %w", err)
+			}
+			if emails := serverConfig.PaymentTermsApplicationEmails; emails.Disabled {
+				setupLog.Info("payment terms application emails disabled")
+			} else if err = (&controller.PaymentTermsApplicationEmailReconciler{
+				EmailNamespace:         emails.EmailNamespace,
+				ReceivedEmailTemplate:  emails.ReceivedTemplate,
+				SubmittedEmailTemplate: emails.SubmittedTemplate,
+				ApprovedEmailTemplate:  emails.ApprovedTemplate,
+				DeclinedEmailTemplate:  emails.DeclinedTemplate,
+				SupportEmailAddress:    *emails.SupportEmailAddress,
+				PortalURL:              emails.PortalURL,
+				StaffPortalURL:         emails.StaffPortalURL,
+				MaxEventAge:            emails.MaxEventAge.Duration,
+			}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating payment terms application email controller: %w", err)
 			}
 			if utilfeature.DefaultFeatureGate.Enabled(features.CreditGrants) {
 				if err = (&controller.SignupCreditReconciler{}).SetupWithManager(mgr); err != nil {
