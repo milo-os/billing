@@ -15,17 +15,9 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-// Bounds on a contract's start, relative to when its entitlement is created.
-const (
-	// MaxContractBackdate is how far in the past a contract may start, for
-	// one signed before it was entered. Backdated charges are billed
-	// straight away, so the limit keeps a mistyped year from billing
-	// months that were never agreed.
-	MaxContractBackdate = 31 * 24 * time.Hour
-
-	// MaxContractLeadTime is how far ahead a contract may start.
-	MaxContractLeadTime = 366 * 24 * time.Hour
-)
+// MaxContractLeadTime is how far ahead of its entitlement's creation a
+// contract may start.
+const MaxContractLeadTime = 366 * 24 * time.Hour
 
 // ValidateBillingEntitlementCreate validates a BillingEntitlement on creation.
 func ValidateBillingEntitlementCreate(
@@ -71,8 +63,9 @@ func ValidateBillingEntitlementUpdate(
 }
 
 // validateBillingContract checks a new contract starts at midnight UTC,
-// no more than MaxContractBackdate before now and no more than
-// MaxContractLeadTime after it.
+// today or later, and no more than MaxContractLeadTime after now. Billing
+// providers can't start charging retroactively (OpenMeter refuses to start
+// a subscription in the past), so a contract can't start before today.
 func validateBillingContract(contract *billingv1alpha1.BillingContract, now time.Time) field.ErrorList {
 	if contract == nil {
 		return nil
@@ -88,9 +81,9 @@ func validateBillingContract(contract *billingv1alpha1.BillingContract, now time
 		allErrs = append(allErrs, field.Invalid(fldPath, contract.StartsAt.Format(time.RFC3339),
 			"must be midnight UTC, since monthly charges bill on the contract's start day"))
 	}
-	if startsAt.Before(now.Add(-MaxContractBackdate)) {
+	if startsAt.Before(now.UTC().Truncate(24 * time.Hour)) {
 		allErrs = append(allErrs, field.Invalid(fldPath, contract.StartsAt.Format(time.RFC3339),
-			"must be no more than 31 days in the past"))
+			"must be today or later: charges can't start in the past"))
 	}
 	if startsAt.After(now.Add(MaxContractLeadTime)) {
 		allErrs = append(allErrs, field.Invalid(fldPath, contract.StartsAt.Format(time.RFC3339),

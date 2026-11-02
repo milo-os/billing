@@ -54,11 +54,11 @@ func TestValidateBillingEntitlementCreate_Contract(t *testing.T) {
 	}{
 		{name: "no contract"},
 		{name: "starts today", startsAt: day(time.March, 20)},
-		{name: "backdated a week", startsAt: day(time.March, 13)},
-		{name: "backdated 31 days", startsAt: day(time.February, 18)},
 		{name: "starts next month", startsAt: day(time.April, 18)},
 		{name: "starts on the 31st", startsAt: day(time.March, 31)},
-		{name: "backdated more than 31 days", startsAt: day(time.February, 17), wantErr: true},
+		{name: "a year ahead", startsAt: func() *time.Time { t := time.Date(2027, time.March, 20, 0, 0, 0, 0, time.UTC); return &t }()},
+		{name: "started yesterday", startsAt: day(time.March, 19), wantErr: true},
+		{name: "backdated a week", startsAt: day(time.March, 13), wantErr: true},
 		{name: "more than a year ahead", startsAt: func() *time.Time { t := time.Date(2027, time.March, 22, 0, 0, 0, 0, time.UTC); return &t }(), wantErr: true},
 		{name: "not midnight UTC", startsAt: func() *time.Time { t := time.Date(2026, time.March, 18, 9, 0, 0, 0, time.UTC); return &t }(), wantErr: true},
 		{name: "midnight in another zone", startsAt: func() *time.Time {

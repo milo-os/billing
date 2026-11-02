@@ -8,8 +8,8 @@ spec:
     - Creating a BillingAccount, GA Offer, and BillingEntitlement
     - Entitlement becomes Ready with OfferAssigned
     - Webhook rejects a second entitlement for the same billing account
-    - A contract's start date must be midnight UTC, at most 31 days back,
-      and can't be added, moved or removed after creation
+    - A contract's start date must be midnight UTC, today or later, and
+      can't be added, moved or removed after creation
 
   steps:
     - name: ensure-milo-system
@@ -112,13 +112,11 @@ spec:
             file: 03-create-contract-account.yaml
 
     - name: reject-bad-contract-starts
-      description: |
-        A contract start more than 31 days back, or not at midnight UTC, is
-        rejected.
+      description: A contract starting yesterday, or not at midnight UTC, is rejected.
       try:
         - script:
             content: |
-              old=$(date -u -d '40 days ago' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v-40d +%Y-%m-%dT00:00:00Z)
+              old=$(date -u -d '1 day ago' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v-1d +%Y-%m-%dT00:00:00Z)
               cat <<YAML | kubectl create -f -
               apiVersion: billing.miloapis.com/v1alpha1
               kind: BillingEntitlement
@@ -135,7 +133,7 @@ spec:
               YAML
             check:
               ($error != null): true
-              (contains($stderr, 'must be no more than 31 days in the past')): true
+              (contains($stderr, 'must be today or later')): true
         - script:
             content: |
               start=$(date -u +%Y-%m-%dT09:30:00Z)
@@ -158,11 +156,11 @@ spec:
               (contains($stderr, 'must be midnight UTC')): true
 
     - name: create-contract-entitlement
-      description: A contract starting a week ago, entered today, is accepted.
+      description: A contract starting today is accepted.
       try:
         - script:
             content: |
-              start=$(date -u -d '7 days ago' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v-7d +%Y-%m-%dT00:00:00Z)
+              start=$(date -u +%Y-%m-%dT00:00:00Z)
               cat <<YAML | kubectl create -f -
               apiVersion: billing.miloapis.com/v1alpha1
               kind: BillingEntitlement
@@ -195,7 +193,7 @@ spec:
       try:
         - script:
             content: |
-              start=$(date -u +%Y-%m-%dT00:00:00Z)
+              start=$(date -u -d '1 day' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v+1d +%Y-%m-%dT00:00:00Z)
               kubectl patch billingentitlement e2e-be-contract -n default --type=merge \
                 --patch "{\"spec\":{\"contract\":{\"startsAt\":\"$start\"}}}"
             check:

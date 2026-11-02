@@ -51,8 +51,8 @@ Two things are missing, and this enhancement adds them:
 
 ## Motivation
 
-Without a start date, a contract signed on 18 March but entered on 20 March
-bills from the 20th, and since
+Without a start date, a contract starting on 18 April but entered on 20 March
+starts charging on 20 March, and since
 [openmeter-provider#65](https://github.com/milo-os/openmeter-provider/pull/65)
 every new subscription bills on the 1st: the first invoice carries the setup fee
 and a part month, and each later invoice falls on the 1st rather than the
@@ -104,9 +104,10 @@ spec:
 - Monthly charges bill on that day of each month. A contract starting on the
   18th bills on the 18th; one starting on the 29th, 30th or 31st bills on the
   last day of shorter months.
-- It can be backdated by up to 31 days, for a contract signed before it was
-  entered. The charges since then are billed straight away.
-- It can be up to a year ahead, for a contract that starts later.
+- It can be today or up to a year ahead, but not in the past. Billing providers
+  can't start charging retroactively: OpenMeter refuses to start a subscription
+  in the past. A contract signed before it's entered starts on the day it's
+  entered, or on a later date such as when the hardware is handed over.
 
 The contract is set when the entitlement is created and can't be added, moved
 or removed afterwards: the provider fixes the billing day when it subscribes the
@@ -190,7 +191,7 @@ Later months are invoiced automatically each cycle.
 ### Validation
 
 The `BillingEntitlement` webhook checks, on create, that `contract.startsAt` is
-midnight UTC, no more than 31 days before now and no more than a year after it.
+midnight UTC, today or later and no more than a year ahead.
 CEL rules on the CRD keep the contract from being added or removed after
 creation and `startsAt` from changing, and the webhook repeats them.
 
@@ -202,8 +203,9 @@ the spec immutable; `mode` is an enum of `Preview` and `Issue`.
 
 An invoicing provider:
 
-- Starts an entitlement's subscription at `contract.startsAt` and bills it on
-  that day of each month, when set.
+- Starts charging an entitlement's Offer on `contract.startsAt`, and bills it
+  on that day of each month, when set. Before then the account has nothing to
+  invoice, so requests find no charges.
 - Fulfils `InvoiceRequest`s for accounts it invoices, writing status only:
   - Lines and total cover the account's fixed charges waiting to be invoiced,
     after discounts and before tax.
@@ -214,9 +216,12 @@ An invoicing provider:
 - Marks requests it can't fulfil `Failed` with reason `Unsupported`, rather than
   leaving them `Pending`.
 
-For openmeter-provider, the start date becomes the subscription's start and
-billing anchor; a Preview reads the customer's pending fixed-charge lines, and an
-Issue invoices those lines.
+For openmeter-provider, the start date becomes the subscription's billing
+anchor, and the provider subscribes the account on that day (straight away for
+today). It waits rather than scheduling a subscription ahead, because OpenMeter
+can't delete a scheduled subscription cleanly. A Preview prices the customer's
+pending fixed-charge lines with OpenMeter's invoice simulation, and an Issue
+invoices those lines.
 
 ### RBAC
 

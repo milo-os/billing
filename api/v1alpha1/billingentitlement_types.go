@@ -41,12 +41,12 @@ type BillingEntitlementSpec struct {
 // BillingContract holds the terms of a negotiated contract.
 type BillingContract struct {
 	// StartsAt is when the contract starts, at midnight UTC. The Offer's
-	// charges start here, so a one-time setup fee is charged for this date,
+	// charges start on this day, so a one-time setup fee is charged then,
 	// and monthly charges bill on this day of each month: a contract
 	// starting on the 18th bills on the 18th, and one starting on the 29th,
-	// 30th or 31st bills on the last day of shorter months. It may be up to
-	// 31 days in the past, for a contract signed before it was entered, and
-	// up to a year ahead. Immutable.
+	// 30th or 31st bills on the last day of shorter months. It may be today
+	// or up to a year ahead, but not in the past: billing providers can't
+	// start charging retroactively. Immutable.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="contract.startsAt is immutable"
