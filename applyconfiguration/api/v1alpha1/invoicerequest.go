@@ -15,12 +15,13 @@ import (
 //
 // InvoiceRequest is the Schema for the invoicerequests API.
 //
-// An InvoiceRequest asks the invoicing provider to invoice a billing
-// account's fixed charges now, instead of waiting for the end of the
-// billing cycle: the one-time and recurring charges of its Offer, such as
-// a contract's setup fee and first month. Usage stays on the normal
-// cycle. Staff use it to check a new contract's billing: a Preview shows
-// the lines without creating anything, and an Issue sends the invoice.
+// An InvoiceRequest asks the invoicing provider about a billing account's
+// fixed charges: the one-time and recurring charges of its Offer, such as
+// a contract's setup fee and monthly fee. Usage isn't covered. Staff use a
+// Preview to check a new contract's billing before it starts: it reports
+// the first invoice's lines without creating anything. An Issue asks the
+// provider to invoice the charges now, for providers that wait for the end
+// of the billing cycle.
 //
 // Invoices themselves stay provider-written: an Issue request leads the
 // provider to create one, which status.invoiceRef then names. Each
