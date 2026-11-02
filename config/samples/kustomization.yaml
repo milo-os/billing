@@ -8,6 +8,7 @@ resources:
 - billing_v1alpha1_billingentitlement.yaml
 - billing_v1alpha1_meterdefinition.yaml
 - billing_v1alpha1_invoice.yaml
+- billing_v1alpha1_invoicerequest.yaml
 - billing_v1alpha1_offer.yaml
 - billing_v1alpha1_servicepricing.yaml
 # +kubebuilder:scaffold:manifestskustomizesamples

@@ -15,6 +15,8 @@ const BillingEntitlementConditionOfferAssigned = "OfferAssigned"
 // Exactly one active BillingEntitlement exists per billing account. It
 // binds the account to a published Offer. Distinct from the per-project
 // ServiceEntitlement in service-catalog.
+//
+// +kubebuilder:validation:XValidation:rule="has(self.contract) == has(oldSelf.contract)",message="contract can only be set when the entitlement is created"
 type BillingEntitlementSpec struct {
 	// BillingAccountRef references the BillingAccount in the same
 	// namespace.
@@ -26,6 +28,29 @@ type BillingEntitlementSpec struct {
 	//
 	// +kubebuilder:validation:Required
 	OfferRef OfferReference `json:"offerRef"`
+
+	// Contract holds the terms of a negotiated contract, such as a bare
+	// metal customer's. Without it, the account's charges start when the
+	// entitlement is created and bill on the 1st of each month. Set only
+	// when the entitlement is created.
+	//
+	// +kubebuilder:validation:Optional
+	Contract *BillingContract `json:"contract,omitempty"`
+}
+
+// BillingContract holds the terms of a negotiated contract.
+type BillingContract struct {
+	// StartsAt is when the contract starts, at midnight UTC. The Offer's
+	// charges start on this day, so a one-time setup fee is charged then,
+	// and monthly charges bill on this day of each month: a contract
+	// starting on the 18th bills on the 18th, and one starting on the 29th,
+	// 30th or 31st bills on the last day of shorter months. It may be today
+	// or up to a year ahead, but not in the past: billing providers can't
+	// start charging retroactively. Immutable.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="contract.startsAt is immutable"
+	StartsAt metav1.Time `json:"startsAt"`
 }
 
 // BillingEntitlementStatus defines the observed state of a BillingEntitlement.
@@ -53,6 +78,7 @@ type BillingEntitlementStatus struct {
 // +kubebuilder:resource:scope=Namespaced
 // +kubebuilder:printcolumn:name="BillingAccount",type=string,JSONPath=`.spec.billingAccountRef.name`
 // +kubebuilder:printcolumn:name="Offer",type=string,JSONPath=`.spec.offerRef.name`
+// +kubebuilder:printcolumn:name="Contract Start",type=date,JSONPath=`.spec.contract.startsAt`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +genclient
 type BillingEntitlement struct {

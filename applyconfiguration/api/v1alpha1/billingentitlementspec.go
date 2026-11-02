@@ -18,6 +18,11 @@ type BillingEntitlementSpecApplyConfiguration struct {
 	BillingAccountRef *BillingAccountRefApplyConfiguration `json:"billingAccountRef,omitempty"`
 	// OfferRef references a cluster-scoped published (GA) Offer.
 	OfferRef *OfferReferenceApplyConfiguration `json:"offerRef,omitempty"`
+	// Contract holds the terms of a negotiated contract, such as a bare
+	// metal customer's. Without it, the account's charges start when the
+	// entitlement is created and bill on the 1st of each month. Set only
+	// when the entitlement is created.
+	Contract *BillingContractApplyConfiguration `json:"contract,omitempty"`
 }
 
 // BillingEntitlementSpecApplyConfiguration constructs a declarative configuration of the BillingEntitlementSpec type for use with
@@ -39,5 +44,13 @@ func (b *BillingEntitlementSpecApplyConfiguration) WithBillingAccountRef(value *
 // If called multiple times, the OfferRef field is set to the value of the last call.
 func (b *BillingEntitlementSpecApplyConfiguration) WithOfferRef(value *OfferReferenceApplyConfiguration) *BillingEntitlementSpecApplyConfiguration {
 	b.OfferRef = value
+	return b
+}
+
+// WithContract sets the Contract field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Contract field is set to the value of the last call.
+func (b *BillingEntitlementSpecApplyConfiguration) WithContract(value *BillingContractApplyConfiguration) *BillingEntitlementSpecApplyConfiguration {
+	b.Contract = value
 	return b
 }

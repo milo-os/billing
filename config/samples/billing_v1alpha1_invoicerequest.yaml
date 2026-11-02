@@ -1,0 +1,11 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: InvoiceRequest
+metadata:
+  labels:
+    app.kubernetes.io/name: billing
+    app.kubernetes.io/managed-by: kustomize
+  name: invoicerequest-sample
+spec:
+  billingAccountRef:
+    name: billingaccount-sample
+  mode: Preview

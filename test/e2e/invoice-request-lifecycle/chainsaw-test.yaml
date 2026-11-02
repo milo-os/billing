@@ -1,0 +1,82 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: invoice-request-lifecycle
+spec:
+  description: |
+    Tests InvoiceRequest admission. The invoicing provider fulfils requests,
+    so this covers only what billing owns:
+    1. A Preview request for an existing account is accepted and owned by it.
+    2. The spec is immutable, so a Preview can't become an Issue.
+    3. A request for a missing account, or with an unknown mode, is rejected.
+  steps:
+    - name: create-account
+      try:
+        - create:
+            file: 01-create-account.yaml
+
+    - name: create-preview
+      description: A Preview request is accepted and owned by its billing account.
+      try:
+        - create:
+            file: 02-create-preview.yaml
+        - assert:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: InvoiceRequest
+              metadata:
+                name: e2e-invoice-request-preview
+                namespace: default
+                ownerReferences:
+                  - apiVersion: billing.miloapis.com/v1alpha1
+                    kind: BillingAccount
+                    name: e2e-invoice-request-account
+              spec:
+                mode: Preview
+
+    - name: reject-spec-change
+      description: Turning a Preview into an Issue is rejected.
+      try:
+        - script:
+            content: |
+              kubectl patch invoicerequest e2e-invoice-request-preview -n default --type=merge \
+                --patch '{"spec":{"mode":"Issue"}}'
+            check:
+              ($error != null): true
+              (contains($stderr, 'spec is immutable')): true
+
+    - name: reject-missing-account
+      try:
+        - create:
+            file: 03-missing-account.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'e2e-invoice-request-no-such-account')): true
+
+    - name: reject-unknown-mode
+      try:
+        - create:
+            file: 04-unknown-mode.yaml
+            expect:
+              - check:
+                  ($error != null): true
+                  (contains($error, 'Unsupported value')): true
+
+    - name: cleanup
+      description: Deleting the account removes its requests with it.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: e2e-invoice-request-account
+              namespace: default
+        - error:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: InvoiceRequest
+              metadata:
+                name: e2e-invoice-request-preview
+                namespace: default

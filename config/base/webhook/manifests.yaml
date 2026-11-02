@@ -106,6 +106,25 @@ webhooks:
     service:
       name: billing-webhook
       namespace: system
+      path: /mutate-billing-miloapis-com-v1alpha1-invoicerequest
+  failurePolicy: Fail
+  name: minvoicerequest.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    resources:
+    - invoicerequests
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
       path: /mutate-billing-miloapis-com-v1alpha1-paymentmethod
   failurePolicy: Fail
   name: mpaymentmethod.kb.io
@@ -288,6 +307,26 @@ webhooks:
     - UPDATE
     resources:
     - invoices
+  sideEffects: None
+- admissionReviewVersions:
+  - v1
+  clientConfig:
+    service:
+      name: billing-webhook
+      namespace: system
+      path: /validate-billing-miloapis-com-v1alpha1-invoicerequest
+  failurePolicy: Fail
+  name: vinvoicerequest.kb.io
+  rules:
+  - apiGroups:
+    - billing.miloapis.com
+    apiVersions:
+    - v1alpha1
+    operations:
+    - CREATE
+    - UPDATE
+    resources:
+    - invoicerequests
   sideEffects: None
 - admissionReviewVersions:
   - v1

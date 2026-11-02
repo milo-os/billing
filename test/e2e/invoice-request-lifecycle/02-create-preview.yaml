@@ -1,0 +1,9 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: InvoiceRequest
+metadata:
+  name: e2e-invoice-request-preview
+  namespace: default
+spec:
+  billingAccountRef:
+    name: e2e-invoice-request-account
+  mode: Preview

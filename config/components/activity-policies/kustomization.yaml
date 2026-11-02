@@ -16,4 +16,5 @@ resources:
   - billingarrangement-policy.yaml
   - billingarrangementapplication-policy.yaml
   - billingarrangementdecline-policy.yaml
+  - invoicerequest-policy.yaml
   - paymentmethod-policy.yaml

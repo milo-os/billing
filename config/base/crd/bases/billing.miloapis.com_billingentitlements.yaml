@@ -21,6 +21,10 @@ spec:
     - jsonPath: .spec.offerRef.name
       name: Offer
       type: string
+    - jsonPath: .spec.contract.startsAt
+      name: Contract Start
+      priority: 1
+      type: date
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -68,6 +72,30 @@ spec:
                 required:
                 - name
                 type: object
+              contract:
+                description: |-
+                  Contract holds the terms of a negotiated contract, such as a bare
+                  metal customer's. Without it, the account's charges start when the
+                  entitlement is created and bill on the 1st of each month. Set only
+                  when the entitlement is created.
+                properties:
+                  startsAt:
+                    description: |-
+                      StartsAt is when the contract starts, at midnight UTC. The Offer's
+                      charges start on this day, so a one-time setup fee is charged then,
+                      and monthly charges bill on this day of each month: a contract
+                      starting on the 18th bills on the 18th, and one starting on the 29th,
+                      30th or 31st bills on the last day of shorter months. It may be today
+                      or up to a year ahead, but not in the past: billing providers can't
+                      start charging retroactively. Immutable.
+                    format: date-time
+                    type: string
+                    x-kubernetes-validations:
+                    - message: contract.startsAt is immutable
+                      rule: self == oldSelf
+                required:
+                - startsAt
+                type: object
               offerRef:
                 description: OfferRef references a cluster-scoped published (GA) Offer.
                 properties:
@@ -83,6 +111,9 @@ spec:
             - billingAccountRef
             - offerRef
             type: object
+            x-kubernetes-validations:
+            - message: contract can only be set when the entitlement is created
+              rule: has(self.contract) == has(oldSelf.contract)
           status:
             description: BillingEntitlementStatus defines the observed state of a
               BillingEntitlement.

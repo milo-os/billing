@@ -1,10 +1,13 @@
+# Assigns Offers to billing accounts, sets contract terms on them, and
+# previews or issues an account's next invoice with an InvoiceRequest.
+# Bound to staff only (see the staff PolicyBindings in infra).
 apiVersion: iam.miloapis.com/v1alpha1
 kind: Role
 metadata:
   name: billing.miloapis.com-billing-entitlement-admin
   annotations:
     kubernetes.io/display-name: Billing Entitlement Admin
-    kubernetes.io/description: "Full access to all billing entitlement resources"
+    kubernetes.io/description: "Assign Offers and contract terms to billing accounts, and preview or issue their invoices"
 spec:
   launchStage: Alpha
   inheritedRoles:
@@ -14,3 +17,5 @@ spec:
     - billing.miloapis.com/billingentitlements.update
     - billing.miloapis.com/billingentitlements.patch
     - billing.miloapis.com/billingentitlements.delete
+    - billing.miloapis.com/invoicerequests.create
+    - billing.miloapis.com/invoicerequests.delete
