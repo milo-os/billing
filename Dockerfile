@@ -20,6 +20,7 @@ COPY api/ api/
 COPY applyconfiguration/ applyconfiguration/
 COPY internal/ internal/
 COPY emission/ emission/
+COPY pkg/ pkg/
 
 # Build
 ENV GOCACHE=/root/.cache/go-build
