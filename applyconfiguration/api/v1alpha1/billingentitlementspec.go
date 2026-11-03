@@ -20,8 +20,16 @@ type BillingEntitlementSpecApplyConfiguration struct {
 	OfferRef *OfferReferenceApplyConfiguration `json:"offerRef,omitempty"`
 	// Contract holds the terms of a negotiated contract, such as a bare
 	// metal customer's. Without it, the account's charges start when the
-	// entitlement is created and bill on the 1st of each month. Set only
-	// when the entitlement is created.
+	// entitlement is created and bill on the 1st of each month.
+	//
+	// A contract can be added to an existing entitlement, usually together
+	// with offerRef, to move an account onto it. The account is billed as
+	// before until the contract starts, and by offerRef from then on. Once
+	// set, a contract can't be removed.
+	//
+	// After a contract starts, changing offerRef amends it: billing
+	// providers apply the new Offer from the account's next billing date,
+	// so the current month is billed as agreed.
 	Contract *BillingContractApplyConfiguration `json:"contract,omitempty"`
 }
 

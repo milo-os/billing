@@ -78,8 +78,11 @@ func TestValidateBillingEntitlementCreate_Contract(t *testing.T) {
 }
 
 func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
+	now := time.Date(2026, time.March, 18, 15, 4, 5, 0, time.UTC)
 	march18 := time.Date(2026, time.March, 18, 0, 0, 0, 0, time.UTC)
 	march19 := march18.AddDate(0, 0, 1)
+	march17 := march18.AddDate(0, 0, -1)
+	march19Noon := march19.Add(12 * time.Hour)
 
 	tests := []struct {
 		name        string
@@ -90,9 +93,14 @@ func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
 		{name: "no contract either side"},
 		{name: "contract unchanged", old: &march18, new: &march18},
 		{name: "offer changed mid-term", old: &march18, new: &march18, changeOffer: true},
-		{name: "contract added", new: &march18, wantErr: true},
+		{name: "contract added, starting today", new: &march18},
+		{name: "contract added with a new offer", new: &march19, changeOffer: true},
+		{name: "contract added, started yesterday", new: &march17, wantErr: true},
+		{name: "contract added, not midnight UTC", new: &march19Noon, wantErr: true},
 		{name: "contract removed", old: &march18, wantErr: true},
 		{name: "start moved", old: &march18, new: &march19, wantErr: true},
+		// A contract that has started stays valid once its day has passed.
+		{name: "started contract unchanged", old: &march17, new: &march17},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -113,7 +121,7 @@ func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
 			if tt.changeOffer {
 				newBE.Spec.OfferRef.Name = "bare-metal-acme-v2"
 			}
-			errs := ValidateBillingEntitlementUpdate(context.Background(), c, contractEntitlement(tt.old), newBE)
+			errs := ValidateBillingEntitlementUpdate(context.Background(), c, contractEntitlement(tt.old), newBE, now)
 			if (len(errs) > 0) != tt.wantErr {
 				t.Errorf("ValidateBillingEntitlementUpdate() errors = %v, wantErr %v", errs, tt.wantErr)
 			}

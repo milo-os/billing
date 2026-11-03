@@ -20,6 +20,7 @@ resources:
   - payment-method-class-admin.yaml
   - payment-method-class-viewer.yaml
   - service-pricing-admin.yaml
+  - service-pricing-creator.yaml
   - service-pricing-viewer.yaml
   - usage-viewer.yaml
   - billing-credit-admin.yaml

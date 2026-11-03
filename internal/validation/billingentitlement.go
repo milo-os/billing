@@ -15,8 +15,8 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-// MaxContractLeadTime is how far ahead of its entitlement's creation a
-// contract may start.
+// MaxContractLeadTime is how far ahead a contract may start when it's
+// set.
 const MaxContractLeadTime = 366 * 24 * time.Hour
 
 // ValidateBillingEntitlementCreate validates a BillingEntitlement on creation.
@@ -37,12 +37,14 @@ func ValidateBillingEntitlementCreate(
 
 // ValidateBillingEntitlementUpdate validates a BillingEntitlement on update.
 // Changing offerRef is allowed (staff switch); uniqueness and GA checks still apply.
-// The contract can't be added, removed or moved: CEL rules on the CRD
-// enforce it, and they're repeated here for defence in depth.
+// A contract may be added, which moves an existing account onto one, and
+// is then checked like a new one. It can't be removed or moved: CEL rules
+// on the CRD enforce it, and they're repeated here for defence in depth.
 func ValidateBillingEntitlementUpdate(
 	ctx context.Context,
 	c client.Client,
 	oldBE, newBE *billingv1alpha1.BillingEntitlement,
+	now time.Time,
 ) field.ErrorList {
 	var allErrs field.ErrorList
 
@@ -51,10 +53,12 @@ func ValidateBillingEntitlementUpdate(
 
 	oldContract, newContract := oldBE.Spec.Contract, newBE.Spec.Contract
 	switch {
-	case (oldContract == nil) != (newContract == nil):
+	case oldContract == nil:
+		allErrs = append(allErrs, validateBillingContract(newContract, now)...)
+	case newContract == nil:
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "contract"),
-			"contract can only be set when the entitlement is created"))
-	case oldContract != nil && !oldContract.StartsAt.Equal(&newContract.StartsAt):
+			"a contract can't be removed"))
+	case !oldContract.StartsAt.Equal(&newContract.StartsAt):
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "contract", "startsAt"),
 			"contract.startsAt is immutable"))
 	}

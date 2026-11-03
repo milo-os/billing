@@ -17,9 +17,10 @@ type BillingContractApplyConfiguration struct {
 	// charges start on this day, so a one-time setup fee is charged then,
 	// and monthly charges bill on this day of each month: a contract
 	// starting on the 18th bills on the 18th, and one starting on the 29th,
-	// 30th or 31st bills on the last day of shorter months. It may be today
-	// or up to a year ahead, but not in the past: billing providers can't
-	// start charging retroactively. Immutable.
+	// 30th or 31st bills on the last day of shorter months. When the
+	// contract is set, it may be today or up to a year ahead, but not in
+	// the past: billing providers can't start charging retroactively.
+	// Immutable.
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
 }
 
