@@ -58,7 +58,7 @@ func (r *billingEntitlementWebhook) ValidateCreate(ctx context.Context, obj *bil
 func (r *billingEntitlementWebhook) ValidateUpdate(ctx context.Context, oldObj, newObj *billingv1alpha1.BillingEntitlement) (admission.Warnings, error) {
 	billingEntitlementLog.Info("validating update", "name", newObj.GetName(), "namespace", newObj.GetNamespace())
 
-	if errs := validation.ValidateBillingEntitlementUpdate(ctx, r.client, oldObj, newObj); len(errs) > 0 {
+	if errs := validation.ValidateBillingEntitlementUpdate(ctx, r.client, oldObj, newObj, r.clock()); len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			newObj.GetObjectKind().GroupVersionKind().GroupKind(),
 			newObj.Name,

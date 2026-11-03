@@ -16,7 +16,7 @@ const BillingEntitlementConditionOfferAssigned = "OfferAssigned"
 // binds the account to a published Offer. Distinct from the per-project
 // ServiceEntitlement in service-catalog.
 //
-// +kubebuilder:validation:XValidation:rule="has(self.contract) == has(oldSelf.contract)",message="contract can only be set when the entitlement is created"
+// +kubebuilder:validation:XValidation:rule="!has(oldSelf.contract) || has(self.contract)",message="a contract can't be removed"
 type BillingEntitlementSpec struct {
 	// BillingAccountRef references the BillingAccount in the same
 	// namespace.
@@ -31,8 +31,16 @@ type BillingEntitlementSpec struct {
 
 	// Contract holds the terms of a negotiated contract, such as a bare
 	// metal customer's. Without it, the account's charges start when the
-	// entitlement is created and bill on the 1st of each month. Set only
-	// when the entitlement is created.
+	// entitlement is created and bill on the 1st of each month.
+	//
+	// A contract can be added to an existing entitlement, usually together
+	// with offerRef, to move an account onto it. The account is billed as
+	// before until the contract starts, and by offerRef from then on. Once
+	// set, a contract can't be removed.
+	//
+	// After a contract starts, changing offerRef amends it: billing
+	// providers apply the new Offer from the account's next billing date,
+	// so the current month is billed as agreed.
 	//
 	// +kubebuilder:validation:Optional
 	Contract *BillingContract `json:"contract,omitempty"`
@@ -44,9 +52,10 @@ type BillingContract struct {
 	// charges start on this day, so a one-time setup fee is charged then,
 	// and monthly charges bill on this day of each month: a contract
 	// starting on the 18th bills on the 18th, and one starting on the 29th,
-	// 30th or 31st bills on the last day of shorter months. It may be today
-	// or up to a year ahead, but not in the past: billing providers can't
-	// start charging retroactively. Immutable.
+	// 30th or 31st bills on the last day of shorter months. When the
+	// contract is set, it may be today or up to a year ahead, but not in
+	// the past: billing providers can't start charging retroactively.
+	// Immutable.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:XValidation:rule="self == oldSelf",message="contract.startsAt is immutable"

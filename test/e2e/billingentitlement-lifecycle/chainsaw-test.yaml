@@ -9,7 +9,8 @@ spec:
     - Entitlement becomes Ready with OfferAssigned
     - Webhook rejects a second entitlement for the same billing account
     - A contract's start date must be midnight UTC, today or later, and
-      can't be added, moved or removed after creation
+      can't be moved or removed once set
+    - A contract can be added to an existing entitlement
 
   steps:
     - name: ensure-milo-system
@@ -93,17 +94,42 @@ spec:
                   ($error != null): true
                   (contains($error, 'already has billing entitlement')): true
 
-    - name: reject-contract-added-later
-      description: A contract can only be set when the entitlement is created.
+    - name: add-contract-later
+      description: |
+        A contract can be added to an existing entitlement, which moves the
+        account onto it. It's checked like a new one, so it can't start
+        yesterday.
       try:
         - script:
             content: |
-              start=$(date -u +%Y-%m-%dT00:00:00Z)
+              old=$(date -u -d '1 day ago' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v-1d +%Y-%m-%dT00:00:00Z)
               kubectl patch billingentitlement e2e-be-entitlement -n default --type=merge \
-                --patch "{\"spec\":{\"contract\":{\"startsAt\":\"$start\"}}}"
+                --patch "{\"spec\":{\"contract\":{\"startsAt\":\"$old\"}}}"
             check:
               ($error != null): true
-              (contains($stderr, 'contract can only be set when the entitlement is created')): true
+              (contains($stderr, 'must be today or later')): true
+        - script:
+            content: |
+              start=$(date -u -d '1 day' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v+1d +%Y-%m-%dT00:00:00Z)
+              kubectl patch billingentitlement e2e-be-entitlement -n default --type=merge \
+                --patch "{\"spec\":{\"contract\":{\"startsAt\":\"$start\"}}}"
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingEntitlement
+              metadata:
+                name: e2e-be-entitlement
+                namespace: default
+              spec:
+                contract:
+                  (startsAt != null): true
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: OfferAssigned
+                    status: "True"
 
     - name: create-contract-account
       description: A second billing account for the contract entitlement.
@@ -210,7 +236,7 @@ spec:
                 --patch '[{"op":"remove","path":"/spec/contract"}]'
             check:
               ($error != null): true
-              (contains($stderr, 'contract can only be set when the entitlement is created')): true
+              (contains($stderr, 'a contract can\'t be removed')): true
 
     - name: cleanup
       description: Delete entitlements, offer, accounts, and ServicePricing.

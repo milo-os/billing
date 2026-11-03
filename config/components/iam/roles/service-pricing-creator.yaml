@@ -1,0 +1,13 @@
+apiVersion: iam.miloapis.com/v1alpha1
+kind: Role
+metadata:
+  name: billing.miloapis.com-service-pricing-creator
+  annotations:
+    kubernetes.io/display-name: Service Pricing Creator
+    kubernetes.io/description: "Create service pricings, such as a contract's fees, without changing or deleting existing ones"
+spec:
+  launchStage: Alpha
+  inheritedRoles:
+    - name: billing.miloapis.com-service-pricing-viewer
+  includedPermissions:
+    - billing.miloapis.com/servicepricings.create
