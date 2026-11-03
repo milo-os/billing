@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oklog/ulid/v2"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"k8s.io/apimachinery/pkg/types"
@@ -406,6 +407,73 @@ func TestRecord_IDReusedAcrossRetries(t *testing.T) {
 		if receivedIDs[i] != receivedIDs[0] {
 			t.Errorf("attempt %d id %q != attempt 0 id %q", i, receivedIDs[i], receivedIDs[0])
 		}
+	}
+}
+
+func TestRecord_IdempotencyKey_DeterministicAcrossCalls(t *testing.T) {
+	var receivedIDs []string
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ := io.ReadAll(r.Body)
+		var ce map[string]interface{}
+		_ = json.Unmarshal(body, &ce)
+		if id, ok := ce["id"].(string); ok {
+			receivedIDs = append(receivedIDs, id)
+		}
+		w.WriteHeader(http.StatusOK)
+	}))
+	defer srv.Close()
+
+	mp, _ := newTestProvider()
+	rec, err := emission.NewUsageRecorder(
+		emission.WithEndpoint(srv.URL),
+		emission.WithMeterProvider(mp),
+	)
+	if err != nil {
+		t.Fatalf("NewUsageRecorder: %v", err)
+	}
+
+	ev1 := validEvent()
+	ev1.IdempotencyKey = "pod-uid-123:compute.datumapis.com/instance/milli-cpu-seconds:1730000000:1730000060"
+	if err := rec.Record(context.Background(), ev1); err != nil {
+		t.Fatalf("first Record: %v", err)
+	}
+
+	ev2 := validEvent()
+	ev2.IdempotencyKey = ev1.IdempotencyKey
+	if err := rec.Record(context.Background(), ev2); err != nil {
+		t.Fatalf("second Record: %v", err)
+	}
+
+	ev3 := validEvent()
+	ev3.IdempotencyKey = "pod-uid-123:compute.datumapis.com/instance/memory-seconds:1730000000:1730000060"
+	if err := rec.Record(context.Background(), ev3); err != nil {
+		t.Fatalf("third Record: %v", err)
+	}
+
+	ev4 := validEvent() // empty IdempotencyKey -> random ULID
+	if err := rec.Record(context.Background(), ev4); err != nil {
+		t.Fatalf("fourth Record: %v", err)
+	}
+
+	if len(receivedIDs) != 4 {
+		t.Fatalf("expected 4 recorded events, got %d", len(receivedIDs))
+	}
+
+	for i, id := range receivedIDs {
+		if _, err := ulid.Parse(id); err != nil {
+			t.Errorf("event %d id %q is not a valid ULID: %v", i, id, err)
+		}
+	}
+
+	if receivedIDs[0] != receivedIDs[1] {
+		t.Errorf("same IdempotencyKey produced different IDs: %q vs %q", receivedIDs[0], receivedIDs[1])
+	}
+	if receivedIDs[0] == receivedIDs[2] {
+		t.Errorf("different IdempotencyKeys produced the same ID: %q", receivedIDs[0])
+	}
+	if receivedIDs[0] == receivedIDs[3] {
+		t.Errorf("random ULID unexpectedly matched deterministic ID: %q", receivedIDs[0])
 	}
 }
 

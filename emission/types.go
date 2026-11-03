@@ -11,10 +11,16 @@ import (
 
 // UsageEvent is a billable usage event to be recorded by the Emission SDK.
 //
-// All fields except Dimensions and Resource are required.
+// All fields except IdempotencyKey, Dimensions, and Resource are required.
 // Record() returns a ValidationError if a required field is absent or
 // malformed.
 type UsageEvent struct {
+	// IdempotencyKey is an optional caller-supplied key used to deterministically
+	// derive the CloudEvent ID (ULID) for downstream deduplication across
+	// caller retries or controller reconciliations. When empty, a random ULID
+	// is generated per Record() call.
+	IdempotencyKey string
+
 	// Meter is the canonical meter name (e.g.
 	// "compute.miloapis.com/instance/cpu-seconds"). Must be non-empty.
 	Meter string
