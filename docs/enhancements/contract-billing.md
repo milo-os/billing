@@ -164,6 +164,11 @@ current month is billed as agreed, and each invoice carries one price.
 Entitlements without a contract still change immediately, as an account
 switching Offers in the portal expects.
 
+The amended Offer leaves out one-time fees already charged, such as the setup
+fee. Providers charge a `OneTime` pricing when the Offer's charges start, which
+for openmeter-provider means whenever the account's subscription changes plan,
+so keeping the setup fee in would charge it again.
+
 ### Invoice Requests
 
 ```yaml
@@ -288,7 +293,10 @@ the contract's start date as its new billing anchor. For an amendment it waits
 until the end of the subscription's current billing period and changes plan
 then, timed at that boundary so the old Offer bills the whole period. It records
 on the entitlement that the contract has started, so a change made after that
-is treated as an amendment rather than the move onto the contract.
+is treated as an amendment rather than the move onto the contract, and when an
+amendment is due, so one that misses its boundary (the provider was down, say)
+is made as soon as it can rather than a month late.
+([openmeter-provider#93](https://github.com/milo-os/openmeter-provider/pull/93))
 
 ### RBAC
 
