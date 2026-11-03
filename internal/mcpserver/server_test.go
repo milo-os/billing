@@ -255,9 +255,13 @@ func TestBadArgumentsAreToolErrors(t *testing.T) {
 func TestBreakdownRequiresADimension(t *testing.T) {
 	_, session, _ := setup(t, asCaller)
 	// The schema marks dimension required, so the SDK rejects the call.
-	_, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: ToolUsageBreakdown})
-	if err == nil || !strings.Contains(err.Error(), "dimension") {
-		t.Errorf("got %v", err)
+	res, err := session.CallTool(context.Background(), &mcp.CallToolParams{Name: ToolUsageBreakdown})
+	if err != nil {
+		t.Fatal(err)
+	}
+	text := res.Content[0].(*mcp.TextContent).Text
+	if !res.IsError || !strings.Contains(text, "dimension") {
+		t.Errorf("got %q (error=%v)", text, res.IsError)
 	}
 }
 
