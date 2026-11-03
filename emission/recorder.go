@@ -5,6 +5,7 @@ package emission
 import (
 	"bytes"
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -88,27 +89,34 @@ func NewUsageRecorder(opts ...Option) (*UsageRecorder, error) {
 
 // Record validates the event, wraps it in a CloudEvents envelope, and POSTs
 // it to the usage endpoint. The same ULID is reused across retry attempts to
-// allow downstream deduplication.
+// allow downstream deduplication. When ev.IdempotencyKey is non-empty, the
+// ULID is derived deterministically from the key so separate Record() calls
+// with the same key produce the same CloudEvent id.
 func (r *UsageRecorder) Record(ctx context.Context, ev UsageEvent) error {
 	if err := validate(ev); err != nil {
 		return err
 	}
 
-	// Generate the ULID once; all retry attempts share the same id so that
+	// Determine the ULID once; all retry attempts share the same id so that
 	// downstream stages can deduplicate retried deliveries.
-	id := ulid.MustNew(ulid.Timestamp(time.Now()), r.entropy).String()
+	var id string
+	if ev.IdempotencyKey != "" {
+		id = deterministicULID(ev.IdempotencyKey)
+	} else {
+		id = ulid.MustNew(ulid.Timestamp(time.Now()), r.entropy).String()
+	}
+
+	ce, err := toCloudEvent(ev, id)
+	if err != nil {
+		return fmt.Errorf("emission: building CloudEvent: %w", err)
+	}
+
+	payload, err := json.Marshal(ce)
+	if err != nil {
+		return fmt.Errorf("emission: marshalling CloudEvent: %w", err)
+	}
 
 	for attempt := 1; ; attempt++ {
-		ce, err := toCloudEvent(ev, id)
-		if err != nil {
-			return fmt.Errorf("emission: building CloudEvent: %w", err)
-		}
-
-		payload, err := json.Marshal(ce)
-		if err != nil {
-			return fmt.Errorf("emission: marshalling CloudEvent: %w", err)
-		}
-
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, r.endpoint, bytes.NewReader(payload))
 		if err != nil {
 			return fmt.Errorf("emission: building request: %w", err)
@@ -119,6 +127,10 @@ func (r *UsageRecorder) Record(ctx context.Context, ev UsageEvent) error {
 
 		// Context cancelled — surface immediately without consuming a retry slot.
 		if ctx.Err() != nil {
+			if resp != nil {
+				_, _ = io.Copy(io.Discard, resp.Body)
+				_ = resp.Body.Close()
+			}
 			r.metrics.recordErrors.Add(ctx, 1, metric.WithAttributes(attribute.String("reason", "context_canceled")))
 			return ctx.Err()
 		}
@@ -137,6 +149,7 @@ func (r *UsageRecorder) Record(ctx context.Context, ev UsageEvent) error {
 		}
 
 		statusCode := resp.StatusCode
+		_, _ = io.Copy(io.Discard, resp.Body)
 		_ = resp.Body.Close()
 
 		switch {
@@ -194,4 +207,14 @@ func computeBackoff(p RetryPolicy, attempt int, rng io.Reader) time.Duration {
 	jitter := time.Duration(float64(delay) * p.JitterFactor * (f*2 - 1))
 
 	return delay + jitter
+}
+
+// deterministicULID derives a valid 128-bit ULID string from an arbitrary
+// caller-supplied idempotency key using the first 16 bytes of its SHA-256
+// digest.
+func deterministicULID(key string) string {
+	sum := sha256.Sum256([]byte(key))
+	var id ulid.ULID
+	copy(id[:], sum[:16])
+	return id.String()
 }
