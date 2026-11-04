@@ -1,0 +1,32 @@
+name: Provider UI plugin
+
+on:
+  pull_request:
+    paths:
+      - ui/provider/**
+      - .github/workflows/ui-provider.yaml
+  push:
+    branches: [main]
+    paths:
+      - ui/provider/**
+      - .github/workflows/ui-provider.yaml
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ui/provider
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: ui/provider/.nvmrc
+      - uses: oven-sh/setup-bun@v2
+      - run: bun install --frozen-lockfile
+      - run: bun run typecheck
+      - run: bun test src
+      - run: bun run build

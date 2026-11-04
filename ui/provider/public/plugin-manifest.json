@@ -1,0 +1,23 @@
+{
+  "name": "billing.staff-portal.miloapis.com",
+  "version": "0.1.0",
+  "sdk": {
+    "name": "@datum-cloud/portal-plugin-sdk",
+    "range": "^1.0.0"
+  },
+  "remoteEntry": "remoteEntry.js",
+  "exposedModules": {
+    "FleetOverview": "./src/pages/fleet-overview.tsx"
+  },
+  "extensions": [
+    {
+      "type": "portal.page/service",
+      "properties": {
+        "id": "billing-fleet-overview",
+        "label": "Overview",
+        "path": "",
+        "component": { "$codeRef": "FleetOverview" }
+      }
+    }
+  ]
+}

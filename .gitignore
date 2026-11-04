@@ -30,3 +30,8 @@ cover.out
 
 # Claude AI
 .claude
+
+# Portal UI plugins (ui/)
+ui/**/node_modules/
+ui/**/dist/
+ui/**/.mf/

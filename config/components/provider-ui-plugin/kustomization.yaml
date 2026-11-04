@@ -1,0 +1,10 @@
+# billing's staff-portal plugin (ui/provider): a static Module Federation
+# bundle served over in-cluster TLS. staff-portal finds it through
+# ServiceConfiguration.spec.userInterface.provider (config/milo), which
+# service-catalog fans out to a ProviderPortalPlugin; no Gateway fronts it.
+apiVersion: kustomize.config.k8s.io/v1alpha1
+kind: Component
+
+resources:
+  - deployment.yaml
+  - service.yaml
