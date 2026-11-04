@@ -324,6 +324,8 @@ An invoicing provider controller is responsible for:
    provider-prefixed annotations (`<provider-group>.billing.miloapis.com/
    <field>`) for anything it needs for its own reconciliation.
 5. Keeping `Invoice` in sync as its payment lifecycle progresses.
+6. Recording a timeline Event for each payment lifecycle transition, as
+   described in [Billing Activity](billing-activity.md).
 
 RBAC: **read** `BillingAccount` spec (cluster-wide); **create/update**
 `Invoice` (cluster-wide); **full** access to whatever configuration CRD(s) it
