@@ -11,6 +11,8 @@ spec:
     3. Updating the Invoice to PastDue projects InvoicingReady=False / PastDue without
        changing BillingAccount phase.
     4. Paid restores Current; a newer Void does not mask an older PastDue.
+    5. Billing records InvoicingPastDue and InvoicingCurrent Events on the
+       BillingAccount for the activity timeline.
   steps:
     - name: create-account
       description: Create a BillingAccount and assert InvoicingReady=NoInvoicesYet.
@@ -156,6 +158,25 @@ spec:
                   - type: PaymentReady
                     status: "False"
                     reason: NotConfigured
+        # Billing records the account falling past due for the activity
+        # timeline, naming the invoice in an annotation.
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: v1
+              kind: Event
+              metadata:
+                namespace: default
+                annotations:
+                  event.billing.miloapis.com/invoice: invoice-lifecycle-acct-2026-06
+              involvedObject:
+                apiVersion: billing.miloapis.com/v1alpha1
+                kind: BillingAccount
+                name: invoice-lifecycle-acct
+              reason: InvoicingPastDue
+              type: Warning
+              source:
+                component: billing-controller
 
     - name: mark-invoice-paid
       description: Paid restores InvoicingReady=Current.
@@ -193,6 +214,18 @@ spec:
                   - type: PaymentReady
                     status: "False"
                     reason: NotConfigured
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: v1
+              kind: Event
+              metadata:
+                namespace: default
+              involvedObject:
+                kind: BillingAccount
+                name: invoice-lifecycle-acct
+              reason: InvoicingCurrent
+              type: Normal
 
     - name: newer-void-does-not-mask-past-due
       description: |

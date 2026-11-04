@@ -8,10 +8,12 @@ import (
 
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -39,8 +41,9 @@ const (
 
 // BillingAccountReconciler reconciles a BillingAccount object.
 type BillingAccountReconciler struct {
-	client client.Client
-	now    func() time.Time
+	client   client.Client
+	recorder record.EventRecorder
+	now      func() time.Time
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts,verbs=get;list;watch;create;update;patch;delete
@@ -133,7 +136,9 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 	r.reconcileDefaultPaymentMethodCondition(ctx, &account)
 
 	// Resolve and project invoicing health onto status.
-	if err := r.reconcileInvoicingCondition(ctx, &account); err != nil {
+	invoicingBefore := invoicingCondition(&account)
+	pastDueInvoice, err := r.reconcileInvoicingCondition(ctx, &account)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling invoicing condition: %w", err)
 	}
 
@@ -155,6 +160,7 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 	if err := r.client.Status().Update(ctx, &account); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
+	recordInvoicingTransition(r.recorder, &account, invoicingBefore, pastDueInvoice)
 
 	logger.Info("reconciled billing account",
 		"phase", targetPhase,
@@ -289,6 +295,14 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethod(
 		return fmt.Errorf("setting default payment method %q: %w", active.Name, err)
 	}
 	log.FromContext(ctx).Info("defaulted payment method", "paymentMethod", active.Name)
+	detail := cardEventDetail(active)
+	if detail == nil {
+		detail = map[string]string{}
+	}
+	detail[billingv1alpha1.EventAnnotationPaymentMethod] = active.Name
+	recordTimelineEvent(r.recorder, account, detail, corev1.EventTypeNormal,
+		billingv1alpha1.EventReasonDefaultPaymentMethodChanged,
+		fmt.Sprintf("Payment method %q is now the default.", active.Name))
 	return nil
 }
 
@@ -550,7 +564,8 @@ func (r *BillingAccountReconciler) pendingApplication(
 // reconcileInvoicingCondition keeps latestInvoiceRef and the InvoicingReady
 // condition in lock-step with the account's Invoice resources. List failures
 // bubble up as reconcile errors; an empty invoice set is a healthy
-// NoInvoicesYet state, not an error.
+// NoInvoicesYet state, not an error. It returns the name of the invoice that
+// makes the account PastDue, if any.
 //
 // latestInvoiceRef always tracks the most recently created Invoice.
 // InvoicingReady ignores Void and empty-phase invoices when choosing which
@@ -559,13 +574,13 @@ func (r *BillingAccountReconciler) pendingApplication(
 func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
-) error {
+) (string, error) {
 	var invoiceList billingv1alpha1.InvoiceList
 	if err := r.client.List(ctx, &invoiceList,
 		client.InNamespace(account.Namespace),
 		client.MatchingFields{InvoiceBillingAccountRefField: account.Name},
 	); err != nil {
-		return fmt.Errorf("listing invoices: %w", err)
+		return "", fmt.Errorf("listing invoices: %w", err)
 	}
 
 	cond := metav1.Condition{
@@ -579,18 +594,20 @@ func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 		cond.Reason = "NoInvoicesYet"
 		cond.Message = "No invoices have been created for this billing account."
 		apimeta.SetStatusCondition(&account.Status.Conditions, cond)
-		return nil
+		return "", nil
 	}
 
 	latest := pickLatestInvoice(invoiceList.Items)
 	account.Status.LatestInvoiceRef = &billingv1alpha1.LatestInvoiceRef{Name: latest.Name}
 
 	if readiness := pickReadinessInvoice(invoiceList.Items); readiness != nil {
+		pastDue := ""
 		switch readiness.Status.Phase {
 		case billingv1alpha1.InvoicePhasePastDue:
 			cond.Status = metav1.ConditionFalse
 			cond.Reason = "PastDue"
 			cond.Message = fmt.Sprintf("Invoice %q is past due.", readiness.Name)
+			pastDue = readiness.Name
 		default:
 			// Open or Paid.
 			cond.Status = metav1.ConditionTrue
@@ -598,7 +615,7 @@ func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 			cond.Message = fmt.Sprintf("Invoice %q is %s.", readiness.Name, readiness.Status.Phase)
 		}
 		apimeta.SetStatusCondition(&account.Status.Conditions, cond)
-		return nil
+		return pastDue, nil
 	}
 
 	// No Open/Paid/PastDue invoice: classify remaining resources.
@@ -628,7 +645,7 @@ func (r *BillingAccountReconciler) reconcileInvoicingCondition(
 	}
 
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
-	return nil
+	return "", nil
 }
 
 // pickLatestInvoice returns the Invoice with the most recent
@@ -670,6 +687,7 @@ func pickReadinessInvoice(invoices []billingv1alpha1.Invoice) *billingv1alpha1.I
 // SetupWithManager sets up the controller with the Manager.
 func (r *BillingAccountReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
+	r.recorder = mgr.GetEventRecorderFor(eventRecorderName) //nolint:staticcheck // SA1019: the events/v1 recorder can't set annotations, which timeline events need.
 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingaccount").

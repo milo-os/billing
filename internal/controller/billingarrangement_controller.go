@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/log"
@@ -26,8 +28,9 @@ import (
 // computes the same answer with validation.ArrangementPhaseAt instead of
 // waiting on this status.
 type BillingArrangementReconciler struct {
-	client client.Client
-	now    func() time.Time
+	client   client.Client
+	recorder record.EventRecorder
+	now      func() time.Time
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements,verbs=get;list;watch
@@ -49,6 +52,7 @@ func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconc
 	phase := validation.ArrangementPhaseAt(&arr, now)
 
 	base := arr.DeepCopy()
+	endedOnTheirOwn := termsEndedOnTheirOwn(base, phase)
 	arr.Status.Phase = phase
 	arr.Status.ObservedGeneration = arr.Generation
 
@@ -73,9 +77,26 @@ func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconc
 	if err := r.client.Status().Patch(ctx, &arr, client.MergeFrom(base)); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
+	if endedOnTheirOwn {
+		recordTimelineEvent(r.recorder, &arr, map[string]string{
+			billingv1alpha1.EventAnnotationBillingAccount: arr.Spec.BillingAccountRef.Name,
+			billingv1alpha1.EventAnnotationEndsAt:         billingv1alpha1.EventTime(arr.Spec.EndsAt.Time),
+		}, corev1.EventTypeNormal, billingv1alpha1.EventReasonPaymentTermsEnded, cond.Message)
+	}
 
 	log.FromContext(ctx).V(1).Info("reconciled billing arrangement", "phase", phase)
 	return requeueAt(nextArrangementBoundary(&arr, now), now), nil
+}
+
+// termsEndedOnTheirOwn reports whether stored arrangement arr, last seen
+// Active, has now reached its endsAt without anyone editing it. A person
+// ending terms changes the spec, so the generation is ahead of the one the
+// status last observed; the audit log records that instead.
+func termsEndedOnTheirOwn(arr *billingv1alpha1.BillingArrangement, phase billingv1alpha1.BillingArrangementPhase) bool {
+	return arr.Status.Phase == billingv1alpha1.BillingArrangementPhaseActive &&
+		phase == billingv1alpha1.BillingArrangementPhaseEnded &&
+		arr.Spec.EndsAt != nil &&
+		arr.Status.ObservedGeneration == arr.Generation
 }
 
 // nowFrom returns the reconciler's injected clock reading, or the wall
@@ -90,6 +111,7 @@ func nowFrom(clock func() time.Time) time.Time {
 // SetupWithManager sets up the controller with the Manager.
 func (r *BillingArrangementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
+	r.recorder = mgr.GetEventRecorderFor(eventRecorderName) //nolint:staticcheck // SA1019: the events/v1 recorder can't set annotations, which timeline events need.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingarrangement").
 		For(&billingv1alpha1.BillingArrangement{}).
