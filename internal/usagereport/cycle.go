@@ -53,8 +53,29 @@ func BillingCycles(terms *billingv1alpha1.PaymentTerms, now time.Time) (current,
 	return current, previous
 }
 
-// anchorDate is the invoice day in a month, clamped to the month's length
-// (the API allows days 1-28, but stay safe for any value).
+// CycleTerms returns the terms an account's billing cycles follow: its
+// payment terms, except that a contract that has started bills monthly on
+// its own day. Nil when the account has neither.
+func CycleTerms(account *billingv1alpha1.BillingAccount, now time.Time) *billingv1alpha1.PaymentTerms {
+	if account == nil {
+		return nil
+	}
+	contract := account.Status.Contract
+	if contract == nil || now.Before(contract.StartsAt.Time) {
+		return account.Spec.PaymentTerms
+	}
+	terms := &billingv1alpha1.PaymentTerms{}
+	if account.Spec.PaymentTerms != nil {
+		terms = account.Spec.PaymentTerms.DeepCopy()
+	}
+	terms.InvoiceFrequency = "Monthly"
+	terms.InvoiceDayOfMonth = contract.BillingDayOfMonth
+	return terms
+}
+
+// anchorDate is the invoice day in a month, clamped to the month's length:
+// payment terms allow days 1-28, but a contract can bill on the 29th to
+// 31st.
 func anchorDate(year int, month time.Month, day int) time.Time {
 	lastDay := time.Date(year, month+1, 0, 0, 0, 0, 0, time.UTC).Day()
 	if day > lastDay {

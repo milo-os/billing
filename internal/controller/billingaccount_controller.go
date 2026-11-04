@@ -151,10 +151,10 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 		return ctrl.Result{}, fmt.Errorf("reconciling payment ready condition: %w", err)
 	}
 
-	// Publish the Offer's discounts so customers can see them without
-	// reading the Offer.
-	if err := r.reconcileDiscounts(ctx, &account); err != nil {
-		return ctrl.Result{}, fmt.Errorf("reconciling discounts: %w", err)
+	// Publish the Offer's discounts and the contract so customers can see
+	// them without reading the entitlement or the Offer.
+	if err := r.reconcileEntitlementSummary(ctx, &account); err != nil {
+		return ctrl.Result{}, fmt.Errorf("reconciling discounts and contract: %w", err)
 	}
 
 	if err := r.client.Status().Update(ctx, &account); err != nil {
@@ -354,34 +354,36 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
 }
 
-// reconcileDiscounts publishes the discounts of the Offer the account is
-// entitled to on status.discounts. An account without a BillingEntitlement,
-// or whose Offer isn't published yet, has none.
-func (r *BillingAccountReconciler) reconcileDiscounts(
+// reconcileEntitlementSummary publishes the discounts of the Offer the
+// account is entitled to on status.discounts, and its entitlement's
+// contract on status.contract. An account without a BillingEntitlement, or
+// whose Offer isn't published yet, has neither.
+func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
 ) error {
-	offer, err := r.entitledOffer(ctx, account)
+	entitlement, offer, err := r.entitledOffer(ctx, account)
 	if err != nil {
 		return err
 	}
 	account.Status.Discounts = accountDiscounts(offer)
+	account.Status.Contract = accountContract(entitlement, offer)
 	return nil
 }
 
-// entitledOffer returns the published Offer the account's BillingEntitlement
-// references, or nil when there is no entitlement or the Offer isn't
-// assignable.
+// entitledOffer returns the account's BillingEntitlement and the published
+// Offer it references, or nils when there is no entitlement or the Offer
+// isn't assignable.
 func (r *BillingAccountReconciler) entitledOffer(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
-) (*billingv1alpha1.Offer, error) {
+) (*billingv1alpha1.BillingEntitlement, *billingv1alpha1.Offer, error) {
 	var entitlements billingv1alpha1.BillingEntitlementList
 	if err := r.client.List(ctx, &entitlements,
 		client.InNamespace(account.Namespace),
 		client.MatchingFields{BillingEntitlementBillingAccountRefField: account.Name},
 	); err != nil {
-		return nil, fmt.Errorf("listing billing entitlements: %w", err)
+		return nil, nil, fmt.Errorf("listing billing entitlements: %w", err)
 	}
 
 	for i := range entitlements.Items {
@@ -392,16 +394,16 @@ func (r *BillingAccountReconciler) entitledOffer(
 		var offer billingv1alpha1.Offer
 		if err := r.client.Get(ctx, types.NamespacedName{Name: be.Spec.OfferRef.Name}, &offer); err != nil {
 			if apierrors.IsNotFound(err) {
-				return nil, nil
+				return nil, nil, nil
 			}
-			return nil, fmt.Errorf("getting offer %q: %w", be.Spec.OfferRef.Name, err)
+			return nil, nil, fmt.Errorf("getting offer %q: %w", be.Spec.OfferRef.Name, err)
 		}
 		if !validation.OfferIsAssignable(&offer) {
-			return nil, nil
+			return nil, nil, nil
 		}
-		return &offer, nil
+		return be, &offer, nil
 	}
-	return nil, nil
+	return nil, nil, nil
 }
 
 // accountDiscounts lists every pricing in the Offer's snapshot with its
@@ -432,6 +434,39 @@ func accountDiscounts(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAcc
 		return nil
 	}
 	return discounts
+}
+
+// accountContract summarises the entitlement's contract with the fixed fees
+// in its Offer's snapshot, or nil when the entitlement has no contract or
+// the Offer isn't published. The Offer is the contract's from when the
+// contract is added, so its fees show before it starts.
+func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *billingv1alpha1.Offer) *billingv1alpha1.BillingAccountContract {
+	if entitlement == nil || entitlement.Spec.Contract == nil || offer == nil {
+		return nil
+	}
+
+	startsAt := entitlement.Spec.Contract.StartsAt
+	contract := &billingv1alpha1.BillingAccountContract{
+		StartsAt:          startsAt,
+		BillingDayOfMonth: int32(startsAt.UTC().Day()),
+	}
+	for _, sp := range offer.Spec.ServicePricings {
+		switch sp.Spec.ChargeType {
+		case billingv1alpha1.ChargeTypeUsage:
+			contract.UsageBilled = true
+		case billingv1alpha1.ChargeTypeOneTime, billingv1alpha1.ChargeTypeRecurring:
+			contract.Fees = append(contract.Fees, billingv1alpha1.BillingAccountContractFee{
+				Name:        sp.Name,
+				DisplayName: sp.Spec.DisplayName,
+				ServiceRef:  sp.Spec.ServiceRef,
+				ChargeType:  sp.Spec.ChargeType,
+				Amount:      sp.Spec.Amount,
+				Currency:    sp.Spec.Currency,
+				Interval:    sp.Spec.Interval,
+			})
+		}
+	}
+	return contract
 }
 
 // reconcilePaymentReadyCondition publishes the active BillingArrangement

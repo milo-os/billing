@@ -30,3 +30,6 @@ cover.out
 
 # Claude AI
 .claude
+
+# Built datumctl plugin (go build in cmd/milo-billing)
+/cmd/milo-billing/milo-billing

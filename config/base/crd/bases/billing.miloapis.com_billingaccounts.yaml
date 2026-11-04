@@ -314,6 +314,101 @@ spec:
                 x-kubernetes-list-map-keys:
                 - type
                 x-kubernetes-list-type: map
+              contract:
+                description: |-
+                  Contract summarises the contract on the account's BillingEntitlement,
+                  copied with its fees from the contract's published Offer so customers
+                  can see their contract without reading the entitlement or the Offer.
+                  Set from when the contract is added, including before it starts.
+                  Cleared when the account has no contract, or its Offer isn't
+                  published.
+                properties:
+                  billingDayOfMonth:
+                    description: |-
+                      BillingDayOfMonth is the day of the month the contract bills on, the
+                      day it starts. Months shorter than it bill on their last day.
+                    format: int32
+                    maximum: 31
+                    minimum: 1
+                    type: integer
+                  fees:
+                    description: |-
+                      Fees are the contract's fixed fees, before discounts: its one-time
+                      fees, such as a setup fee, and its recurring ones, such as a monthly
+                      fee. Discounts on them are listed in status.discounts. A contract
+                      amended after it started omits the one-time fees already charged.
+                    items:
+                      description: BillingAccountContractFee is one of a contract's
+                        fixed fees.
+                      properties:
+                        amount:
+                          description: Amount is the fee as a decimal string in currency
+                            (e.g. "2400.00").
+                          pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                          type: string
+                        chargeType:
+                          allOf:
+                          - enum:
+                            - Usage
+                            - OneTime
+                            - Recurring
+                          - enum:
+                            - OneTime
+                            - Recurring
+                          description: |-
+                            ChargeType is OneTime for a fee charged once, when the contract
+                            starts, or Recurring for one charged every interval.
+                          type: string
+                        currency:
+                          description: Currency is the ISO 4217 currency code of amount.
+                          type: string
+                        displayName:
+                          description: |-
+                            DisplayName is the fee's label, as invoices show it (e.g. "Setup
+                            fee").
+                          maxLength: 128
+                          type: string
+                        interval:
+                          description: |-
+                            Interval is how often a Recurring fee is charged. Empty for a OneTime
+                            fee.
+                          enum:
+                          - monthly
+                          type: string
+                        name:
+                          description: Name is the metadata.name of the fee's ServicePricing.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                        serviceRef:
+                          description: ServiceRef is the service the fee is for.
+                          maxLength: 253
+                          type: string
+                      required:
+                      - amount
+                      - chargeType
+                      - currency
+                      - name
+                      type: object
+                    type: array
+                    x-kubernetes-list-map-keys:
+                    - name
+                    x-kubernetes-list-type: map
+                  startsAt:
+                    description: |-
+                      StartsAt is when the contract starts, at midnight UTC: its one-time
+                      fees are charged then, and its monthly fees bill from then.
+                    format: date-time
+                    type: string
+                  usageBilled:
+                    description: |-
+                      UsageBilled is true when the contract also bills usage, at the rates
+                      in its Offer, on top of its fees.
+                    type: boolean
+                required:
+                - billingDayOfMonth
+                - startsAt
+                type: object
               discounts:
                 description: |-
                   Discounts lists the discount on each service pricing in the account's
