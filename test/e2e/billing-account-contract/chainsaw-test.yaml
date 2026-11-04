@@ -1,0 +1,247 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: billing-account-contract
+spec:
+  description: |
+    Tests the contract a BillingAccount publishes on status.contract:
+    - An entitlement without a contract publishes none
+    - Adding a contract publishes its start, billing day, fixed fees and
+      whether usage is billed, before the contract starts
+    - Moving the entitlement to an amended Offer replaces the fees and keeps
+      the start and billing day
+    - Removing the entitlement clears the contract
+
+  steps:
+    - name: ensure-milo-system
+      description: Ensure milo-system exists for ServicePricing defaults.
+      try:
+        - script:
+            content: |
+              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+
+    - name: create-service-and-meter
+      description: |
+        Create the Service the fixed fees are for and the meter the usage
+        pricing selects. Waiting for the meter's Ready means the operator's
+        cache, which the webhook reads, has it.
+      try:
+        - create:
+            file: 01-service.yaml
+        - create:
+            file: 01-meter.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: MeterDefinition
+              metadata:
+                name: e2e-bac-cpu-allocated
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: Published
+                    status: "True"
+
+    - name: create-prerequisites
+      description: Create the ServicePricings, the two Draft Offers, and the BillingAccount.
+      try:
+        - create:
+            file: 01-servicepricings.yaml
+        - create:
+            file: 01-offers.yaml
+        - create:
+            file: 01-account.yaml
+
+    - name: publish-offers
+      description: Publish both Offers so the entitlement can reference them.
+      try:
+        - script:
+            content: |
+              kubectl patch offer e2e-bac-contract --type=merge --patch '{"spec":{"launchStage":"GA"}}'
+              kubectl patch offer e2e-bac-amended --type=merge --patch '{"spec":{"launchStage":"GA"}}'
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-bac-contract
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: Published
+                    status: "True"
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              metadata:
+                name: e2e-bac-amended
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: Published
+                    status: "True"
+
+    - name: no-contract
+      description: An entitlement without a contract publishes none.
+      try:
+        - create:
+            file: 02-entitlement.yaml
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingEntitlement
+              metadata:
+                name: e2e-bac-entitlement
+                namespace: default
+              status:
+                conditions:
+                  - type: Ready
+                    status: "True"
+                  - type: OfferAssigned
+                    status: "True"
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-bac-account
+                namespace: default
+              status:
+                (contract == null): true
+
+    - name: add-contract
+      description: |
+        Adding a contract starting tomorrow publishes it straight away, with
+        the Offer's fees in order, usage billed on top, and the start day as
+        the billing day.
+      try:
+        - script:
+            content: |
+              start=$(date -u -d '1 day' +%Y-%m-%dT00:00:00Z 2>/dev/null || date -u -v+1d +%Y-%m-%dT00:00:00Z)
+              kubectl patch billingentitlement e2e-bac-entitlement -n default --type=merge \
+                --patch "{\"spec\":{\"contract\":{\"startsAt\":\"$start\"}}}"
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-bac-account
+                namespace: default
+              status:
+                contract:
+                  (startsAt != null): true
+                  usageBilled: true
+                  (length(fees)): 2
+                  fees:
+                    - name: e2e-bac-setup
+                      displayName: Setup fee
+                      serviceRef: e2e-bac-hosting.billing.miloapis.com
+                      chargeType: OneTime
+                      amount: "5000.00"
+                      currency: USD
+                    - name: e2e-bac-monthly
+                      displayName: Monthly fee
+                      serviceRef: e2e-bac-hosting.billing.miloapis.com
+                      chargeType: Recurring
+                      amount: "2400.00"
+                      currency: USD
+                      interval: monthly
+        - script:
+            content: &check-start |
+              start=$(kubectl get billingentitlement e2e-bac-entitlement -n default -o jsonpath='{.spec.contract.startsAt}')
+              got=$(kubectl get billingaccount e2e-bac-account -n default -o jsonpath='{.status.contract.startsAt}')
+              if [ "$got" != "$start" ]; then
+                echo "status.contract.startsAt = $got, want the entitlement's $start"
+                exit 1
+              fi
+              day=$(echo "$start" | cut -c9-10 | sed 's/^0//')
+              got=$(kubectl get billingaccount e2e-bac-account -n default -o jsonpath='{.status.contract.billingDayOfMonth}')
+              if [ "$got" != "$day" ]; then
+                echo "status.contract.billingDayOfMonth = $got, want $day, the day of $start"
+                exit 1
+              fi
+
+    - name: change-offer
+      description: |
+        Moving the entitlement to the amended Offer replaces the fees and
+        stops usage billing. The contract keeps its start and billing day.
+      try:
+        - script:
+            content: |
+              kubectl patch billingentitlement e2e-bac-entitlement -n default --type=merge \
+                --patch '{"spec":{"offerRef":{"name":"e2e-bac-amended"}}}'
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-bac-account
+                namespace: default
+              status:
+                contract:
+                  usageBilled: false
+                  (length(fees)): 1
+                  fees:
+                    - name: e2e-bac-monthly-amended
+                      chargeType: Recurring
+                      amount: "3000.00"
+                      interval: monthly
+        - script:
+            content: *check-start
+
+    - name: remove-entitlement
+      description: Without an entitlement the account has no contract.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingEntitlement
+              name: e2e-bac-entitlement
+              namespace: default
+        - assert:
+            timeout: 60s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: e2e-bac-account
+                namespace: default
+              status:
+                (contract == null): true
+
+    - name: cleanup
+      description: Delete the account, Offers, ServicePricings, meter and Service.
+      try:
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: e2e-bac-account
+              namespace: default
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              name: e2e-bac-contract
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: Offer
+              name: e2e-bac-amended
+        - delete:
+            file: 01-servicepricings.yaml
+        - delete:
+            file: 01-meter.yaml
+        - delete:
+            file: 01-service.yaml
