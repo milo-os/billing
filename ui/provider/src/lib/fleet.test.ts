@@ -3,7 +3,7 @@ import { plural, summarizeFleet, type FleetInput } from './fleet';
 import { formatMoneyCompact } from './money';
 import { DAY_MS, getAgingBucket, isStaleInvoice } from './invoices';
 import type { BillingAccount, Invoice, PaymentMethod } from './types';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 
 const NOW = new Date('2026-11-15T12:00:00Z');
 const ago = (days: number) => new Date(NOW.getTime() - days * DAY_MS).toISOString();

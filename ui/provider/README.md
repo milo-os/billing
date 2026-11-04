@@ -97,15 +97,23 @@ datum-ui `badge`, `button`, `card`, `icons` and `skeleton` subpaths
 
 ## Local dev
 
-Use Node 24 (`.nvmrc`) and bun.
+Use Node 26 (`.nvmrc`) and pnpm 12 (`packageManager` in `package.json`).
+Both are enforced: installing on an older Node, or with npm, yarn or bun,
+fails (`engines` and `devEngines`, `engineStrict` in `pnpm-workspace.yaml`,
+and a `preinstall` check). Node 25+ doesn't ship corepack, so install pnpm
+once with `npm install --global pnpm@12`, from outside this directory.
 
 ```
-bun install
-bun test src          # the fleet maths (src/lib/*.test.ts)
-bun run typecheck
-bun run build && bun run preview   # built dist/ at :5299, for staff-portal
-bun run dev           # standalone harness at :5299
+pnpm install
+pnpm test             # the fleet maths (src/lib/*.test.ts), with vitest
+pnpm run typecheck
+pnpm run build && pnpm run preview   # built dist/ at :5299, for staff-portal
+pnpm run dev          # standalone harness at :5299
 ```
+
+The container serves `dist/` with `serve.ts`, a dependency-free Node HTTPS
+server that Node 26 runs as TypeScript directly. To try it locally, point it
+at a cert and key: `TLS_DIR=./certs PORT=8443 pnpm run serve`.
 
 The standalone harness has no staff-portal proxy, so data calls fail. Open
 `http://localhost:5299/?fixtures` to answer them from a made-up fleet

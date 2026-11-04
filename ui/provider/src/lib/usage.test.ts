@@ -1,5 +1,5 @@
 import { rollUpByService, serviceName, usageAccounts, usageWindows } from './usage';
-import { describe, expect, test } from 'bun:test';
+import { describe, expect, test } from 'vitest';
 
 describe('serviceName', () => {
   test('names a meter after its domain, like internal/usagereport', () => {

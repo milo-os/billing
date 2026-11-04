@@ -22,11 +22,17 @@ jobs:
         working-directory: ui/provider
     steps:
       - uses: actions/checkout@v4
+      # pnpm's version comes from package.json's packageManager; Node's from
+      # .nvmrc. Both are enforced on install (engines, devEngines).
+      - uses: pnpm/action-setup@v4
+        with:
+          package_json_file: ui/provider/package.json
       - uses: actions/setup-node@v4
         with:
           node-version-file: ui/provider/.nvmrc
-      - uses: oven-sh/setup-bun@v2
-      - run: bun install --frozen-lockfile
-      - run: bun run typecheck
-      - run: bun test src
-      - run: bun run build
+          cache: pnpm
+          cache-dependency-path: ui/provider/pnpm-lock.yaml
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run typecheck
+      - run: pnpm test
+      - run: pnpm run build
