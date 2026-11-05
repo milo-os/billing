@@ -50,6 +50,12 @@ type BillingOperator struct {
 	// UsageConsumer.
 	Nats NATSConfig `json:"nats"`
 
+	// DisableProjectAutoBinding stops billing binding new projects to their
+	// organization's billing account. With it unset, a project without a
+	// billing account is bound to the organization's only ready account, or
+	// to the one marked defaultForNewProjects.
+	DisableProjectAutoBinding bool `json:"disableProjectAutoBinding,omitempty"`
+
 	// DisableQuarantineOnAttributionFailure disables publishing quarantined
 	// events to NATS when attribution fails (e.g. no billing account/binding exists).
 	// TODO: Disable / remove this configuration once all projects have a billing account.

@@ -1,0 +1,36 @@
+# The contract's Offer: a setup fee, a monthly fee, and usage on top.
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-bac-contract
+  annotations:
+    kubernetes.io/display-name: E2E Contract
+spec:
+  chargeTypes:
+    - OneTime
+    - Recurring
+    - Usage
+  launchStage: Draft
+  servicePricingRefs:
+    - name: e2e-bac-setup
+      namespace: milo-system
+    - name: e2e-bac-monthly
+      namespace: milo-system
+    - name: e2e-bac-cpu-allocated
+      namespace: milo-system
+---
+# The amended contract's Offer: a higher monthly fee and no usage. An
+# amended Offer leaves out OneTime fees, which were charged at the start.
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: e2e-bac-amended
+  annotations:
+    kubernetes.io/display-name: E2E Contract (amended)
+spec:
+  chargeTypes:
+    - Recurring
+  launchStage: Draft
+  servicePricingRefs:
+    - name: e2e-bac-monthly-amended
+      namespace: milo-system

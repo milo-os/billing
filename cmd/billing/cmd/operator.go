@@ -165,6 +165,11 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 			if err = (&controller.BillingAccountBindingReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating BillingAccountBinding controller: %w", err)
 			}
+			if serverConfig.DisableProjectAutoBinding {
+				setupLog.Info("project auto-binding disabled; projects are bound by clients only")
+			} else if err = (&controller.ProjectBillingBinder{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating project billing binder: %w", err)
+			}
 			if err = (&controller.MeterDefinitionReconciler{}).SetupWithManager(mgr); err != nil {
 				return fmt.Errorf("creating MeterDefinition controller: %w", err)
 			}

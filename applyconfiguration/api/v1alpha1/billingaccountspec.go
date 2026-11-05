@@ -30,6 +30,11 @@ type BillingAccountSpecApplyConfiguration struct {
 	// default for charge processing. The referenced PaymentMethod must
 	// reside in the same namespace and be in the Active phase.
 	DefaultPaymentMethodRef *DefaultPaymentMethodRefApplyConfiguration `json:"defaultPaymentMethodRef,omitempty"`
+	// DefaultForNewProjects makes this the account the organization's new
+	// projects are billed to when it has more than one billing account.
+	// With only one, new projects are billed to it either way. At most one
+	// account in an organization can set it.
+	DefaultForNewProjects *bool `json:"defaultForNewProjects,omitempty"`
 }
 
 // BillingAccountSpecApplyConfiguration constructs a declarative configuration of the BillingAccountSpec type for use with
@@ -80,5 +85,13 @@ func (b *BillingAccountSpecApplyConfiguration) WithTaxIDs(values ...*TaxIDApplyC
 // If called multiple times, the DefaultPaymentMethodRef field is set to the value of the last call.
 func (b *BillingAccountSpecApplyConfiguration) WithDefaultPaymentMethodRef(value *DefaultPaymentMethodRefApplyConfiguration) *BillingAccountSpecApplyConfiguration {
 	b.DefaultPaymentMethodRef = value
+	return b
+}
+
+// WithDefaultForNewProjects sets the DefaultForNewProjects field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the DefaultForNewProjects field is set to the value of the last call.
+func (b *BillingAccountSpecApplyConfiguration) WithDefaultForNewProjects(value bool) *BillingAccountSpecApplyConfiguration {
+	b.DefaultForNewProjects = &value
 	return b
 }

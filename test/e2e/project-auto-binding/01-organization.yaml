@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: organization-e2e-autobind
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: BillingAccount
+metadata:
+  name: autobind-account
+  namespace: organization-e2e-autobind
+spec:
+  currencyCode: USD

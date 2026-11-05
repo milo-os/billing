@@ -1,0 +1,141 @@
+apiVersion: chainsaw.kyverno.io/v1alpha1
+kind: Test
+metadata:
+  name: project-auto-binding
+spec:
+  description: |
+    Billing binds a project to its organization's billing account when
+    nothing else has:
+    - a new project is bound to the organization's only Ready account
+    - a project annotated billing.miloapis.com/auto-bind=false is left alone
+    - a project created before its organization has an account is bound
+      once the account is Ready
+
+  steps:
+    - name: setup
+      description: An organization with a Ready billing account.
+      try:
+        - create:
+            file: 01-organization.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: autobind-account
+                namespace: organization-e2e-autobind
+              status:
+                phase: Ready
+
+    - name: binds-a-new-project
+      description: A new project gets a binding to the organization's account.
+      try:
+        - create:
+            file: 02-projects.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                namespace: organization-e2e-autobind
+                annotations:
+                  billing.miloapis.com/auto-bound: "true"
+              spec:
+                billingAccountRef:
+                  name: autobind-account
+                projectRef:
+                  name: autobind-web
+              status:
+                phase: Active
+
+    - name: skips-an-opted-out-project
+      description: The opted-out project has no binding once the other is bound.
+      try:
+        - error:
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                namespace: organization-e2e-autobind
+              spec:
+                projectRef:
+                  name: autobind-canary
+
+    - name: binds-once-the-account-is-ready
+      description: |
+        A project whose organization has no account yet waits, and is bound
+        when the account appears and becomes Ready.
+      try:
+        - create:
+            file: 03-late-organization.yaml
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              metadata:
+                name: autobind-late-account
+                namespace: organization-e2e-autobind-late
+              status:
+                phase: Ready
+        - assert:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                namespace: organization-e2e-autobind-late
+              spec:
+                billingAccountRef:
+                  name: autobind-late-account
+                projectRef:
+                  name: autobind-late
+              status:
+                phase: Active
+
+    - name: cleanup
+      description: Deleting the projects removes their bindings, then the accounts can go.
+      try:
+        - delete:
+            ref:
+              apiVersion: resourcemanager.miloapis.com/v1alpha1
+              kind: Project
+              name: autobind-web
+        - delete:
+            ref:
+              apiVersion: resourcemanager.miloapis.com/v1alpha1
+              kind: Project
+              name: autobind-canary
+        - delete:
+            ref:
+              apiVersion: resourcemanager.miloapis.com/v1alpha1
+              kind: Project
+              name: autobind-late
+        - error:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                namespace: organization-e2e-autobind
+        - error:
+            timeout: 30s
+            resource:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccountBinding
+              metadata:
+                namespace: organization-e2e-autobind-late
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: autobind-account
+              namespace: organization-e2e-autobind
+        - delete:
+            ref:
+              apiVersion: billing.miloapis.com/v1alpha1
+              kind: BillingAccount
+              name: autobind-late-account
+              namespace: organization-e2e-autobind-late

@@ -84,6 +84,32 @@ func ValidateBillingAccountUpdate(oldAccount, newAccount *billingv1alpha1.Billin
 	return allErrs
 }
 
+// ValidateBillingAccountDefaultForNewProjects checks that no other account
+// in the organization is already the default for new projects, when this
+// one claims to be.
+func ValidateBillingAccountDefaultForNewProjects(ctx context.Context, c client.Reader, account *billingv1alpha1.BillingAccount) field.ErrorList {
+	var allErrs field.ErrorList
+	if !account.Spec.DefaultForNewProjects {
+		return allErrs
+	}
+	fldPath := field.NewPath("spec", "defaultForNewProjects")
+
+	var accounts billingv1alpha1.BillingAccountList
+	if err := c.List(ctx, &accounts, client.InNamespace(account.Namespace)); err != nil {
+		return append(allErrs, field.InternalError(fldPath, fmt.Errorf("listing billing accounts: %w", err)))
+	}
+	for i := range accounts.Items {
+		other := &accounts.Items[i]
+		if other.Name == account.Name || !other.DeletionTimestamp.IsZero() || !other.Spec.DefaultForNewProjects {
+			continue
+		}
+		allErrs = append(allErrs, field.Forbidden(fldPath,
+			fmt.Sprintf("billing account %q is already the default for new projects", other.Name)))
+		break
+	}
+	return allErrs
+}
+
 // ValidateBillingAccountDefaultPaymentMethodRef checks that the
 // defaultPaymentMethodRef (when set) points at a PaymentMethod that
 // exists in the same namespace and is in the Active phase. Admission
