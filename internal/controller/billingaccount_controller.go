@@ -461,6 +461,8 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 				ServiceRef:  sp.Spec.ServiceRef,
 				ChargeType:  sp.Spec.ChargeType,
 				Amount:      sp.Spec.Amount,
+				Quantity:    validation.SnapshotQuantity(sp),
+				PricingUnit: sp.Spec.PricingUnit,
 				Currency:    sp.Spec.Currency,
 				Interval:    sp.Spec.Interval,
 			})

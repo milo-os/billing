@@ -77,6 +77,13 @@ func ValidateOfferServicePricingRefs(
 			}
 			return append(allErrs, field.InternalError(fldPath.Index(i), fmt.Errorf("reading ServicePricing: %w", err)))
 		}
+		if ref.Quantity > 0 && sp.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("quantity"),
+				ref.Quantity,
+				quantityOnUsageMessage,
+			))
+		}
 		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
 	}
 
@@ -88,6 +95,31 @@ func ValidateOfferServicePricingRefs(
 		))
 	}
 	return allErrs
+}
+
+const quantityOnUsageMessage = "quantity is only allowed for OneTime and Recurring fees; " +
+	"a Usage pricing is charged for what was used"
+
+// SnapshotQuantity returns how many of a fee an Offer charges: the
+// snapshot's quantity, or 1 for a snapshot taken before quantities
+// existed.
+func SnapshotQuantity(sp billingv1alpha1.ServicePricingSnapshot) int32 {
+	if sp.Quantity > 0 {
+		return sp.Quantity
+	}
+	return 1
+}
+
+// UsagePricingsWithQuantity returns the names of Usage pricings that carry
+// a quantity, which only fees may.
+func UsagePricingsWithQuantity(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage && p.Quantity > 0 {
+			names = append(names, p.Name)
+		}
+	}
+	return names
 }
 
 // ServicePricingRefKey returns the key of the ServicePricing a ref names,
@@ -138,6 +170,15 @@ func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.E
 			dup.Pricings,
 			fmt.Sprintf("an Offer may price meter %q only once", dup.Metric),
 		))
+	}
+	for i, snap := range offer.Spec.ServicePricings {
+		if snap.Quantity > 0 && snap.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("quantity"),
+				snap.Quantity,
+				quantityOnUsageMessage,
+			))
+		}
 	}
 	return allErrs
 }

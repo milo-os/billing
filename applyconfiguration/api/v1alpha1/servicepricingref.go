@@ -17,6 +17,12 @@ type ServicePricingRefApplyConfiguration struct {
 	Namespace *string `json:"namespace,omitempty"`
 	// Discount specifies an optional discount override for this service pricing.
 	Discount *DiscountApplyConfiguration `json:"discount,omitempty"`
+	// Quantity is how many of a OneTime or Recurring fee the Offer charges:
+	// the fee's amount times its quantity, such as three servers at the
+	// same monthly price. Defaults to 1. Not allowed on a Usage pricing,
+	// whose quantity is what was used: the Offer controller won't publish
+	// an Offer that sets it there.
+	Quantity *int32 `json:"quantity,omitempty"`
 }
 
 // ServicePricingRefApplyConfiguration constructs a declarative configuration of the ServicePricingRef type for use with
@@ -46,5 +52,13 @@ func (b *ServicePricingRefApplyConfiguration) WithNamespace(value string) *Servi
 // If called multiple times, the Discount field is set to the value of the last call.
 func (b *ServicePricingRefApplyConfiguration) WithDiscount(value *DiscountApplyConfiguration) *ServicePricingRefApplyConfiguration {
 	b.Discount = value
+	return b
+}
+
+// WithQuantity sets the Quantity field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Quantity field is set to the value of the last call.
+func (b *ServicePricingRefApplyConfiguration) WithQuantity(value int32) *ServicePricingRefApplyConfiguration {
+	b.Quantity = &value
 	return b
 }

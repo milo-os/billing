@@ -15,12 +15,21 @@ import (
 // fixed amount. Providers read the Offer's snapshot of this shape,
 // distinguished by chargeType.
 //
+// A OneTime or Recurring pricing is a fee, such as a contract's setup or
+// monthly fee. A fee may name a service and a pricingUnit, and an Offer
+// charges it as many times as its reference's quantity.
+//
+// A Usage pricing with basedOn is a customer's own rates: a copy of the
+// list pricing basedOn names, with only its rate amounts changed.
+//
 // The spec is immutable: a new price is a new ServicePricing.
 //
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit) && has(self.rates))",message="Usage ServicePricing requires metric, pricingUnit, and rates"
 // +kubebuilder:validation:XValidation:rule="self.chargeType == 'Usage' || !has(self.unitConversion)",message="unitConversion is only allowed for Usage ServicePricing"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'OneTime' || (has(self.amount) && has(self.trigger))",message="OneTime ServicePricing requires amount and trigger"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Recurring' || (has(self.amount) && has(self.interval))",message="Recurring ServicePricing requires amount and interval"
+// +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || has(self.serviceRef)",message="Usage ServicePricing requires serviceRef"
+// +kubebuilder:validation:XValidation:rule="self.chargeType == 'Usage' || !has(self.basedOn)",message="basedOn is only allowed for Usage ServicePricing"
 type ServicePricingSpec struct {
 	// ChargeType distinguishes Usage, OneTime, and Recurring pricing.
 	//
@@ -28,12 +37,15 @@ type ServicePricingSpec struct {
 	ChargeType ChargeType `json:"chargeType"`
 
 	// ServiceRef is the canonical service identifier (e.g.
-	// "compute.datumapis.com").
+	// "compute.datumapis.com"). Required for Usage pricings, where it names
+	// the service that owns the meter. Optional for OneTime and Recurring
+	// fees, which needn't be for any one service, such as a contract's
+	// setup or support fee; when set, it must name a Service.
 	//
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	ServiceRef string `json:"serviceRef"`
+	ServiceRef string `json:"serviceRef,omitempty"`
 
 	// Currency is the ISO 4217 currency code. USD only in v1.
 	//
@@ -60,6 +72,11 @@ type ServicePricingSpec struct {
 	// PricingUnit is a human-readable billing unit label (e.g. "vcpu",
 	// "gib"). Required when chargeType is Usage. Does not need to be the
 	// literal UCUM unit string of the meter.
+	//
+	// Optional for OneTime and Recurring fees, where it labels what the
+	// amount is per (e.g. "port", "kW"), so invoices and portals show a
+	// fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+	// charged.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=64
@@ -97,6 +114,21 @@ type ServicePricingSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// BasedOn names the list pricing, in the same namespace, that this
+	// Usage pricing gives a customer their own rates for. Everything but
+	// the rate amounts must match it: serviceRef, metric, pricingUnit,
+	// unitConversion, each rate's match and whether it's flat or tiered,
+	// and tier bounds. Only flat and tier rate values differ. The named
+	// pricing can't itself have basedOn. Usage pricings only.
+	//
+	// Billing doesn't change with basedOn: it records which list price the
+	// customer's rates replace, so portals can show them side by side.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	BasedOn string `json:"basedOn,omitempty"`
 }
 
 // UnitConversion converts usage measured in the meter's unit into the

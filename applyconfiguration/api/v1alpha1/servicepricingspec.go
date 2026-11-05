@@ -20,12 +20,22 @@ import (
 // fixed amount. Providers read the Offer's snapshot of this shape,
 // distinguished by chargeType.
 //
+// A OneTime or Recurring pricing is a fee, such as a contract's setup or
+// monthly fee. A fee may name a service and a pricingUnit, and an Offer
+// charges it as many times as its reference's quantity.
+//
+// A Usage pricing with basedOn is a customer's own rates: a copy of the
+// list pricing basedOn names, with only its rate amounts changed.
+//
 // The spec is immutable: a new price is a new ServicePricing.
 type ServicePricingSpecApplyConfiguration struct {
 	// ChargeType distinguishes Usage, OneTime, and Recurring pricing.
 	ChargeType *apiv1alpha1.ChargeType `json:"chargeType,omitempty"`
 	// ServiceRef is the canonical service identifier (e.g.
-	// "compute.datumapis.com").
+	// "compute.datumapis.com"). Required for Usage pricings, where it names
+	// the service that owns the meter. Optional for OneTime and Recurring
+	// fees, which needn't be for any one service, such as a contract's
+	// setup or support fee; when set, it must name a Service.
 	ServiceRef *string `json:"serviceRef,omitempty"`
 	// Currency is the ISO 4217 currency code. USD only in v1.
 	Currency *string `json:"currency,omitempty"`
@@ -39,6 +49,11 @@ type ServicePricingSpecApplyConfiguration struct {
 	// PricingUnit is a human-readable billing unit label (e.g. "vcpu",
 	// "gib"). Required when chargeType is Usage. Does not need to be the
 	// literal UCUM unit string of the meter.
+	//
+	// Optional for OneTime and Recurring fees, where it labels what the
+	// amount is per (e.g. "port", "kW"), so invoices and portals show a
+	// fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+	// charged.
 	PricingUnit *string `json:"pricingUnit,omitempty"`
 	// UnitConversion converts the meter's usage into pricingUnit before the
 	// rates apply, for a metric measured in a different unit than it is
@@ -55,6 +70,16 @@ type ServicePricingSpecApplyConfiguration struct {
 	Trigger *apiv1alpha1.ChargeTrigger `json:"trigger,omitempty"`
 	// Interval is the cadence for a Recurring charge.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
+	// BasedOn names the list pricing, in the same namespace, that this
+	// Usage pricing gives a customer their own rates for. Everything but
+	// the rate amounts must match it: serviceRef, metric, pricingUnit,
+	// unitConversion, each rate's match and whether it's flat or tiered,
+	// and tier bounds. Only flat and tier rate values differ. The named
+	// pricing can't itself have basedOn. Usage pricings only.
+	//
+	// Billing doesn't change with basedOn: it records which list price the
+	// customer's rates replace, so portals can show them side by side.
+	BasedOn *string `json:"basedOn,omitempty"`
 }
 
 // ServicePricingSpecApplyConfiguration constructs a declarative configuration of the ServicePricingSpec type for use with
@@ -153,5 +178,13 @@ func (b *ServicePricingSpecApplyConfiguration) WithTrigger(value apiv1alpha1.Cha
 // If called multiple times, the Interval field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithInterval(value apiv1alpha1.ChargeInterval) *ServicePricingSpecApplyConfiguration {
 	b.Interval = &value
+	return b
+}
+
+// WithBasedOn sets the BasedOn field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BasedOn field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithBasedOn(value string) *ServicePricingSpecApplyConfiguration {
+	b.BasedOn = &value
 	return b
 }

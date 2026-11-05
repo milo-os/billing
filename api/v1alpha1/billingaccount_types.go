@@ -477,7 +477,8 @@ type BillingAccountContractFee struct {
 	// +kubebuilder:validation:MaxLength=128
 	DisplayName string `json:"displayName,omitempty"`
 
-	// ServiceRef is the service the fee is for.
+	// ServiceRef is the service the fee is for. Empty for a fee that isn't
+	// for any one service.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=253
@@ -490,11 +491,25 @@ type BillingAccountContractFee struct {
 	// +kubebuilder:validation:Enum=OneTime;Recurring
 	ChargeType ChargeType `json:"chargeType"`
 
-	// Amount is the fee as a decimal string in currency (e.g. "2400.00").
+	// Amount is the fee's unit amount as a decimal string in currency (e.g.
+	// "2400.00"). The contract charges it quantity times.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)(\.\d+)?$`
 	Amount string `json:"amount"`
+
+	// Quantity is how many of the fee the contract charges, so the fee
+	// charged is amount times quantity (e.g. 3 × "1000.00").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	Quantity int32 `json:"quantity,omitempty"`
+
+	// PricingUnit is what amount is per (e.g. "port"), so the fee reads
+	// "4 port × $300.00". Empty when the quantity is a count of the fee.
+	//
+	// +kubebuilder:validation:Optional
+	PricingUnit string `json:"pricingUnit,omitempty"`
 
 	// Currency is the ISO 4217 currency code of amount.
 	//

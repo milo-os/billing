@@ -134,6 +134,17 @@ spec:
                         milo-system when empty.
                       maxLength: 63
                       type: string
+                    quantity:
+                      description: |-
+                        Quantity is how many of a OneTime or Recurring fee the Offer charges:
+                        the fee's amount times its quantity, such as three servers at the
+                        same monthly price. Defaults to 1. Not allowed on a Usage pricing,
+                        whose quantity is what was used: the Offer controller won't publish
+                        an Offer that sets it there.
+                      format: int32
+                      maximum: 10000
+                      minimum: 1
+                      type: integer
                   required:
                   - name
                   type: object
@@ -170,6 +181,17 @@ spec:
                       maxLength: 253
                       minLength: 1
                       type: string
+                    quantity:
+                      description: |-
+                        Quantity is how many of a OneTime or Recurring fee the Offer charges,
+                        captured from the reference when the Offer becomes GA: 1 unless the
+                        reference set it. Providers charge the fee's amount times its
+                        quantity, and treat an unset quantity (in a snapshot taken before it
+                        existed) as 1. Unset for Usage pricings.
+                      format: int32
+                      maximum: 10000
+                      minimum: 1
+                      type: integer
                     spec:
                       description: Spec is a deep copy of the source ServicePricingSpec
                         at publish time.
@@ -179,6 +201,20 @@ spec:
                             Amount is the fixed USD decimal string for OneTime and Recurring
                             charges.
                           pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                          type: string
+                        basedOn:
+                          description: |-
+                            BasedOn names the list pricing, in the same namespace, that this
+                            Usage pricing gives a customer their own rates for. Everything but
+                            the rate amounts must match it: serviceRef, metric, pricingUnit,
+                            unitConversion, each rate's match and whether it's flat or tiered,
+                            and tier bounds. Only flat and tier rate values differ. The named
+                            pricing can't itself have basedOn. Usage pricings only.
+
+                            Billing doesn't change with basedOn: it records which list price the
+                            customer's rates replace, so portals can show them side by side.
+                          maxLength: 253
+                          minLength: 1
                           type: string
                         chargeType:
                           description: ChargeType distinguishes Usage, OneTime, and
@@ -217,6 +253,11 @@ spec:
                             PricingUnit is a human-readable billing unit label (e.g. "vcpu",
                             "gib"). Required when chargeType is Usage. Does not need to be the
                             literal UCUM unit string of the meter.
+
+                            Optional for OneTime and Recurring fees, where it labels what the
+                            amount is per (e.g. "port", "kW"), so invoices and portals show a
+                            fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+                            charged.
                           maxLength: 64
                           type: string
                         rates:
@@ -295,7 +336,10 @@ spec:
                         serviceRef:
                           description: |-
                             ServiceRef is the canonical service identifier (e.g.
-                            "compute.datumapis.com").
+                            "compute.datumapis.com"). Required for Usage pricings, where it names
+                            the service that owns the meter. Optional for OneTime and Recurring
+                            fees, which needn't be for any one service, such as a contract's
+                            setup or support fee; when set, it must name a Service.
                           maxLength: 253
                           minLength: 1
                           type: string
@@ -335,7 +379,6 @@ spec:
                       required:
                       - chargeType
                       - currency
-                      - serviceRef
                       type: object
                       x-kubernetes-validations:
                       - message: Usage ServicePricing requires metric, pricingUnit,
@@ -350,6 +393,10 @@ spec:
                       - message: Recurring ServicePricing requires amount and interval
                         rule: self.chargeType != 'Recurring' || (has(self.amount)
                           && has(self.interval))
+                      - message: Usage ServicePricing requires serviceRef
+                        rule: self.chargeType != 'Usage' || has(self.serviceRef)
+                      - message: basedOn is only allowed for Usage ServicePricing
+                        rule: self.chargeType == 'Usage' || !has(self.basedOn)
                   required:
                   - name
                   - spec

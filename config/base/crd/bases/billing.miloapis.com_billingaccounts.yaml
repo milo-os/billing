@@ -349,8 +349,9 @@ spec:
                         fixed fees.
                       properties:
                         amount:
-                          description: Amount is the fee as a decimal string in currency
-                            (e.g. "2400.00").
+                          description: |-
+                            Amount is the fee's unit amount as a decimal string in currency (e.g.
+                            "2400.00"). The contract charges it quantity times.
                           pattern: ^(0|[1-9]\d*)(\.\d+)?$
                           type: string
                         chargeType:
@@ -387,8 +388,22 @@ spec:
                           maxLength: 253
                           minLength: 1
                           type: string
+                        pricingUnit:
+                          description: |-
+                            PricingUnit is what amount is per (e.g. "port"), so the fee reads
+                            "4 port × $300.00". Empty when the quantity is a count of the fee.
+                          type: string
+                        quantity:
+                          description: |-
+                            Quantity is how many of the fee the contract charges, so the fee
+                            charged is amount times quantity (e.g. 3 × "1000.00").
+                          format: int32
+                          minimum: 1
+                          type: integer
                         serviceRef:
-                          description: ServiceRef is the service the fee is for.
+                          description: |-
+                            ServiceRef is the service the fee is for. Empty for a fee that isn't
+                            for any one service.
                           maxLength: 253
                           type: string
                       required:
