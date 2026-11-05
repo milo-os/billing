@@ -139,12 +139,10 @@ then open `/admin/service-catalog/billing-miloapis-com`.
 - `config/components/provider-ui-plugin`: a Deployment and Service serving
   `dist/` over in-cluster TLS (`serve.ts`, cert-manager CSI). Infra adds it
   to the billing manager's Flux Kustomization.
-- Registration comes last, once the Service is serving: set
-  `spec.userInterface.provider.assets.baseURL` in
-  `config/milo/service-configuration.yaml` to
-  `https://billing-provider-ui-plugin.billing-system.svc.cluster.local`.
-  service-catalog fans that out to a `ProviderPortalPlugin`, which
-  staff-portal watches. The URL is in-cluster only; staff-portal fetches the
-  assets server-side and already trusts `datum-control-plane-ca`, so no
-  `caBundle`. Registering before the Deployment runs would point
-  staff-portal's billing Overview at a host that doesn't exist.
+- `config/milo/service-configuration.yaml` sets
+  `spec.userInterface.provider.assets.baseURL` to the Service's in-cluster
+  URL. service-catalog fans that out to a `ProviderPortalPlugin`, which
+  staff-portal watches. staff-portal fetches the assets server-side and
+  already trusts `datum-control-plane-ca`, so there's no `caBundle`. In a new
+  environment, deploy the component before this registration reaches it, or
+  staff-portal's billing Overview points at a host that doesn't exist.
