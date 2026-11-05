@@ -8,9 +8,14 @@
 # the user-visible mutations are create (add a card) and delete (remove it).
 #
 # Audit rules handle CRUD operations captured by the Kubernetes API server audit log.
-# eventRules surface the provider controller's phase transition Events
-# (PaymentMethodAttached, PaymentMethodFailed) so the timeline reflects the
-# asynchronous outcome of card collection without leaking SDK detail.
+# eventRules surface the Events defined in api/v1alpha1/events.go: the
+# provider records PaymentMethodAttached and PaymentMethodFailed when card
+# collection finishes, and billing records PaymentMethodExpiringSoon and
+# PaymentMethodExpired from the card's expiry. They read their detail from
+# event.billing.miloapis.com/ annotations, so no provider SDK text or decline
+# code reaches the timeline, and guard each annotation they read, because a
+# summary that errors sends the event to the dead-letter queue. Cards show as
+# "Visa ending 4242", linked to the PaymentMethod.
 apiVersion: activity.miloapis.com/v1alpha1
 kind: ActivityPolicy
 metadata:
@@ -36,3 +41,34 @@ spec:
     - name: update
       match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
       summary: "{{ actor }} updated payment method {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+  eventRules:
+    # "Visa ending 4242 was added to billing account acme and is ready to use"
+    - name: attached-card
+      match: "event.reason == 'PaymentMethodAttached' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/billing-account' in event.metadata.annotations && 'event.billing.miloapis.com/card-brand' in event.metadata.annotations && 'event.billing.miloapis.com/card-last4' in event.metadata.annotations"
+      summary: "{{ link((event.metadata.annotations['event.billing.miloapis.com/card-brand'] in {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'} ? {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'}[event.metadata.annotations['event.billing.miloapis.com/card-brand']] : 'Card') + ' ending ' + event.metadata.annotations['event.billing.miloapis.com/card-last4'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was added to billing account {{ link(event.metadata.annotations['event.billing.miloapis.com/billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/billing-account']}) }} and is ready to use"
+
+    - name: attached
+      match: "event.reason == 'PaymentMethodAttached' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/billing-account' in event.metadata.annotations"
+      summary: "Payment method {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was added to billing account {{ link(event.metadata.annotations['event.billing.miloapis.com/billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/billing-account']}) }} and is ready to use"
+
+    # "Payment method card-1 could not be added to billing account acme: the card was declined
+    # (insufficient funds)"
+    - name: failed
+      match: "event.reason == 'PaymentMethodFailed' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/billing-account' in event.metadata.annotations"
+      summary: "Payment method {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} could not be added to billing account {{ link(event.metadata.annotations['event.billing.miloapis.com/billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/billing-account']}) }}{{ 'event.billing.miloapis.com/decline-reason' in event.metadata.annotations ? ': ' + (event.metadata.annotations['event.billing.miloapis.com/decline-reason'] in {'Declined': 'the card was declined', 'InsufficientFunds': 'the card was declined (insufficient funds)', 'ExpiredCard': 'the card has expired', 'AuthenticationRequired': 'the card holder did not complete authentication', 'ProcessingError': 'a processing error occurred'} ? {'Declined': 'the card was declined', 'InsufficientFunds': 'the card was declined (insufficient funds)', 'ExpiredCard': 'the card has expired', 'AuthenticationRequired': 'the card holder did not complete authentication', 'ProcessingError': 'a processing error occurred'}[event.metadata.annotations['event.billing.miloapis.com/decline-reason']] : 'the card was declined') : '' }}"
+
+    # "Visa ending 4242 on billing account acme expires at the end of November 2026"
+    - name: expiring-soon
+      match: "event.reason == 'PaymentMethodExpiringSoon' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/billing-account' in event.metadata.annotations && 'event.billing.miloapis.com/card-brand' in event.metadata.annotations && 'event.billing.miloapis.com/card-last4' in event.metadata.annotations && 'event.billing.miloapis.com/card-expiry' in event.metadata.annotations"
+      summary: "{{ link((event.metadata.annotations['event.billing.miloapis.com/card-brand'] in {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'} ? {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'}[event.metadata.annotations['event.billing.miloapis.com/card-brand']] : 'Card') + ' ending ' + event.metadata.annotations['event.billing.miloapis.com/card-last4'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} on billing account {{ link(event.metadata.annotations['event.billing.miloapis.com/billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/billing-account']}) }} expires at the end of {{ ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/card-expiry'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/card-expiry'])).getFullYear()) }}"
+
+    # "Visa ending 4242 on billing account acme has expired"
+    - name: expired
+      match: "event.reason == 'PaymentMethodExpired' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/billing-account' in event.metadata.annotations && 'event.billing.miloapis.com/card-brand' in event.metadata.annotations && 'event.billing.miloapis.com/card-last4' in event.metadata.annotations"
+      summary: "{{ link((event.metadata.annotations['event.billing.miloapis.com/card-brand'] in {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'} ? {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'}[event.metadata.annotations['event.billing.miloapis.com/card-brand']] : 'Card') + ' ending ' + event.metadata.annotations['event.billing.miloapis.com/card-last4'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} on billing account {{ link(event.metadata.annotations['event.billing.miloapis.com/billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/billing-account']}) }} has expired"
+
+    - name: fallback
+      match: "event.reason in ['PaymentMethodAttached', 'PaymentMethodFailed', 'PaymentMethodExpiringSoon', 'PaymentMethodExpired']"
+      summary: "Payment method {{ link(event.regarding.name, event.regarding) }} {{ {'PaymentMethodAttached': 'is ready to use', 'PaymentMethodFailed': 'could not be added', 'PaymentMethodExpiringSoon': 'expires at the end of this month', 'PaymentMethodExpired': 'has expired'}[event.reason] }}"
+

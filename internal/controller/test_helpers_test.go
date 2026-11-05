@@ -99,7 +99,7 @@ func (r *testBillingAccountReconciler) Reconcile(ctx context.Context, req reconc
 	// projection so envtests exercise the same code path.
 	prod := &BillingAccountReconciler{client: r.client}
 	prod.reconcileDefaultPaymentMethodCondition(ctx, &account)
-	if err := prod.reconcileInvoicingCondition(ctx, &account); err != nil {
+	if _, err := prod.reconcileInvoicingCondition(ctx, &account); err != nil {
 		return ctrl.Result{}, err
 	}
 	now := time.Now()

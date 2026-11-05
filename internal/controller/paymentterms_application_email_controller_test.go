@@ -22,8 +22,8 @@ import (
 )
 
 const (
-	emailTestNamespace = "milo-system"
-	emailTestOrgNamespace   = "organization-acme"
+	emailTestNamespace    = "milo-system"
+	emailTestOrgNamespace = "organization-acme"
 )
 
 var emailTestNow = time.Date(2026, time.October, 28, 12, 0, 0, 0, time.UTC)

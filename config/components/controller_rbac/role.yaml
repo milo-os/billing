@@ -7,6 +7,13 @@ rules:
 - apiGroups:
   - ""
   resources:
+  - events
+  verbs:
+  - create
+  - patch
+- apiGroups:
+  - ""
+  resources:
   - namespaces
   verbs:
   - get
@@ -71,11 +78,19 @@ rules:
   - billingarrangements
   - invoices
   - paymentmethodclasses
-  - paymentmethods
   - servicepricings
   verbs:
   - get
   - list
+  - watch
+- apiGroups:
+  - billing.miloapis.com
+  resources:
+  - paymentmethods
+  verbs:
+  - get
+  - list
+  - patch
   - watch
 - apiGroups:
   - coordination.k8s.io

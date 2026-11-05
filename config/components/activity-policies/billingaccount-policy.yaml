@@ -4,7 +4,9 @@
 # Defines how BillingAccount API operations appear in activity timelines.
 #
 # Audit rules handle CRUD operations captured by the Kubernetes API server audit log.
-# No eventRules — the controller sets conditions but does not emit Kubernetes Events.
+# eventRules cover what billing's controller records on the account (see
+# api/v1alpha1/events.go): the account falling past due and becoming current
+# again, and billing making a card the default.
 #
 # Design principles:
 # - Prefer contactInfo.businessName / contactInfo.name as the display label,
@@ -13,6 +15,12 @@
 #   (which carry no requestObject) cleanly degrade to the resource name.
 # - Action-oriented language ("created billing account", ...)
 # - Exclude system actors so controller reconciliation does not generate noise.
+# - Say when a person changes the default payment method, rather than
+#   "updated billing account". Only merge patches that set nothing but
+#   spec.defaultPaymentMethodRef match, so other edits read as updates.
+# - Event rules read their detail from event.billing.miloapis.com/
+#   annotations and guard each one they read, because a summary that errors
+#   sends the event to the dead-letter queue.
 apiVersion: activity.miloapis.com/v1alpha1
 kind: ActivityPolicy
 metadata:
@@ -39,6 +47,37 @@ spec:
       match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
       summary: "{{ actor }} deleted billing account {{ audit.objectRef.name }}"
 
+    # "Jo made payment method visa-4242 the default for billing account acme"
+    - name: set-default-payment-method
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'patch' && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && size(audit.requestObject.spec) == 1 && has(audit.requestObject.spec.defaultPaymentMethodRef) && type(audit.requestObject.spec.defaultPaymentMethodRef) == map && has(audit.requestObject.spec.defaultPaymentMethodRef.name) && type(audit.requestObject.spec.defaultPaymentMethodRef.name) == string && has(audit.objectRef.namespace) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} made payment method {{ link(audit.requestObject.spec.defaultPaymentMethodRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': audit.objectRef.namespace, 'name': audit.requestObject.spec.defaultPaymentMethodRef.name}) }} the default for billing account {{ link(audit.objectRef.name, audit.objectRef) }}"
+
     - name: update
       match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
       summary: "{{ actor }} updated billing account {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+  eventRules:
+    # Billing sets the default itself when an account's only card is confirmed:
+    # "Visa ending 4242 is now the default payment method for billing account acme"
+    - name: default-payment-method-card
+      match: "event.reason == 'DefaultPaymentMethodChanged' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/payment-method' in event.metadata.annotations && 'event.billing.miloapis.com/card-brand' in event.metadata.annotations && 'event.billing.miloapis.com/card-last4' in event.metadata.annotations"
+      summary: "{{ link((event.metadata.annotations['event.billing.miloapis.com/card-brand'] in {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'} ? {'visa': 'Visa', 'mastercard': 'Mastercard', 'amex': 'American Express', 'discover': 'Discover', 'diners': 'Diners Club', 'jcb': 'JCB', 'unionpay': 'UnionPay', 'cartes_bancaires': 'Cartes Bancaires'}[event.metadata.annotations['event.billing.miloapis.com/card-brand']] : 'Card') + ' ending ' + event.metadata.annotations['event.billing.miloapis.com/card-last4'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/payment-method']}) }} is now the default payment method for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }}"
+
+    - name: default-payment-method
+      match: "event.reason == 'DefaultPaymentMethodChanged' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/payment-method' in event.metadata.annotations"
+      summary: "Payment method {{ link(event.metadata.annotations['event.billing.miloapis.com/payment-method'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/payment-method']}) }} is now the default payment method for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }}"
+
+    - name: default-payment-method-fallback
+      match: "event.reason == 'DefaultPaymentMethodChanged' && has(event.regarding.namespace)"
+      summary: "Billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} has a new default payment method"
+
+    # "Billing account acme is past due on invoice acme-2026-10"
+    - name: past-due
+      match: "event.reason == 'InvoicingPastDue' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/invoice' in event.metadata.annotations"
+      summary: "Billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} is past due on invoice {{ link(event.metadata.annotations['event.billing.miloapis.com/invoice'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'invoices', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/invoice']}) }}"
+
+    # "Billing account acme is no longer past due"
+    - name: invoicing-status
+      match: "event.reason in ['InvoicingPastDue', 'InvoicingCurrent'] && has(event.regarding.namespace)"
+      summary: "Billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} {{ event.reason == 'InvoicingPastDue' ? 'is past due' : 'is no longer past due' }}"
+
