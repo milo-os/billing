@@ -1028,7 +1028,7 @@ resync (the 24h cap) covers anything missed.
 | billing | Enforcer (`Full` and `CreateOnly`) and the breaker. | Milo 1–3 |
 | milo | Deletion exemption, `CreateOnly`, the project create gate. | — |
 | email-templates | Six templates. | — |
-| amberflo-provider | `status.paymentFailedAt`, if question 2 picks first failure. | API |
+| openmeter-provider | `status.paymentFailedAt`, if question 2 picks first failure. | API |
 | staff-portal | Standing panel, override actions and the decision queue. | Evaluator |
 | cloud-portal | Banner and error handling. | Evaluator |
 | infra | Config per environment, the Milo feature gate, the billing PolicyBinding for suspensions, and the staff role binding. | Each phase |
