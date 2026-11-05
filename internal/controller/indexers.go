@@ -9,6 +9,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
 const (
@@ -58,6 +59,18 @@ const (
 
 // AddIndexers adds field indexers to the manager for efficient lookups.
 func AddIndexers(ctx context.Context, mgr ctrl.Manager) error {
+	if err := mgr.GetFieldIndexer().IndexField(
+		ctx,
+		&resourcemanagerv1alpha1.Project{},
+		ProjectOwnerOrganizationField,
+		func(obj client.Object) []string {
+			project := obj.(*resourcemanagerv1alpha1.Project)
+			return []string{project.Spec.OwnerRef.Name}
+		},
+	); err != nil {
+		return err
+	}
+
 	if err := mgr.GetFieldIndexer().IndexField(
 		ctx,
 		&billingv1alpha1.BillingAccountBinding{},
