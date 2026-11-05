@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -24,6 +24,7 @@ latest-milestone: "v0"
   - [IAM](#iam)
 - [Future Work](#future-work)
 - [Alternatives](#alternatives)
+- [Implementation History](#implementation-history)
 
 ## Summary
 
@@ -40,8 +41,9 @@ backend. Clients never talk to the backend directly.
 
 ## Motivation
 
-The portal's usage dashboard calls Amberflo's `POST /usage` with a global API
-key, and checks access itself by first listing billing accounts as the user.
+Before this API, the portal's usage dashboard called Amberflo's `POST /usage`
+with a global API key, and checked access itself by first listing billing
+accounts as the user.
 With OpenMeter there is no API key to hand out: OpenMeter's API has no
 authentication, and anyone who can reach it can read and change every
 customer's billing data. Giving the portal network access to it would make the
@@ -255,3 +257,13 @@ A provider's REST storage for `usagequeries`:
 - **A namespaced resource.** Simpler authorization, but it cannot express
   project or platform scope, and staff would need one query per
   organization.
+
+## Implementation History
+
+- 2026-10-13: `UsageQuery` API implemented in billing.
+- 2026-10-14: openmeter-provider serves it from an aggregated API server.
+  Scope rules described as the provider implements them.
+- 2026-10-15: `includeSpend` returns what the usage costs, per meter and in
+  total.
+- 2026-10-19: Usage is converted into each `ServicePricing`'s pricing unit.
+- 2026-10-27: Spend includes the account's Offer discounts.

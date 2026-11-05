@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -354,10 +354,12 @@ status:
       expiryYear: 2028
 ```
 
-**9. Portal sets the default on BillingAccount.**
+**9. The default is set on BillingAccount.**
 
-The portal designates the confirmed payment method as the default on the billing
-account:
+If the account has no default and this is its only `Active` payment method,
+the billing service controller sets it as the default itself, so a
+customer's first card becomes the default without the portal asking. With
+several active cards, the portal designates the one the owner picks:
 
 ```yaml
 spec:
@@ -685,6 +687,12 @@ either controller reconciles.
 admission webhook validates that the referenced payment method exists and is in
 the `Active` phase before accepting the update.
 
+When the account has no default and exactly one `Active` payment method, the
+billing service controller sets `defaultPaymentMethodRef` to it. It never
+replaces an existing default, and leaves the choice to the owner when there
+are several active cards. A payment method can't be deleted while it is the
+account's default.
+
 ### Billing Account Side Effects
 
 Payment methods have direct consequences on the health and capabilities of the
@@ -763,6 +771,25 @@ cleared — the account owner must explicitly designate a new default payment
 method. This preserves intent: the owner chose that instrument and should
 consciously replace it rather than having it silently removed.
 
+**`PaymentReady` condition:**
+
+`DefaultPaymentMethodReady` only covers cards. Since accounts can also pay by
+invoice (see [Billing Arrangements](./billing-arrangements.md)), the billing
+service sets a second condition, `PaymentReady`, that is `True` when the
+account has any way to pay: an active default payment method (reason
+`PaymentMethodReady`) or active invoice terms (reason `InvoiceTerms`).
+Onboarding gates in milo and the portal read `PaymentReady`, not
+`DefaultPaymentMethodReady`.
+
+**Card expiry:**
+
+For `Active` cards the billing service records a `PaymentMethodExpiringSoon`
+Event on the first day of the card's expiry month and `PaymentMethodExpired`
+on the first day after it, once each. They appear on the billing account's
+activity timeline (see [Billing Activity](./billing-activity.md)). Billing
+does this rather than the provider because the expiry is already on
+`PaymentMethod` status, whichever provider confirmed the card.
+
 ### Ownership and Deletion
 
 Provider-specific resources (e.g. `StripePaymentMethod`) carry an
@@ -808,6 +835,16 @@ to read provider-specific CRDs.
 ## Implementation History
 
 - 2026-05-12: Enhancement drafted.
+- 2026-05-20: `PaymentMethod` and `PaymentMethodClass` implemented in
+  billing, with `defaultPaymentMethodRef` and the
+  `DefaultPaymentMethodReady` condition. stripe-provider implements the
+  Stripe flow.
+- 2026-10-06: `PaymentReady` added, so an account on invoice terms counts
+  as able to pay without a card.
+- 2026-10-13: A customer's first card becomes their default payment
+  method automatically.
+- 2026-11-04: Card expiry and payment method changes are recorded on the
+  billing account's activity timeline.
 
 ## Future Work
 

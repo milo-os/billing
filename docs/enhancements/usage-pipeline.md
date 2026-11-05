@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -618,6 +618,13 @@ Provider-specific implementation details — batch semantics, dedup window
 guarantees, customer mapping lifecycle, and API error handling — are covered in
 the provider's own enhancement document.
 
+Today the submission controller is openmeter-provider's `submission-consumer`,
+which submits to OpenMeter. It replaced amberflo-provider's when Amberflo was
+retired on 2026-10-23, and kept its metric names. It sets each event's subject
+to the UID of the `BillingAccount` billing attributed it to, which is the
+account's OpenMeter customer key. Its outcomes and how to diagnose them are in
+the [usage metering runbook](../runbooks/usage-metering.md).
+
 ### Observability
 
 Pipeline components are instrumented using the [OpenTelemetry][otel-metrics] Go
@@ -682,7 +689,22 @@ alerts, not resource conditions.
 ## Implementation History
 
 - 2026-04-28: Initial enhancement proposal
+- 2026-04-30: Ingestion gateway implemented behind the Vector Agent.
+- 2026-05-01: Central validation and attribution implemented.
+- 2026-05-13: A usage generator emits synthetic usage in development.
+- 2026-06-15: `project_name` injected as a system dimension on valid events.
 - 2026-07-09: Add phase suffixes to NATS message IDs to prevent stream-level deduplication collisions
+- 2026-07-22: A flag skips quarantine on attribution failures.
+- 2026-09-02: The gateway drops usage for projects with no billable account
+  before it reaches NATS, after `attribution_failure` events flooded
+  JetStream in production.
+- 2026-09-03: Non-integer usage values are quarantined (`invalid_value`) and
+  alerted on.
+- 2026-10-05: openmeter-provider's submission consumer implemented.
+- 2026-10-23: amberflo-provider retired; openmeter-provider submits all usage
+  from then on.
+- 2026-11-03: The emission SDK accepts an `IdempotencyKey`, so a service can
+  give an event a deterministic ID and re-emitting it is deduplicated.
 
 ## Drawbacks
 
