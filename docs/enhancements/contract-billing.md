@@ -15,6 +15,8 @@ latest-milestone: "v0"
   - [Contract Start Date](#contract-start-date)
   - [Moving an Account onto a Contract](#moving-an-account-onto-a-contract)
   - [Amending a Contract](#amending-a-contract)
+  - [Contract Fees](#contract-fees)
+  - [Contract Usage Pricing](#contract-usage-pricing)
   - [Invoice Requests](#invoice-requests)
   - [Setting Up a Contract](#setting-up-a-contract)
   - [What Customers See](#what-customers-see)
@@ -25,6 +27,8 @@ latest-milestone: "v0"
   - [Activity](#activity)
 - [Next Steps](#next-steps)
   - [End of Term](#end-of-term)
+  - [Contract Rates for Customers](#contract-rates-for-customers)
+  - [Minimum Spend Commitments](#minimum-spend-commitments)
 - [Alternatives](#alternatives)
 - [Implementation History](#implementation-history)
 
@@ -52,6 +56,18 @@ Two things are missing, and this enhancement adds them:
   reaches the customer. The first invoice itself is sent automatically when the
   contract starts.
 
+A contract's charges also need to fit what was negotiated, and this enhancement
+covers that too:
+
+- **Fees without a service.** A `OneTime` or `Recurring` pricing no longer has
+  to name a catalog service, since a setup or support fee often isn't for any
+  one service.
+- **Fee quantities.** An Offer can charge a fee more than once, such as three
+  servers at $1,000 a month, with `quantity` on its pricing reference.
+- **Usage pricing chosen per contract.** Staff pick the platform's usage
+  pricings for a contract directly, rather than copying another Offer's, and
+  can give the customer their own rates with a pricing based on the list one.
+
 ## Motivation
 
 Without a start date, a contract starting on 18 April but entered on 20 March
@@ -65,6 +81,19 @@ Staff also have no way to see what a new contract will invoice before the first
 invoice reaches the customer. Doing so today means using the billing provider
 directly, which the epic rules out.
 
+A contract's fees and rates are also harder to set up than they should be:
+
+- Every fee must name a service, so a contract for something without a catalog
+  service, such as bare metal or support, needs a Service registered just to
+  give its fees a name.
+- A fee can be charged only once per contract. Three identical servers need
+  three pricings, and three identical invoice lines.
+- A contract that bills usage copies the usage pricings of a published Offer.
+  A customer who negotiated one rate, such as a lower vCPU price, needs an
+  Offer made for them first, and the
+  [pricing enhancement](https://github.com/datum-cloud/enhancements/pull/932)
+  sends prices negotiated for one customer through a PR to infra.
+
 ### Goals
 
 - Let a contract set the day its charges start and bill on.
@@ -75,11 +104,19 @@ directly, which the epic rules out.
   the staff portal, without access to the billing provider.
 - Keep `Invoice` provider-written: a request leads to an invoice, but only the
   provider creates `Invoice` resources.
+- Let a contract charge fees that aren't for a catalog service, and charge a
+  fee more than once.
+- Let staff choose a contract's usage pricings, and set a customer's own usage
+  rates, from the staff portal.
 
 ### Non-Goals
 
 - Ending or renewing a contract at the end of its term. Decided below, built
   next.
+- Minimum spend commitments, where a customer commits to spending an amount
+  over the term. See [Minimum Spend Commitments](#minimum-spend-commitments).
+- Changing how a customer's usage is measured. A customer's own rates price the
+  same meter in the same units as the list pricing.
 - Letting customers request invoices.
 - Invoicing usage on request. Usage stays on the normal cycle.
 
@@ -121,8 +158,9 @@ without a contract are unchanged: charges start when the entitlement is created
 and bill on the 1st.
 
 The Offer can be any mix of pricings. A contract that's only a set fee has a
-`OneTime` and a `Recurring` pricing; one that also bills usage adds the
-platform's `Usage` pricings to the same Offer.
+`OneTime` and a `Recurring` pricing; one that also bills usage adds `Usage`
+pricings to the same Offer, the platform's or the customer's own (see
+[Contract Usage Pricing](#contract-usage-pricing)).
 
 `contract` is a struct so the term and what happens at its end can join it (see
 [End of Term](#end-of-term)).
@@ -158,10 +196,11 @@ such as the account's discounts in its status, shows the contract's Offer early.
 
 ### Amending a Contract
 
-Changing a contract's charges, such as its monthly fee, means a new Offer and
-pointing `offerRef` at it. For an entitlement with a contract that has started,
-the provider applies the new Offer from the account's next billing date: the
-current month is billed as agreed, and each invoice carries one price.
+Changing a contract's charges, such as its monthly fee, a fee's quantity or a
+usage rate, means a new Offer and pointing `offerRef` at it. For an entitlement
+with a contract that has started, the provider applies the new Offer from the
+account's next billing date: the current month is billed as agreed, and each
+invoice carries one price.
 Entitlements without a contract still change immediately, as an account
 switching Offers in the portal expects.
 
@@ -169,6 +208,133 @@ The amended Offer leaves out one-time fees already charged, such as the setup
 fee. Providers charge a `OneTime` pricing when the Offer's charges start, which
 for openmeter-provider means whenever the account's subscription changes plan,
 so keeping the setup fee in would charge it again.
+
+### Contract Fees
+
+A contract's fees are `OneTime` and `Recurring` `ServicePricing`s, which staff
+create for the contract or reuse across contracts.
+
+**Fees don't need a service.** `serviceRef` is optional on `OneTime` and
+`Recurring` pricings. A setup fee, a support fee or a rack fee often isn't for
+any one catalog service, and a contract shouldn't need a Service registered
+just to give its fees one to name. When a fee sets `serviceRef`, it must still
+name a Service. `Usage` pricings still require it, since it must name the
+service that owns the meter.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: dedicated-server-1000
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  currency: USD
+  displayName: Dedicated server
+  amount: "1000.00"
+  interval: monthly
+```
+
+**Fees have a quantity.** An Offer's `servicePricingRefs[].quantity` says how
+many of a fee the contract charges. It's a whole number from 1 to 10,000,
+defaulting to 1, and it's copied into the Offer's snapshot on publish, like the
+reference's discount.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: contract-ba-acme-20261105120000
+spec:
+  launchStage: GA
+  chargeTypes: [OneTime, Recurring]
+  servicePricingRefs:
+    - name: contract-ba-acme-20261105120000-fee-1   # Setup fee, $1,500
+    - name: dedicated-server-1000
+      quantity: 3
+```
+
+- A pricing is a unit price, and how many the customer takes belongs to the
+  contract. So three servers at $1,000 a month are one pricing with quantity 3,
+  and one "Dedicated server" pricing can serve any number of contracts.
+- An Offer can't list the same pricing twice (its references are keyed by
+  name), so quantity is how a fee is charged more than once.
+- The fee charged is its amount times its quantity. The invoice line is named
+  with the quantity, such as "Dedicated server × 3", for $3,000.00, and the
+  reference's discount applies to that total.
+- `quantity` is for fees only. The Offer controller refuses to publish an Offer
+  that sets it on a `Usage` pricing, whose quantity is what was used.
+
+### Contract Usage Pricing
+
+A contract that bills usage lists `Usage` pricings in its Offer, next to its
+fees. Today the staff portal copies them from a published Offer. Instead, staff
+choose them directly, and can set the customer's own rates.
+
+**Choosing pricings.** The staff portal lists the platform's usage pricings by
+service, newest first for each meter, with the default Offer's selection ticked
+to start from. Customer pricings, those with a `basedOn`, aren't listed. Staff
+tick the ones the contract bills, and can give each a discount, as references
+already allow. Nothing ties the contract's Offer to another Offer: like any
+Offer, it lists any usage pricings, one per meter.
+
+**Customer rates.** When a customer negotiates a rate rather than a percentage
+off, staff create a `Usage` pricing for them: a copy of the list pricing with
+its rates changed, and `basedOn` naming the list pricing. The contract's Offer
+lists it in place of the list pricing.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: contract-ba-acme-20261105120000-compute-vcpu
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  basedOn: compute-vcpu-v1
+  serviceRef: compute.datumapis.com
+  currency: USD
+  displayName: Compute vCPU
+  metric: compute.datumapis.com/instance/milli-cpu-seconds
+  pricingUnit: vcpu-second
+  unitConversion:
+    meterUnitsPerPricingUnit: "1000"
+    description: >-
+      CPU is metered in millicore-seconds and priced per vCPU-second;
+      1 vCPU = 1000 millicores.
+  rates:
+    - match:
+        dimension: runtime_class
+        value: general-purpose
+      flat: "0.000011"   # list: 0.000014
+    - flat: "0.000011"
+```
+
+- A customer pricing is the list pricing with different amounts. `basedOn`
+  names a `Usage` pricing in the same namespace, and everything but the
+  amounts must match it: the meter, the pricing unit and its conversion, the
+  dimension matches in the same order, and the tier bounds. Only `flat` and
+  tier `rate` values change, so the customer's usage is measured and grouped
+  exactly as the list price's is.
+- `basedOn` can't name a pricing that has a `basedOn` of its own, so it always
+  names a list price.
+- The Offer's one-price-per-meter rule already keeps a contract from listing a
+  customer pricing and its list pricing together.
+- The staff portal uses `basedOn` to show each rate beside the list rate.
+  Providers rate the snapshot as they would any other: `basedOn` changes
+  nothing about billing.
+- Invoices show the contract rate as the price. A discount instead shows the
+  list price, the discount and the net amount, so it remains the better choice
+  when the customer expects to see list prices.
+- Like any pricing, a customer pricing can't be changed once created. A new
+  rate is a new pricing in a new Offer, applied from the next billing date.
+
+Customer pricings are made in the staff portal, as contract fees already are.
+This replaces the [pricing enhancement](https://github.com/datum-cloud/enhancements/pull/932)'s
+rule that prices negotiated for one customer go in a private directory in
+infra: they reach Milo without a PR, stay out of the public service repos, and
+are still checked against their meter on save. The pricing enhancement will be
+updated to match.
 
 ### Invoice Requests
 
@@ -233,9 +399,11 @@ In the staff portal, on the customer's billing account:
 
 1. **Payment terms.** Grant invoice terms with a `BillingArrangement`, with the
    contract's PO number and agreement reference, which print on every invoice.
-2. **Offer.** Create the customer's pricings for the setup fee and the monthly
-   charge, and an Offer with them, plus the platform's usage pricings if the
-   contract bills usage too. Publish the Offer and point the account's
+2. **Offer.** List the contract's fees, each with its amount, how it's charged
+   and how many, and a service only if it's for one. Tick the usage pricings
+   the contract bills, if any, with a discount or the customer's own rates for
+   each. The portal creates the pricings the contract needs, an Offer with them
+   and the usage pricings, publishes it and points the account's
    `BillingEntitlement` at it, adding the contract's start date.
 3. **Check.** Before the start date, create a `Preview` request and compare the
    first invoice's lines with the contract.
@@ -262,11 +430,11 @@ status:
         chargeType: OneTime
         amount: "5000.00"
         currency: USD
-      - name: acme-monthly
-        displayName: Monthly fee
-        serviceRef: compute.datumapis.com
+      - name: dedicated-server-1000
+        displayName: Dedicated server
         chargeType: Recurring
-        amount: "2400.00"
+        amount: "1000.00"
+        quantity: 3
         currency: USD
         interval: monthly
     usageBilled: true
@@ -275,6 +443,9 @@ status:
 - It's set as soon as the contract is added, so a customer moving onto one sees
   it before it starts. Fees are before discounts, which stay in
   `status.discounts`.
+- Each fee's `amount` is its unit amount, and `quantity` how many the contract
+  charges, so the portal shows "3 × $1,000.00". A fee without a service has no
+  `serviceRef`.
 - An amended contract shows the new Offer's fees as soon as `offerRef` changes,
   although they're billed from the next billing date, and leaves out the
   one-time fees already charged.
@@ -297,6 +468,24 @@ The `InvoiceRequest` webhook adds an owner reference to the billing account and
 checks it exists in the same namespace and isn't being deleted. A CEL rule makes
 the spec immutable; `mode` is an enum of `Preview` and `Issue`.
 
+For `ServicePricing`:
+
+- A CEL rule requires `serviceRef` on `Usage` pricings only. The webhook checks
+  that a fee's `serviceRef` names a Service when it's set, as before.
+- `basedOn` is allowed on `Usage` pricings only (CEL). The webhook checks that
+  it names a `Usage` pricing in the same namespace that has no `basedOn` of its
+  own, with the same `serviceRef`, `metric`, `pricingUnit` and
+  `unitConversion`, the same number of rates with the same `match` in the same
+  order, and, rate by rate, flat where it's flat and the same tier `upTo`
+  bounds where it's tiered. The usual meter checks apply too.
+
+For `Offer`:
+
+- `servicePricingRefs[].quantity` is a whole number from 1 to 10,000.
+- The Offer controller refuses to publish an Offer with `quantity` on a `Usage`
+  pricing, as it refuses one that prices a meter twice, and copies `quantity`
+  into each fee's snapshot, defaulting to 1.
+
 ### Provider Requirements
 
 An invoicing provider:
@@ -318,6 +507,16 @@ An invoicing provider:
     fails with `NothingToInvoice` rather than creating an empty invoice.
 - Marks requests it can't fulfil `Failed` with reason `Unsupported`, rather than
   leaving them `Pending`.
+- Charges a fee's amount times its snapshot `quantity`, in invoices and
+  previews alike, naming the line with the quantity when it's more than 1.
+- Doesn't need `serviceRef` on a fee.
+
+OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
+the rate card's amount to the fee's amount times its quantity and adds the
+quantity to its name ("Dedicated server × 3"). Rate card keys stay per pricing,
+so a fee keeps its key when only its quantity changes. Fees without a service
+leave it out of the rate card's description. Customer usage pricings need no
+change: the provider rates their snapshot like any other.
 
 For openmeter-provider, the start date becomes the subscription's billing
 anchor, and the provider subscribes the account on that day (straight away for
@@ -350,8 +549,10 @@ binding. Customers aren't granted either.
 A contract's fees are its own `ServicePricing`s, which staff create.
 `Service Pricing Admin` would also let them change or delete the platform's
 pricings, so `Service Pricing Creator` grants `create` (and read) only. Once
-created, a pricing's spec is immutable, so a change of fee is a new pricing. The invoicing provider needs read
-access to requests and write access to their status.
+created, a pricing's spec is immutable, so a change of fee is a new pricing.
+Customer usage pricings are created with the same role, so no new one is
+needed. The invoicing provider needs read access to requests and write access
+to their status.
 
 ### Activity
 
@@ -381,6 +582,23 @@ is still running, without anyone deciding to.
 Continuing past the term also needs the account to stay payable: if its invoice
 terms end with the contract, the renewal flag covers them too.
 
+### Contract Rates for Customers
+
+`status.contract` says whether a contract bills usage, but not at what rates.
+A customer with their own rates will want to see them beside the list price,
+so a later change can add the contract's usage rates, with the list rate from
+`basedOn`, to `status.contract`.
+
+### Minimum Spend Commitments
+
+The [platform enhancement](https://github.com/datum-cloud/enhancements/blob/main/enhancements/platform/README.md)
+sketches commitments: a customer commits to spending an amount over a term,
+often for a discount, with any shortfall invoiced at the end. That's different
+from a contract's fees, which are charged whatever is used, and it isn't built.
+OpenMeter rate cards already carry minimum and maximum spend commitments, which
+a later design can build on, with the commitment held on the entitlement's
+`contract` beside its term.
+
 ## Alternatives
 
 **Letting consumers create `Invoice`s.** [Invoicing](./invoicing.md) rejected
@@ -400,6 +618,25 @@ when payment terms apply, which needn't match when charges start: a contract
 customer might pay by card. The start date belongs with the Offer assignment
 that the charges come from.
 
+**A catalog Service for contract fees.** Registering a "contract" or "bare
+metal" Service would give every fee a `serviceRef` without an API change, but
+it's a Service that serves nothing, and customers would see its name on fees
+it has nothing to do with.
+
+**Quantity on the `ServicePricing`.** A pricing's spec is its unit price, and
+one pricing can be used by several contracts, each with its own quantity. Like
+a discount, how many a contract charges belongs on the Offer's reference.
+
+**Listing a fee more than once.** References are keyed by name, and charging
+three servers as three lines would repeat the same line on every invoice.
+
+**Rate overrides on the Offer's reference.** Overriding a usage pricing's rates
+on `servicePricingRefs` would save creating a pricing, but prices would then
+live in two places, the snapshot would have to merge them, and the webhook's
+meter checks wouldn't see the rates that are billed. A customer pricing keeps
+"a new price is a new `ServicePricing`", and `basedOn` keeps its link to the
+list price.
+
 ## Implementation History
 
 - 2026-11-02: Enhancement drafted, with the contract start date and
@@ -413,3 +650,6 @@ that the charges come from.
   the next billing date. Added the `Service Pricing Creator` role.
 - 2026-11-04: Contracts are published on `BillingAccount.status.contract` for
   customers, and billing cycles follow a started contract's billing day.
+- 2026-11-05: Fees can leave out the service and carry a quantity on the
+  Offer's reference. Staff choose a contract's usage pricings directly, and set
+  a customer's own rates with a `Usage` pricing `basedOn` the list one.
