@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -739,6 +739,12 @@ Two gaps to close along the way:
   work and the plan for milo's emails and the Help Scout ticket.
 - 2026-11-02: The application emails moved from milo to billing, which owns
   applications and their decisions, so milo no longer depends on billing.
+- 2026-11-05: Recorded where delivery stands. Phases 1 and 2 are built.
+  Phase 3's automated invoicing shipped with openmeter-provider: since
+  2026-10-28 an account on invoice terms is invoiced through the Stripe
+  customer stripe-provider publishes for it, with no card. Credit-limit
+  alerts and phase 4 are not built. Customer applications are behind
+  cloud-portal's `PAYMENT_TERMS_ENABLED` setting.
 
 ## Future Work
 

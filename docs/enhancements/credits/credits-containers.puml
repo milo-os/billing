@@ -15,8 +15,7 @@ System_Boundary(portals, "Portals") {
 
 System_Boundary(milo, "Milo control plane") {
     Container(apiserver, "Milo API server", "Kubernetes API", "Stores CreditGrant, BillingAccount, Invoice; forwards usage.billing.miloapis.com to the billing provider")
-    Container(billing, "billing", "Go, webhooks", "CreditGrant and BillingAccountBalance types; CreditGrant validation (immutable, one-way void)")
-    Container(servicecatalog, "service-catalog", "Go, controller", "signupCredit: one CreditGrant per new billing account")
+    Container(billing, "billing", "Go, webhooks, controller", "CreditGrant and BillingAccountBalance types; CreditGrant validation (immutable, one-way void); signupCredit on Offer: one CreditGrant per organization")
 }
 
 System_Boundary(provider, "Billing provider (any implementation)") {
@@ -32,7 +31,7 @@ Rel(customer, cloudportal, "Billing page")
 Rel(staffportal, apiserver, "Create / update CreditGrant", "HTTPS")
 Rel(cloudportal, apiserver, "GET BillingAccountBalance, list Invoices", "HTTPS, user token")
 Rel(apiserver, billing, "Admission", "webhook")
-Rel(servicecatalog, apiserver, "Create CreditGrant", "HTTPS")
+Rel(billing, apiserver, "Create signup CreditGrant", "HTTPS")
 Rel(controllers, apiserver, "Watch CreditGrant; write status, Invoice", "HTTPS")
 Rel(apiserver, usageapi, "Forward balance reads", "APIService")
 Rel(controllers, backend, "Grant, void, state")
