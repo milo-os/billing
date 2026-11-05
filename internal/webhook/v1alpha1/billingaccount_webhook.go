@@ -59,6 +59,7 @@ func (r *billingAccountWebhook) ValidateCreate(ctx context.Context, obj *billing
 
 	errs := validation.ValidateBillingAccountCreate(obj)
 	errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.reader, obj)...)
+	errs = append(errs, validation.ValidateBillingAccountDefaultForNewProjects(ctx, r.reader, obj)...)
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(
 			obj.GetObjectKind().GroupVersionKind().GroupKind(),
@@ -77,6 +78,9 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 	errs := validation.ValidateBillingAccountUpdate(oldObj, newObj)
 	if !defaultPaymentMethodRefUnchanged(oldObj, newObj) {
 		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.reader, newObj)...)
+	}
+	if newObj.Spec.DefaultForNewProjects && !oldObj.Spec.DefaultForNewProjects {
+		errs = append(errs, validation.ValidateBillingAccountDefaultForNewProjects(ctx, r.reader, newObj)...)
 	}
 	if len(errs) > 0 {
 		return nil, errors.NewInvalid(

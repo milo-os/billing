@@ -39,7 +39,8 @@ billing/
 │   ├── components/               # Optional components
 │   └── overlays/                 # Environment-specific
 ├── hack/                         # Scripts and boilerplate
-└── test/e2e/                     # Chainsaw E2E tests
+├── test/e2e/                     # Chainsaw E2E tests
+└── ui/provider/                  # staff-portal plugin: fleet billing overview (Node 26 + pnpm; see its README)
 ```
 
 ## Key Design Decisions

@@ -1,0 +1,19 @@
+apiVersion: resourcemanager.miloapis.com/v1alpha1
+kind: Project
+metadata:
+  name: autobind-web
+spec:
+  ownerRef:
+    kind: Organization
+    name: e2e-autobind
+---
+apiVersion: resourcemanager.miloapis.com/v1alpha1
+kind: Project
+metadata:
+  name: autobind-canary
+  annotations:
+    billing.miloapis.com/auto-bind: "false"
+spec:
+  ownerRef:
+    kind: Organization
+    name: e2e-autobind

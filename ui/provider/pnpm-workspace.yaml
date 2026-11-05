@@ -1,0 +1,10 @@
+# pnpm settings for the plugin (pnpm reads its own settings here, not from
+# .npmrc). Not a workspace: there is one package.
+
+# Refuse to install on a Node or pnpm version outside package.json's engines.
+engineStrict: true
+
+# Dependencies allowed to run install scripts; pnpm refuses any other.
+# esbuild's checks its platform binary (Vite's bundler).
+allowBuilds:
+  esbuild: true

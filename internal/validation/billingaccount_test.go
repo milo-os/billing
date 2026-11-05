@@ -390,3 +390,37 @@ func TestValidateBillingAccountPaymentTermsLocked(t *testing.T) {
 		})
 	}
 }
+
+func TestValidateBillingAccountDefaultForNewProjects(t *testing.T) {
+	account := func(name string, isDefault bool) *billingv1alpha1.BillingAccount {
+		return &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: "organization-acme"},
+			Spec:       billingv1alpha1.BillingAccountSpec{CurrencyCode: "USD", DefaultForNewProjects: isDefault},
+		}
+	}
+	now := metav1.Now()
+	leaving := account("leaving", true)
+	leaving.DeletionTimestamp = &now
+	leaving.Finalizers = []string{"test"}
+
+	for _, tc := range []struct {
+		name     string
+		existing []client.Object
+		account  *billingv1alpha1.BillingAccount
+		wantErr  bool
+	}{
+		{name: "not the default", existing: []client.Object{account("other", true)}, account: account("new", false)},
+		{name: "the only default", existing: []client.Object{account("other", false)}, account: account("new", true)},
+		{name: "already the default itself", existing: []client.Object{account("new", true)}, account: account("new", true)},
+		{name: "a deleting default doesn't count", existing: []client.Object{leaving}, account: account("new", true)},
+		{name: "a second default", existing: []client.Object{account("other", true)}, account: account("new", true), wantErr: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			c := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(tc.existing...).Build()
+			errs := ValidateBillingAccountDefaultForNewProjects(context.Background(), c, tc.account)
+			if (len(errs) > 0) != tc.wantErr {
+				t.Errorf("errors = %v, wantErr %v", errs, tc.wantErr)
+			}
+		})
+	}
+}

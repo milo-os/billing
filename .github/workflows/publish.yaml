@@ -18,11 +18,30 @@ jobs:
       platforms: linux/amd64,linux/arm64
     secrets: inherit
 
-  # The bundle pins the image tag, and Flux rolls out new bundles within a
-  # minute of publishing. Publish it only after the image exists so pods never
-  # roll out against a tag that has not been pushed yet.
+  # billing's staff-portal plugin (ui/provider), deployed by
+  # config/components/provider-ui-plugin.
+  publish-provider-ui-plugin-image:
+    permissions:
+      id-token: write
+      contents: read
+      packages: write
+    uses: datum-cloud/actions/.github/workflows/publish-docker.yaml@v1.26.0
+    with:
+      image-name: billing-provider-ui-plugin
+      registry-organization: milo-os
+      context: ui/provider
+      dockerfile-path: ui/provider/Dockerfile
+      platforms: linux/amd64,linux/arm64
+    secrets: inherit
+
+  # The bundle pins the image tags, and Flux rolls out new bundles within a
+  # minute of publishing. Publish it only after the images exist so pods never
+  # roll out against a tag that has not been pushed yet. `images:` stamps each
+  # path with its own image: the manager's paths with billing, the plugin's
+  # with the plugin. No entry pins a tag, so each gets the bundle's own
+  # version, as the single `image-name` input did before.
   publish-kustomize-bundles:
-    needs: publish-container-image
+    needs: [publish-container-image, publish-provider-ui-plugin-image]
     permissions:
       id-token: write
       contents: read
@@ -31,6 +50,10 @@ jobs:
     with:
       bundle-name: ghcr.io/milo-os/billing-kustomize
       bundle-path: config
-      image-overlays: config/base/manager,config/base/gateway,config/components/usage-generator,config/components/mcp-server
-      image-name: ghcr.io/milo-os/billing
+      images: |
+        - { path: config/base/manager, name: ghcr.io/milo-os/billing }
+        - { path: config/base/gateway, name: ghcr.io/milo-os/billing }
+        - { path: config/components/usage-generator, name: ghcr.io/milo-os/billing }
+        - { path: config/components/mcp-server, name: ghcr.io/milo-os/billing }
+        - { path: config/components/provider-ui-plugin, name: ghcr.io/milo-os/billing-provider-ui-plugin }
     secrets: inherit

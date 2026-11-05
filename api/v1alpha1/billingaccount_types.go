@@ -107,6 +107,14 @@ type BillingAccountSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	DefaultPaymentMethodRef *DefaultPaymentMethodRef `json:"defaultPaymentMethodRef,omitempty"`
+
+	// DefaultForNewProjects makes this the account the organization's new
+	// projects are billed to when it has more than one billing account.
+	// With only one, new projects are billed to it either way. At most one
+	// account in an organization can set it.
+	//
+	// +kubebuilder:validation:Optional
+	DefaultForNewProjects bool `json:"defaultForNewProjects,omitempty"`
 }
 
 // BillingAddress is a postal billing address. Country is required;
