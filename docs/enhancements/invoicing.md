@@ -396,7 +396,8 @@ latest `Invoice` is `PastDue`.
 `InvoicingReady` doesn't affect `BillingAccount` phase — it's a health signal
 downstream consumers gate on, not a lifecycle failure. Whether sustained
 `PastDue` should drive suspension is a policy decision for a separate
-enhancement.
+enhancement: [What Happens When a Customer Doesn't Pay](nonpayment-suspension.md),
+tracked in [#219](https://github.com/milo-os/billing/issues/219).
 
 ### Ownership and Deletion
 
@@ -458,7 +459,9 @@ grant in this design, and it's scoped to a single field.
   one-off RBAC grants.
 - **Invoice line-item detail.** A normalized line-item schema, if backend
   services need it, balanced against keeping `Invoice` provider-agnostic.
-- **Suspension policy on sustained `PastDue`** — a dedicated enhancement.
+- **Suspension policy on sustained `PastDue`** — now its own enhancement,
+  [What Happens When a Customer Doesn't Pay](nonpayment-suspension.md),
+  tracked in [#219](https://github.com/milo-os/billing/issues/219).
 - **Reconciliation job for provider/payment divergence.** Compare a
   provider's reported payment status against the underlying payment
   processor's own record, surfacing a condition rather than trusting a

@@ -157,6 +157,14 @@ one):
 
 ### Account Suspension
 
+> [!NOTE]
+> Suspension for non-payment is in progress, tracked in
+> [#219](https://github.com/milo-os/billing/issues/219) and designed in
+> [What Happens When a Customer Doesn't Pay](enhancements/nonpayment-suspension.md).
+> The account's payment standing is worked out from overdue invoices. Growth
+> is paused first (`Restricted`), then service (`Suspended`, through Milo
+> `ProjectSuspension`s), and paying restores the account automatically.
+
 A customer's payment method fails repeatedly. The service provider suspends
 the billing account:
 
