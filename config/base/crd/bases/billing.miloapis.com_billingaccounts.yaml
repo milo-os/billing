@@ -156,6 +156,13 @@ spec:
                   This field is immutable once the account transitions past Provisioning phase.
                 pattern: ^[A-Z]{3}$
                 type: string
+              defaultForNewProjects:
+                description: |-
+                  DefaultForNewProjects makes this the account the organization's new
+                  projects are billed to when it has more than one billing account.
+                  With only one, new projects are billed to it either way. At most one
+                  account in an organization can set it.
+                type: boolean
               defaultPaymentMethodRef:
                 description: |-
                   DefaultPaymentMethodRef references the PaymentMethod to use by

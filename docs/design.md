@@ -128,6 +128,15 @@ Key properties:
 - **Account must be Ready.** You can only bind a project to a billing account
   that has been fully set up (has a payment profile, is not suspended or
   archived).
+- **Every project gets one.** Billing binds a project that has no binding to
+  its organization's billing account, however the project was created (the
+  portal, datumctl, the API or automation). With several accounts, it uses the
+  one marked `defaultForNewProjects`; with several and none marked, it leaves
+  the project unbound rather than guess. A project created before its
+  organization has a Ready account is bound once one is. Billing never moves a
+  project that's already bound, and skips projects annotated
+  `billing.miloapis.com/auto-bind: "false"` (internal canaries, say). The
+  operator config's `disableProjectAutoBinding` turns this off.
 
 ## User Journeys
 
@@ -139,7 +148,8 @@ can start using services, they need to set up billing:
 1. Create a billing account with their preferred currency
 2. Attach a payment method (credit card)
 3. Optionally configure payment terms and billing contact
-4. Bind their project(s) to the billing account
+4. Their projects are bound to the billing account: billing binds each one as
+   the account becomes Ready, and new projects as they're created
 
 At this point, the organization is ready to consume services and be charged
 for usage.
