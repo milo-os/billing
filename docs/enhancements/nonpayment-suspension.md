@@ -194,7 +194,9 @@ pauses every service cleanly and restores it, so we reuse it.
 
 ## Appendix: How It Works
 
-For engineers; the proposal above doesn't depend on these details.
+For engineers; the proposal above doesn't depend on these details. The
+full technical design is in
+[nonpayment-suspension/architecture.md](./nonpayment-suspension/architecture.md).
 
 - **Knowing an account is overdue.** Billing already marks invoices `PastDue`
   after their due date, and sets `InvoicingReady=False` on the account. The
@@ -229,3 +231,5 @@ For engineers; the proposal above doesn't depend on these details.
 - 2026-11-03: Enhancement drafted.
 - 2026-11-03: Rewritten around customers, staff and scenarios. Technical
   detail moved to the appendix.
+- 2026-11-05: Architecture added in
+  [nonpayment-suspension/architecture.md](./nonpayment-suspension/architecture.md).
