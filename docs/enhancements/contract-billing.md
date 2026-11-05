@@ -265,6 +265,32 @@ spec:
 - `quantity` is for fees only. The Offer controller refuses to publish an Offer
   that sets it on a `Usage` pricing, whose quantity is what was used.
 
+**Fees can have a unit.** A fee may set `pricingUnit`, the unit its amount is
+per, as a `Usage` pricing does. It's a label only: it doesn't change what's
+charged. When set, invoices and portals show the quantity in that unit, so a
+fee charged per port reads "Cross connect: 4 port × $300.00" rather than
+"Cross connect × 4". Without it, the quantity is a count of the fee.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: cross-connect-300
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  currency: USD
+  displayName: Cross connect
+  amount: "300.00"
+  interval: monthly
+  pricingUnit: port
+```
+
+- The unit belongs to the pricing, since it's what the amount is per, and
+  like the rest of the spec it can't be changed once created.
+- It's a short label such as `port`, `kW` or `rack`, shown as written, so
+  staff choose the form that reads well after a number.
+
 ### Contract Usage Pricing
 
 A contract that bills usage lists `Usage` pricings in its Offer, next to its
@@ -444,8 +470,8 @@ status:
   it before it starts. Fees are before discounts, which stay in
   `status.discounts`.
 - Each fee's `amount` is its unit amount, and `quantity` how many the contract
-  charges, so the portal shows "3 × $1,000.00". A fee without a service has no
-  `serviceRef`.
+  charges, so the portal shows "3 × $1,000.00", or "4 port × $300.00" for a fee
+  with a `pricingUnit`. A fee without a service has no `serviceRef`.
 - An amended contract shows the new Offer's fees as soon as `offerRef` changes,
   although they're billed from the next billing date, and leaves out the
   one-time fees already charged.
@@ -472,6 +498,8 @@ For `ServicePricing`:
 
 - A CEL rule requires `serviceRef` on `Usage` pricings only. The webhook checks
   that a fee's `serviceRef` names a Service when it's set, as before.
+- `pricingUnit` stays required on `Usage` pricings and optional on fees. The
+  schema already accepts it on fees, so nothing changes but its meaning.
 - `basedOn` is allowed on `Usage` pricings only (CEL). The webhook checks that
   it names a `Usage` pricing in the same namespace that has no `basedOn` of its
   own, with the same `serviceRef`, `metric`, `pricingUnit` and
@@ -508,15 +536,17 @@ An invoicing provider:
 - Marks requests it can't fulfil `Failed` with reason `Unsupported`, rather than
   leaving them `Pending`.
 - Charges a fee's amount times its snapshot `quantity`, in invoices and
-  previews alike, naming the line with the quantity when it's more than 1.
+  previews alike. It names the line with the quantity and unit when the fee
+  has a `pricingUnit` ("Cross connect: 4 port × $300.00"), and otherwise with
+  the quantity when it's more than 1 ("Dedicated server × 3").
 - Doesn't need `serviceRef` on a fee.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
-quantity to its name ("Dedicated server × 3"). Rate card keys stay per pricing,
-so a fee keeps its key when only its quantity changes. Fees without a service
-leave it out of the rate card's description. Customer usage pricings need no
-change: the provider rates their snapshot like any other.
+quantity, and the unit if there is one, to its name. Rate card keys stay per
+pricing, so a fee keeps its key when only its quantity changes. Fees without a
+service leave it out of the rate card's description. Customer usage pricings
+need no change: the provider rates their snapshot like any other.
 
 For openmeter-provider, the start date becomes the subscription's billing
 anchor, and the provider subscribes the account on that day (straight away for
@@ -653,3 +683,5 @@ list price.
 - 2026-11-05: Fees can leave out the service and carry a quantity on the
   Offer's reference. Staff choose a contract's usage pricings directly, and set
   a customer's own rates with a `Usage` pricing `basedOn` the list one.
+- 2026-11-05: Fees can set `pricingUnit`, shown with their quantity on
+  invoices and in portals.
