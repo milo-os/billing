@@ -17,6 +17,7 @@ latest-milestone: "v0"
   - [Amending a Contract](#amending-a-contract)
   - [Invoice Requests](#invoice-requests)
   - [Setting Up a Contract](#setting-up-a-contract)
+  - [What Customers See](#what-customers-see)
 - [Design Details](#design-details)
   - [Validation](#validation)
   - [Provider Requirements](#provider-requirements)
@@ -242,6 +243,46 @@ In the staff portal, on the customer's billing account:
 When the contract starts, the first invoice (setup fee and first month) is sent
 automatically, and later months follow each cycle.
 
+### What Customers See
+
+Customers can't read the entitlement or its Offer, so the BillingAccount
+controller copies the contract onto `BillingAccount.status.contract`, as it
+copies the Offer's discounts onto `status.discounts`. The portal shows it
+beside the account's payment terms:
+
+```yaml
+status:
+  contract:
+    startsAt: "2026-04-18T00:00:00Z"
+    billingDayOfMonth: 18
+    fees:
+      - name: acme-setup
+        displayName: Setup fee
+        serviceRef: compute.datumapis.com
+        chargeType: OneTime
+        amount: "5000.00"
+        currency: USD
+      - name: acme-monthly
+        displayName: Monthly fee
+        serviceRef: compute.datumapis.com
+        chargeType: Recurring
+        amount: "2400.00"
+        currency: USD
+        interval: monthly
+    usageBilled: true
+```
+
+- It's set as soon as the contract is added, so a customer moving onto one sees
+  it before it starts. Fees are before discounts, which stay in
+  `status.discounts`.
+- An amended contract shows the new Offer's fees as soon as `offerRef` changes,
+  although they're billed from the next billing date, and leaves out the
+  one-time fees already charged.
+- Once the contract has started, billing cycles follow `billingDayOfMonth`
+  instead of the payment terms' `invoiceDayOfMonth`: in the portal's usage
+  cycles, and in the usage tools of Patch and `datumctl billing`.
+- The contract's length isn't shown until [End of Term](#end-of-term) adds it.
+
 ## Design Details
 
 ### Validation
@@ -370,3 +411,5 @@ that the charges come from.
 - 2026-11-03: Contracts can be added to existing entitlements, moving an account
   onto one on its start date, and amendments to a started contract apply from
   the next billing date. Added the `Service Pricing Creator` role.
+- 2026-11-04: Contracts are published on `BillingAccount.status.contract` for
+  customers, and billing cycles follow a started contract's billing day.

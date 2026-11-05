@@ -1,0 +1,54 @@
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-bac-cpu-allocated
+  namespace: milo-system
+spec:
+  chargeType: Usage
+  serviceRef: compute.datumapis.com
+  currency: USD
+  displayName: E2E Contract CPU Allocated
+  metric: e2e.billing.miloapis.com/billing-account-contract/cpu-allocated
+  pricingUnit: vcpu
+  rates:
+    - flat: "0.025"
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-bac-setup
+  namespace: milo-system
+spec:
+  chargeType: OneTime
+  serviceRef: e2e-bac-hosting.billing.miloapis.com
+  currency: USD
+  displayName: Setup fee
+  amount: "5000.00"
+  trigger: BillingAccountActivation
+---
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-bac-monthly
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  serviceRef: e2e-bac-hosting.billing.miloapis.com
+  currency: USD
+  displayName: Monthly fee
+  amount: "2400.00"
+  interval: monthly
+---
+# The monthly fee after the contract is amended.
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: e2e-bac-monthly-amended
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  serviceRef: e2e-bac-hosting.billing.miloapis.com
+  currency: USD
+  displayName: Monthly fee
+  amount: "3000.00"
+  interval: monthly

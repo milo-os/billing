@@ -1,0 +1,13 @@
+# The Service the contract's fixed fees are for. A OneTime or Recurring
+# ServicePricing's serviceRef must name a Service's serviceName.
+apiVersion: services.miloapis.com/v1alpha1
+kind: Service
+metadata:
+  name: e2e-bac-hosting
+spec:
+  serviceName: e2e-bac-hosting.billing.miloapis.com
+  phase: Published
+  displayName: E2E Contract Hosting
+  owner:
+    producerProjectRef:
+      name: e2e-bac

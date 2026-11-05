@@ -210,7 +210,7 @@ func SummarizeAccount(a *billingv1alpha1.BillingAccount, plan string, defaultPM 
 	if t := a.Spec.PaymentTerms; t != nil {
 		s.PaymentTerms = &TermsSummary{InvoiceFrequency: t.InvoiceFrequency, InvoiceDayOfMonth: t.InvoiceDayOfMonth, NetDays: t.NetDays}
 	}
-	current, _ := BillingCycles(a.Spec.PaymentTerms, now)
+	current, _ := BillingCycles(CycleTerms(a, now), now)
 	s.CurrentCycle = &Period{Name: current.Name, Start: current.Start, End: current.End, Label: RangeLabel(current.Start, current.PeriodEnd)}
 	if arr := a.Status.PaymentArrangement; arr != nil {
 		terms := &ArrangementTerms{Type: string(arr.Type), StartsAt: dateOf(arr.StartsAt), EndsAt: dateOf(arr.EndsAt)}

@@ -32,6 +32,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAccountBindingSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountBindingStatus"):
 		return &apiv1alpha1.BillingAccountBindingStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContract"):
+		return &apiv1alpha1.BillingAccountContractApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContractFee"):
+		return &apiv1alpha1.BillingAccountContractFeeApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountDiscount"):
 		return &apiv1alpha1.BillingAccountDiscountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountPaymentArrangement"):
