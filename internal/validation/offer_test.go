@@ -379,6 +379,41 @@ func TestValidateOfferServicePricingRefs(t *testing.T) {
 			t.Errorf("got %d errors, want 1: %v", len(errs), errs)
 		}
 	})
+
+	t.Run("quantity on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", Quantity: 2},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].quantity" {
+			t.Errorf("want one error on quantity, got %v", errs)
+		}
+	})
+}
+
+func TestValidateOfferUpdate_SnapshotQuantityOnUsage(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, Quantity: 3, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].quantity" {
+		t.Errorf("want one error on quantity, got %v", errs)
+	}
+}
+
+func TestSnapshotQuantity(t *testing.T) {
+	if got := SnapshotQuantity(billingv1alpha1.ServicePricingSnapshot{}); got != 1 {
+		t.Errorf("unset quantity: got %d, want 1", got)
+	}
+	if got := SnapshotQuantity(billingv1alpha1.ServicePricingSnapshot{Quantity: 4}); got != 4 {
+		t.Errorf("got %d, want 4", got)
+	}
 }
 
 func TestValidateOfferUpdate_SnapshotPricesMeterOnce(t *testing.T) {

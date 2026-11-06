@@ -15,6 +15,12 @@ type ServicePricingSnapshotApplyConfiguration struct {
 	// Discount is the resolved discount for this service pricing snapshot,
 	// captured when the Offer becomes GA.
 	Discount *DiscountApplyConfiguration `json:"discount,omitempty"`
+	// Quantity is how many of a OneTime or Recurring fee the Offer charges,
+	// captured from the reference when the Offer becomes GA: 1 unless the
+	// reference set it. Providers charge the fee's amount times its
+	// quantity, and treat an unset quantity (in a snapshot taken before it
+	// existed) as 1. Unset for Usage pricings.
+	Quantity *int32 `json:"quantity,omitempty"`
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	Spec *ServicePricingSpecApplyConfiguration `json:"spec,omitempty"`
 }
@@ -38,6 +44,14 @@ func (b *ServicePricingSnapshotApplyConfiguration) WithName(value string) *Servi
 // If called multiple times, the Discount field is set to the value of the last call.
 func (b *ServicePricingSnapshotApplyConfiguration) WithDiscount(value *DiscountApplyConfiguration) *ServicePricingSnapshotApplyConfiguration {
 	b.Discount = value
+	return b
+}
+
+// WithQuantity sets the Quantity field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Quantity field is set to the value of the last call.
+func (b *ServicePricingSnapshotApplyConfiguration) WithQuantity(value int32) *ServicePricingSnapshotApplyConfiguration {
+	b.Quantity = &value
 	return b
 }
 

@@ -8,6 +8,7 @@ import (
 	"slices"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/util/validation/field"
@@ -25,8 +26,9 @@ var serviceListGVK = schema.GroupVersionKind{
 }
 
 // ValidateServicePricingCreate validates a ServicePricing on creation. A
-// Usage pricing is checked against the MeterDefinition it selects; a
-// OneTime or Recurring pricing against the Service it names.
+// Usage pricing is checked against the MeterDefinition it selects, and
+// against its list pricing when it has basedOn; a OneTime or Recurring
+// pricing against the Service it names, if it names one.
 func ValidateServicePricingCreate(
 	ctx context.Context,
 	c client.Client,
@@ -39,10 +41,99 @@ func ValidateServicePricingCreate(
 
 	switch sp.Spec.ChargeType {
 	case billingv1alpha1.ChargeTypeUsage:
-		return validateServicePricingMeter(ctx, c, &sp.Spec, fldPath)
+		allErrs := validateServicePricingMeter(ctx, c, &sp.Spec, fldPath)
+		if sp.Spec.BasedOn != "" {
+			allErrs = append(allErrs, validateServicePricingBasedOn(ctx, c, sp, fldPath)...)
+		}
+		return allErrs
 	default:
+		if sp.Spec.ServiceRef == "" {
+			return nil
+		}
 		return validateServicePricingService(ctx, c, &sp.Spec, fldPath)
 	}
+}
+
+// validateServicePricingBasedOn checks a customer's Usage pricing against
+// the list pricing its basedOn names: a Usage pricing in the same
+// namespace, not itself based on another, that this one matches in
+// everything but its rate amounts.
+func validateServicePricingBasedOn(
+	ctx context.Context,
+	c client.Client,
+	sp *billingv1alpha1.ServicePricing,
+	fldPath *field.Path,
+) field.ErrorList {
+	basedOnPath := fldPath.Child("basedOn")
+
+	var list billingv1alpha1.ServicePricing
+	key := client.ObjectKey{Namespace: sp.Namespace, Name: sp.Spec.BasedOn}
+	if err := c.Get(ctx, key, &list); err != nil {
+		if apierrors.IsNotFound(err) {
+			return field.ErrorList{field.Invalid(basedOnPath, sp.Spec.BasedOn,
+				fmt.Sprintf("no ServicePricing %q in namespace %q", sp.Spec.BasedOn, sp.Namespace))}
+		}
+		return field.ErrorList{field.InternalError(basedOnPath, fmt.Errorf("reading ServicePricing: %w", err))}
+	}
+	return validateBasedOnSpec(&sp.Spec, &list.Spec, fldPath)
+}
+
+// validateBasedOnSpec checks that spec differs from its list pricing only
+// in rate amounts.
+func validateBasedOnSpec(spec, list *billingv1alpha1.ServicePricingSpec, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	basedOnPath := fldPath.Child("basedOn")
+
+	if list.ChargeType != billingv1alpha1.ChargeTypeUsage {
+		return append(allErrs, field.Invalid(basedOnPath, spec.BasedOn,
+			fmt.Sprintf("must name a Usage pricing, not a %s one", list.ChargeType)))
+	}
+	if list.BasedOn != "" {
+		return append(allErrs, field.Invalid(basedOnPath, spec.BasedOn,
+			fmt.Sprintf("must name a list pricing; it is itself based on %q", list.BasedOn)))
+	}
+
+	same := func(name, got, want string) {
+		if got != want {
+			allErrs = append(allErrs, field.Invalid(fldPath.Child(name), got,
+				fmt.Sprintf("must match %s of the pricing it's based on (%q)", name, want)))
+		}
+	}
+	same("serviceRef", spec.ServiceRef, list.ServiceRef)
+	same("metric", spec.Metric, list.Metric)
+	same("pricingUnit", spec.PricingUnit, list.PricingUnit)
+	same("currency", spec.Currency, list.Currency)
+	if !apiequality.Semantic.DeepEqual(spec.UnitConversion, list.UnitConversion) {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("unitConversion"), spec.UnitConversion,
+			"must match unitConversion of the pricing it's based on"))
+	}
+
+	ratesPath := fldPath.Child("rates")
+	if len(spec.Rates) != len(list.Rates) {
+		return append(allErrs, field.Invalid(ratesPath, len(spec.Rates),
+			fmt.Sprintf("must have the same %d rates as the pricing it's based on", len(list.Rates))))
+	}
+	for i := range spec.Rates {
+		got, want := spec.Rates[i], list.Rates[i]
+		ratePath := ratesPath.Index(i)
+		if !apiequality.Semantic.DeepEqual(got.Match, want.Match) {
+			allErrs = append(allErrs, field.Invalid(ratePath.Child("match"), got.Match,
+				"must match the same dimension value, in the same order, as the pricing it's based on"))
+		}
+		if (got.Flat != "") != (want.Flat != "") || len(got.Tiered) != len(want.Tiered) {
+			allErrs = append(allErrs, field.Invalid(ratePath, got,
+				"must be flat or tiered, with the same number of bands, as the pricing it's based on"))
+			continue
+		}
+		for j := range got.Tiered {
+			if got.Tiered[j].UpTo != want.Tiered[j].UpTo {
+				allErrs = append(allErrs, field.Invalid(ratePath.Child("tiered").Index(j).Child("upTo"),
+					got.Tiered[j].UpTo,
+					fmt.Sprintf("must match the tier bound of the pricing it's based on (%q)", want.Tiered[j].UpTo)))
+			}
+		}
+	}
+	return allErrs
 }
 
 // ValidateServicePricingUpdate validates a ServicePricing on update. The
@@ -132,8 +223,8 @@ func validateServicePricingMeter(
 	return allErrs
 }
 
-// validateServicePricingService checks that a fixed charge's serviceRef
-// names a Service by its spec.serviceName.
+// validateServicePricingService checks that a fee's serviceRef names a
+// Service by its spec.serviceName.
 func validateServicePricingService(
 	ctx context.Context,
 	c client.Client,
@@ -168,8 +259,15 @@ func validateServicePricingSpec(spec *billingv1alpha1.ServicePricingSpec, fldPat
 		))
 	}
 
+	if spec.BasedOn != "" && spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("basedOn"), "basedOn is only allowed when chargeType is Usage"))
+	}
+
 	switch spec.ChargeType {
 	case billingv1alpha1.ChargeTypeUsage:
+		if spec.ServiceRef == "" {
+			allErrs = append(allErrs, field.Required(fldPath.Child("serviceRef"), "serviceRef is required when chargeType is Usage"))
+		}
 		if spec.Metric == "" {
 			allErrs = append(allErrs, field.Required(fldPath.Child("metric"), "metric is required when chargeType is Usage"))
 		}

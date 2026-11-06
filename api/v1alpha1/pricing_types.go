@@ -157,6 +157,17 @@ type ServicePricingRef struct {
 	//
 	// +kubebuilder:validation:Optional
 	Discount *Discount `json:"discount,omitempty"`
+
+	// Quantity is how many of a OneTime or Recurring fee the Offer charges:
+	// the fee's amount times its quantity, such as three servers at the
+	// same monthly price. Defaults to 1. Not allowed on a Usage pricing,
+	// whose quantity is what was used: the Offer controller won't publish
+	// an Offer that sets it there.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10000
+	Quantity int32 `json:"quantity,omitempty"`
 }
 
 // ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
@@ -174,6 +185,17 @@ type ServicePricingSnapshot struct {
 	//
 	// +kubebuilder:validation:Optional
 	Discount *Discount `json:"discount,omitempty"`
+
+	// Quantity is how many of a OneTime or Recurring fee the Offer charges,
+	// captured from the reference when the Offer becomes GA: 1 unless the
+	// reference set it. Providers charge the fee's amount times its
+	// quantity, and treat an unset quantity (in a snapshot taken before it
+	// existed) as 1. Unset for Usage pricings.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=10000
+	Quantity int32 `json:"quantity,omitempty"`
 
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	//

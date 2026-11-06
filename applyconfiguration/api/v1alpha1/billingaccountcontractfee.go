@@ -18,13 +18,21 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	// DisplayName is the fee's label, as invoices show it (e.g. "Setup
 	// fee").
 	DisplayName *string `json:"displayName,omitempty"`
-	// ServiceRef is the service the fee is for.
+	// ServiceRef is the service the fee is for. Empty for a fee that isn't
+	// for any one service.
 	ServiceRef *string `json:"serviceRef,omitempty"`
 	// ChargeType is OneTime for a fee charged once, when the contract
 	// starts, or Recurring for one charged every interval.
 	ChargeType *apiv1alpha1.ChargeType `json:"chargeType,omitempty"`
-	// Amount is the fee as a decimal string in currency (e.g. "2400.00").
+	// Amount is the fee's unit amount as a decimal string in currency (e.g.
+	// "2400.00"). The contract charges it quantity times.
 	Amount *string `json:"amount,omitempty"`
+	// Quantity is how many of the fee the contract charges, so the fee
+	// charged is amount times quantity (e.g. 3 × "1000.00").
+	Quantity *int32 `json:"quantity,omitempty"`
+	// PricingUnit is what amount is per (e.g. "port"), so the fee reads
+	// "4 port × $300.00". Empty when the quantity is a count of the fee.
+	PricingUnit *string `json:"pricingUnit,omitempty"`
 	// Currency is the ISO 4217 currency code of amount.
 	Currency *string `json:"currency,omitempty"`
 	// Interval is how often a Recurring fee is charged. Empty for a OneTime
@@ -75,6 +83,22 @@ func (b *BillingAccountContractFeeApplyConfiguration) WithChargeType(value apiv1
 // If called multiple times, the Amount field is set to the value of the last call.
 func (b *BillingAccountContractFeeApplyConfiguration) WithAmount(value string) *BillingAccountContractFeeApplyConfiguration {
 	b.Amount = &value
+	return b
+}
+
+// WithQuantity sets the Quantity field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Quantity field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithQuantity(value int32) *BillingAccountContractFeeApplyConfiguration {
+	b.Quantity = &value
+	return b
+}
+
+// WithPricingUnit sets the PricingUnit field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the PricingUnit field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithPricingUnit(value string) *BillingAccountContractFeeApplyConfiguration {
+	b.PricingUnit = &value
 	return b
 }
 

@@ -98,6 +98,61 @@ func TestOfferReconcile_RefusesMeterPricedTwice(t *testing.T) {
 	}
 }
 
+func monthlyFeePricing(name, amount string) *billingv1alpha1.ServicePricing {
+	return &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeRecurring,
+			Currency:    "USD",
+			DisplayName: "Cross connect",
+			Amount:      amount,
+			Interval:    billingv1alpha1.ChargeIntervalMonthly,
+			PricingUnit: "port",
+		},
+	}
+}
+
+func TestOfferReconcile_SnapshotsFeeQuantities(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeRecurring, billingv1alpha1.ChargeTypeUsage}
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "cross-connect-300", Quantity: 4},
+		{Name: "support-500"},
+		{Name: "compute-cpu-allocated-v1"},
+	}
+	got := reconcileOffer(t, offer,
+		monthlyFeePricing("cross-connect-300", "300.00"),
+		monthlyFeePricing("support-500", "500.00"),
+		cpuAllocatedPricing("compute-cpu-allocated-v1", "0.025"),
+	)
+
+	want := map[string]int32{"cross-connect-300": 4, "support-500": 1, "compute-cpu-allocated-v1": 0}
+	if len(got.Spec.ServicePricings) != len(want) {
+		t.Fatalf("snapshot = %+v, want %d pricings", got.Spec.ServicePricings, len(want))
+	}
+	for _, snap := range got.Spec.ServicePricings {
+		if snap.Quantity != want[snap.Name] {
+			t.Errorf("%s quantity = %d, want %d", snap.Name, snap.Quantity, want[snap.Name])
+		}
+	}
+}
+
+func TestOfferReconcile_RefusesQuantityOnUsage(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "compute-cpu-allocated-v1", Quantity: 2},
+	}
+	got := reconcileOffer(t, offer, cpuAllocatedPricing("compute-cpu-allocated-v1", "0.025"))
+
+	if len(got.Spec.ServicePricings) != 0 {
+		t.Errorf("snapshot written for an Offer with a quantity on a Usage pricing: %+v", got.Spec.ServicePricings)
+	}
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, ConditionTypePublished)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "QuantityOnUsage" {
+		t.Errorf("Published condition = %+v, want False/QuantityOnUsage", cond)
+	}
+}
+
 func TestOfferReconciler_BuildSnapshots_Discounts(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := billingv1alpha1.AddToScheme(scheme); err != nil {
