@@ -24,8 +24,9 @@ import (
 // monthly fee. A fee may name a service and a pricingUnit, and an Offer
 // charges it as many times as its reference's quantity.
 //
-// A Usage pricing with basedOn is a customer's own rates: a copy of the
-// list pricing basedOn names, with only its rate amounts changed.
+// A pricing with basedOn is a customer's own price: a copy of the list
+// pricing basedOn names, with only its rate amounts (Usage) or its amount
+// (OneTime and Recurring) changed.
 //
 // The spec is immutable: a new price is a new ServicePricing.
 type ServicePricingSpecApplyConfiguration struct {
@@ -71,14 +72,17 @@ type ServicePricingSpecApplyConfiguration struct {
 	// Interval is the cadence for a Recurring charge.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
 	// BasedOn names the list pricing, in the same namespace, that this
-	// Usage pricing gives a customer their own rates for. Everything but
-	// the rate amounts must match it: serviceRef, metric, pricingUnit,
-	// unitConversion, each rate's match and whether it's flat or tiered,
-	// and tier bounds. Only flat and tier rate values differ. The named
-	// pricing can't itself have basedOn. Usage pricings only.
+	// pricing gives a customer their own price for. It must have the same
+	// chargeType, and the named pricing can't itself have basedOn.
+	//
+	// A Usage pricing must match it in everything but its rate amounts:
+	// serviceRef, metric, pricingUnit, unitConversion, each rate's match and
+	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
+	// pricing must match it in everything but its amount and displayName:
+	// serviceRef, pricingUnit, trigger and interval.
 	//
 	// Billing doesn't change with basedOn: it records which list price the
-	// customer's rates replace, so portals can show them side by side.
+	// customer's price replaces, so portals can show them side by side.
 	BasedOn *string `json:"basedOn,omitempty"`
 }
 

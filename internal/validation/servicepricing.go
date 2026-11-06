@@ -26,9 +26,9 @@ var serviceListGVK = schema.GroupVersionKind{
 }
 
 // ValidateServicePricingCreate validates a ServicePricing on creation. A
-// Usage pricing is checked against the MeterDefinition it selects, and
-// against its list pricing when it has basedOn; a OneTime or Recurring
-// pricing against the Service it names, if it names one.
+// Usage pricing is checked against the MeterDefinition it selects; a
+// OneTime or Recurring pricing against the Service it names, if it names
+// one. Either is checked against its list pricing when it has basedOn.
 func ValidateServicePricingCreate(
 	ctx context.Context,
 	c client.Client,
@@ -39,25 +39,23 @@ func ValidateServicePricingCreate(
 		return allErrs
 	}
 
-	switch sp.Spec.ChargeType {
-	case billingv1alpha1.ChargeTypeUsage:
-		allErrs := validateServicePricingMeter(ctx, c, &sp.Spec, fldPath)
-		if sp.Spec.BasedOn != "" {
-			allErrs = append(allErrs, validateServicePricingBasedOn(ctx, c, sp, fldPath)...)
-		}
-		return allErrs
-	default:
-		if sp.Spec.ServiceRef == "" {
-			return nil
-		}
-		return validateServicePricingService(ctx, c, &sp.Spec, fldPath)
+	var allErrs field.ErrorList
+	switch {
+	case sp.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage:
+		allErrs = validateServicePricingMeter(ctx, c, &sp.Spec, fldPath)
+	case sp.Spec.ServiceRef != "":
+		allErrs = validateServicePricingService(ctx, c, &sp.Spec, fldPath)
 	}
+	if sp.Spec.BasedOn != "" {
+		allErrs = append(allErrs, validateServicePricingBasedOn(ctx, c, sp, fldPath)...)
+	}
+	return allErrs
 }
 
-// validateServicePricingBasedOn checks a customer's Usage pricing against
-// the list pricing its basedOn names: a Usage pricing in the same
-// namespace, not itself based on another, that this one matches in
-// everything but its rate amounts.
+// validateServicePricingBasedOn checks a customer's pricing against the
+// list pricing its basedOn names: a pricing of the same chargeType in the
+// same namespace, not itself based on another, that this one matches in
+// everything but its price.
 func validateServicePricingBasedOn(
 	ctx context.Context,
 	c client.Client,
@@ -79,14 +77,15 @@ func validateServicePricingBasedOn(
 }
 
 // validateBasedOnSpec checks that spec differs from its list pricing only
-// in rate amounts.
+// in its price: rate amounts for Usage, the amount (and displayName) for a
+// OneTime or Recurring fee.
 func validateBasedOnSpec(spec, list *billingv1alpha1.ServicePricingSpec, fldPath *field.Path) field.ErrorList {
 	var allErrs field.ErrorList
 	basedOnPath := fldPath.Child("basedOn")
 
-	if list.ChargeType != billingv1alpha1.ChargeTypeUsage {
+	if list.ChargeType != spec.ChargeType {
 		return append(allErrs, field.Invalid(basedOnPath, spec.BasedOn,
-			fmt.Sprintf("must name a Usage pricing, not a %s one", list.ChargeType)))
+			fmt.Sprintf("must name a %s pricing, not a %s one", spec.ChargeType, list.ChargeType)))
 	}
 	if list.BasedOn != "" {
 		return append(allErrs, field.Invalid(basedOnPath, spec.BasedOn,
@@ -100,9 +99,14 @@ func validateBasedOnSpec(spec, list *billingv1alpha1.ServicePricingSpec, fldPath
 		}
 	}
 	same("serviceRef", spec.ServiceRef, list.ServiceRef)
-	same("metric", spec.Metric, list.Metric)
 	same("pricingUnit", spec.PricingUnit, list.PricingUnit)
 	same("currency", spec.Currency, list.Currency)
+	if spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
+		same("trigger", string(spec.Trigger), string(list.Trigger))
+		same("interval", string(spec.Interval), string(list.Interval))
+		return allErrs
+	}
+	same("metric", spec.Metric, list.Metric)
 	if !apiequality.Semantic.DeepEqual(spec.UnitConversion, list.UnitConversion) {
 		allErrs = append(allErrs, field.Invalid(fldPath.Child("unitConversion"), spec.UnitConversion,
 			"must match unitConversion of the pricing it's based on"))
@@ -257,10 +261,6 @@ func validateServicePricingSpec(spec *billingv1alpha1.ServicePricingSpec, fldPat
 			spec.Currency,
 			"currency must be USD",
 		))
-	}
-
-	if spec.BasedOn != "" && spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
-		allErrs = append(allErrs, field.Forbidden(fldPath.Child("basedOn"), "basedOn is only allowed when chargeType is Usage"))
 	}
 
 	switch spec.ChargeType {
