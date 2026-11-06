@@ -64,9 +64,9 @@ covers that too:
   one service.
 - **Fee quantities.** An Offer can charge a fee more than once, such as three
   servers at $1,000 a month, with `quantity` on its pricing reference.
-- **Usage pricing chosen per contract.** Staff pick the platform's usage
-  pricings for a contract directly, rather than copying another Offer's, and
-  can give the customer their own rates with a pricing based on the list one.
+- **Pricing chosen per contract.** Staff pick the platform's usage pricings
+  and fees for a contract directly, rather than copying another Offer's, and
+  can give the customer their own price with a pricing based on the list one.
 
 ## Motivation
 
@@ -106,8 +106,9 @@ A contract's fees and rates are also harder to set up than they should be:
   provider creates `Invoice` resources.
 - Let a contract charge fees that aren't for a catalog service, and charge a
   fee more than once.
-- Let staff choose a contract's usage pricings, and set a customer's own usage
-  rates, from the staff portal.
+- Let staff choose a contract's usage pricings and fees from the platform's,
+  and set a customer's own price for either, from the staff portal, keeping
+  the list price alongside.
 
 ### Non-Goals
 
@@ -362,6 +363,41 @@ infra: they reach Milo without a PR, stay out of the public service repos, and
 are still checked against their meter on save. The pricing enhancement will be
 updated to match.
 
+### Contract Fees from the Price List
+
+The platform may list fees too, such as a monthly price for a server type or a
+cross connect. The staff portal lists them beside the usage pricings, by
+service, and staff tick the ones a contract charges, each with a quantity and
+an optional discount. The contract's Offer refers to the list fee itself.
+
+When a customer negotiates a different amount, staff create a fee for them
+`basedOn` the list fee, as with usage rates. It matches the list fee in
+everything but its `amount` and `displayName`: the same `chargeType`,
+`serviceRef`, `pricingUnit`, `trigger` and `interval`.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: contract-ba-acme-20261106120000-fee-2
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  basedOn: cross-connect-v1
+  currency: USD
+  displayName: Cross connect
+  amount: "250.00"   # list: 300.00
+  interval: monthly
+  pricingUnit: port
+```
+
+- The staff portal shows the list amount beside the customer's wherever it
+  shows the fee: in the contract form and on the account's contract.
+- An amendment that keeps the customer's amount reuses their fee, as it does
+  for usage rates.
+- Fees that aren't on the price list, such as a setup fee, are still created
+  for the contract without a `basedOn`.
+
 ### Invoice Requests
 
 ```yaml
@@ -500,12 +536,14 @@ For `ServicePricing`:
   that a fee's `serviceRef` names a Service when it's set, as before.
 - `pricingUnit` stays required on `Usage` pricings and optional on fees. The
   schema already accepts it on fees, so nothing changes but its meaning.
-- `basedOn` is allowed on `Usage` pricings only (CEL). The webhook checks that
-  it names a `Usage` pricing in the same namespace that has no `basedOn` of its
-  own, with the same `serviceRef`, `metric`, `pricingUnit` and
-  `unitConversion`, the same number of rates with the same `match` in the same
-  order, and, rate by rate, flat where it's flat and the same tier `upTo`
-  bounds where it's tiered. The usual meter checks apply too.
+- The webhook checks that `basedOn` names a pricing of the same `chargeType`
+  in the same namespace that has no `basedOn` of its own, with the same
+  `serviceRef`, `pricingUnit` and `currency`. For a `Usage` pricing it also
+  checks the same `metric` and `unitConversion`, the same number of rates with
+  the same `match` in the same order, and, rate by rate, flat where it's flat
+  and the same tier `upTo` bounds where it's tiered; the usual meter checks
+  apply too. For a fee it checks the same `trigger` and `interval`, leaving
+  `amount` and `displayName` free.
 
 For `Offer`:
 
@@ -685,3 +723,5 @@ list price.
   a customer's own rates with a `Usage` pricing `basedOn` the list one.
 - 2026-11-05: Fees can set `pricingUnit`, shown with their quantity on
   invoices and in portals.
+- 2026-11-06: Staff pick fees from the price list too, and a customer's own
+  fee amount is a fee `basedOn` the list one, so the list price stays visible.

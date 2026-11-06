@@ -511,12 +511,112 @@ func TestValidateServicePricingCreate_BasedOn(t *testing.T) {
 		})
 	}
 
-	t.Run("basedOn on a fee", func(t *testing.T) {
+	t.Run("fee based on a Usage pricing", func(t *testing.T) {
 		withBasedOn := fee.DeepCopy()
 		withBasedOn.Spec.BasedOn = list.Name
 		errs := ValidateServicePricingCreate(context.Background(), newPricingClient(list), withBasedOn)
 		if len(errs) != 1 || errs[0].Field != "spec.basedOn" {
-			t.Errorf("want basedOn forbidden on a fee, got %v", errs)
+			t.Errorf("want basedOn refused across charge types, got %v", errs)
+		}
+	})
+}
+
+func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
+	const bareMetal = "bare-metal.datumapis.com"
+	listFee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "cross-connect-v1", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeRecurring,
+			ServiceRef:  bareMetal,
+			Currency:    "USD",
+			DisplayName: "Cross connect",
+			Amount:      "300.00",
+			Interval:    billingv1alpha1.ChargeIntervalMonthly,
+			PricingUnit: "port",
+		},
+	}
+	setupFee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-v1", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	customerFee := listFee.DeepCopy()
+	customerFee.Name = "contract-acme-fee-1"
+	customerFee.Spec.BasedOn = listFee.Name
+	customerFee.Spec.Amount = "250.00"
+	customerFee.Spec.DisplayName = "Cross connect (Acme)"
+	storedCustomer := customerFee.DeepCopy()
+	storedCustomer.Name = "contract-acme-earlier-fee-1"
+
+	customer := func(mutate func(*billingv1alpha1.ServicePricingSpec)) *billingv1alpha1.ServicePricing {
+		sp := customerFee.DeepCopy()
+		if mutate != nil {
+			mutate(&sp.Spec)
+		}
+		return sp
+	}
+
+	tests := []struct {
+		name      string
+		pricing   *billingv1alpha1.ServicePricing
+		wantField string
+	}{
+		{name: "only the amount and name differ", pricing: customer(nil)},
+		{
+			name:      "based on a one-time fee",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = setupFee.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "based on a customer pricing",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = storedCustomer.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "different service",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.ServiceRef = "" }),
+			wantField: "spec.serviceRef",
+		},
+		{
+			name:      "different unit",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.PricingUnit = "cable" }),
+			wantField: "spec.pricingUnit",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cl := newPricingClient(testService(bareMetal), listFee, setupFee, storedCustomer)
+			errs := ValidateServicePricingCreate(context.Background(), cl, tc.pricing)
+			if tc.wantField == "" {
+				if len(errs) != 0 {
+					t.Errorf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) != 1 || errs[0].Field != tc.wantField {
+				t.Errorf("want one error on %s, got %v", tc.wantField, errs)
+			}
+		})
+	}
+
+	t.Run("different trigger", func(t *testing.T) {
+		// Only one trigger exists today, so compare against a list fee with none.
+		errs := validateBasedOnSpec(
+			&billingv1alpha1.ServicePricingSpec{
+				ChargeType: billingv1alpha1.ChargeTypeOneTime, Currency: "USD", Amount: "1000.00",
+				Trigger: billingv1alpha1.ChargeTriggerBillingAccountActivation, BasedOn: setupFee.Name,
+			},
+			&billingv1alpha1.ServicePricingSpec{
+				ChargeType: billingv1alpha1.ChargeTypeOneTime, Currency: "USD", Amount: "1500.00",
+			},
+			field.NewPath("spec"),
+		)
+		if len(errs) != 1 || errs[0].Field != "spec.trigger" {
+			t.Errorf("want one error on spec.trigger, got %v", errs)
 		}
 	})
 }
