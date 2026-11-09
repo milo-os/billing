@@ -1,6 +1,6 @@
 # Billing Guide for Staff
 
-How to use billing in the staff portal: prices, offers, discounts and credits,
+How to use billing in the staff portal: prices, offers and discounts,
 and how to onboard a new customer, including one on a contract.
 
 This guide is for staff, not engineers. Every amount in it is made up.
@@ -10,7 +10,6 @@ This guide is for staff, not engineers. Every amount in it is made up.
 - [Prices](#prices)
 - [Offers](#offers)
 - [Discounts](#discounts)
-- [Credits](#credits)
 - [Putting an account on an offer](#putting-an-account-on-an-offer)
 - [Onboarding a new customer](#onboarding-a-new-customer)
 - [Setting up a contract](#setting-up-a-contract)
@@ -33,7 +32,6 @@ This guide is for staff, not engineers. Every amount in it is made up.
 | **Payment terms** | Lets an account pay by invoice instead of card, with a number of days to pay |
 | **Contract** | A customer's own Offer with a start date: fees agreed with them, and optionally usage at list or agreed rates. Billed on the same day each month |
 | **Invoice** | What the customer is asked to pay. Created and sent by our billing provider (OpenMeter, sending through Stripe), never by hand |
-| **Credit** | A dollar balance that usage is taken from before it's charged. Not available yet |
 
 ## Where to find things
 
@@ -164,21 +162,6 @@ time, put a reminder in your calendar to switch the account back.
 
 On a contract, each fee and each kind of usage from the price list has its
 own **% off** (see [Setting up a contract](#setting-up-a-contract)).
-
-## Credits
-
-**Credits aren't available yet.** The design is done
-([credits](../enhancements/credits/README.md)), but the billing provider's
-side is still being built and the staff portal has no screen for them.
-
-When they arrive, you'll be able to give a billing account a dollar amount
-with a reason (promotional, sponsorship or goodwill) and an optional expiry.
-Usage will be taken from the credit first, and only what's left will be
-charged. A credit given by mistake can be voided, but not deleted or edited.
-
-Until then, there's no way to give a customer a dollar amount. For a goodwill
-gesture, a discount on a customer Offer for a limited time is the nearest
-option. Talk to the billing team first.
 
 ## Putting an account on an offer
 
@@ -456,6 +439,5 @@ For the detail behind this guide:
 
 - [Contract billing](../enhancements/contract-billing.md)
 - [Offer discounts](../enhancements/offer-discounts.md)
-- [Credits](../enhancements/credits/README.md)
 - [Invoicing](../enhancements/invoicing.md)
 - [Billing arrangements (payment terms)](../enhancements/billing-arrangements.md)
