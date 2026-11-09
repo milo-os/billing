@@ -102,6 +102,12 @@ func TestValidateBillingArrangementCreate(t *testing.T) {
 			wantErr: true,
 		},
 		{
+			name: "no credit limit",
+			mutate: func(a *billingv1alpha1.BillingArrangement) {
+				a.Spec.Invoice.CreditLimit = ""
+			},
+		},
+		{
 			name: "display-name style AP email",
 			mutate: func(a *billingv1alpha1.BillingArrangement) {
 				a.Spec.Invoice.AccountsPayableEmail = "Accounts <ap@acme.example>"

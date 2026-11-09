@@ -14,9 +14,10 @@ type InvoiceArrangementTermsApplyConfiguration struct {
 	// NetDays is the number of days after the invoice date that payment
 	// is due.
 	NetDays *int32 `json:"netDays,omitempty"`
-	// CreditLimit is the maximum spend per billing cycle, as a decimal
-	// string in the billing account's currency (e.g. "10000"). Staff are
-	// alerted as the account nears it; it is not a hard cap.
+	// CreditLimit is the most the account should spend per billing cycle,
+	// as a decimal string in the billing account's currency (e.g. "10000").
+	// It is not a hard cap. Optional: nothing enforces it yet, so staff
+	// only set one when finance wants it recorded.
 	CreditLimit *string `json:"creditLimit,omitempty"`
 	// AccountsPayableEmail receives invoices in addition to the billing
 	// contact. When unset, invoices go to the billing contact only.
