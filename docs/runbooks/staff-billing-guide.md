@@ -209,7 +209,6 @@ The payment terms form asks for:
 | Field | What to enter |
 |---|---|
 | **Net days** | Days after the invoice date that payment is due, such as 30 |
-| **Credit limit** | The most the account should spend each billing cycle. Recorded for finance only: usage isn't capped and no alerts are sent yet |
 | **Accounts payable email** | Where the customer wants invoices sent |
 | **PO number** | The customer's purchase order number, if they have one. Printed on every invoice |
 | **Agreement reference** | A signed MSA or order form, if there is one. Otherwise our standard terms apply. Printed on every invoice |

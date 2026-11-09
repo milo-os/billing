@@ -110,13 +110,14 @@ type InvoiceArrangementTerms struct {
 	// +kubebuilder:default=30
 	NetDays int32 `json:"netDays,omitempty"`
 
-	// CreditLimit is the maximum spend per billing cycle, as a decimal
-	// string in the billing account's currency (e.g. "10000"). Staff are
-	// alerted as the account nears it; it is not a hard cap.
+	// CreditLimit is the most the account should spend per billing cycle,
+	// as a decimal string in the billing account's currency (e.g. "10000").
+	// It is not a hard cap. Optional: nothing enforces it yet, so staff
+	// only set one when finance wants it recorded.
 	//
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)(\.\d+)?$`
-	CreditLimit string `json:"creditLimit"`
+	CreditLimit string `json:"creditLimit,omitempty"`
 
 	// AccountsPayableEmail receives invoices in addition to the billing
 	// contact. When unset, invoices go to the billing contact only.

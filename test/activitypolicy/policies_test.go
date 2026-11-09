@@ -380,6 +380,29 @@ func TestBillingArrangementSummaries(t *testing.T) {
 			want: "alice@example.com granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471, starting 1 November 2026, until 30 September 2027",
 		},
 		{
+			name: "grant terms without a credit limit",
+			audit: event("create", nil, stored(invoiceSpec(map[string]any{
+				"invoice": map[string]any{"netDays": float64(30), "purchaseOrderNumber": "PO-4471"},
+			}))),
+			want: "alice@example.com granted invoice terms to billing account acme: net 30, PO PO-4471",
+		},
+		{
+			name: "approve an application without a credit limit",
+			audit: event("create", nil, stored(invoiceSpec(map[string]any{
+				"applicationRef": map[string]any{"name": "acme-apply"},
+				"invoice":        map[string]any{"netDays": float64(30)},
+			}))),
+			want: "alice@example.com approved the payment terms application acme-apply with invoice terms for billing account acme: net 30",
+		},
+		{
+			name: "update terms without a credit limit",
+			audit: event("patch", map[string]any{"spec": map[string]any{"invoice": map[string]any{"netDays": float64(45)}}},
+				stored(invoiceSpec(map[string]any{
+					"invoice": map[string]any{"netDays": float64(45)},
+				}))),
+			want: "alice@example.com updated invoice terms for billing account acme: net 45",
+		},
+		{
 			name:  "end terms now",
 			audit: event("patch", map[string]any{"spec": map[string]any{"endsAt": "2026-10-06T10:00:00Z"}}, stored(invoiceSpec(nil))),
 			want:  "alice@example.com ended invoice terms for billing account acme",
