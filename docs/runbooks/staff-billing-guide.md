@@ -5,7 +5,6 @@ and how to onboard a new customer, including one on a contract.
 
 This guide is for staff, not engineers. Every amount in it is made up.
 
-- [What's available today](#whats-available-today)
 - [The pieces](#the-pieces)
 - [Where to find things](#where-to-find-things)
 - [Prices](#prices)
@@ -21,21 +20,6 @@ This guide is for staff, not engineers. Every amount in it is made up.
 - [What the customer sees](#what-the-customer-sees)
 - [When something looks wrong](#when-something-looks-wrong)
 - [Further reading](#further-reading)
-
-## What's available today
-
-As of November 2026:
-
-| What | State |
-|---|---|
-| Offers, discounts, switching an account's offer | Available |
-| Granting payment terms (pay by invoice) | Available |
-| Customers applying for payment terms in the cloud portal | Staging only. In production, staff grant terms directly |
-| Contracts: start date, setup and monthly fees, first invoice preview | Available |
-| **Contract page** with fee quantities and units, fees without a service, the price list and customer prices | **Waiting on [staff-portal#806](https://github.com/datum-cloud/staff-portal/pull/806).** Merged on 9 November 2026; it reaches staff with the next staff portal release. Until then, contracts are set up in a dialog where every fee needs a service, fees have no quantity or unit, and usage is either copied from a published Offer or not billed |
-| Credits | Not available yet. See [Credits](#credits) |
-
-Sections that describe the new contract page are marked **(#806)**.
 
 ## The pieces
 
@@ -230,8 +214,7 @@ either:
 - **You grant payment terms directly**, for example after a sales call. On
   the billing account, open **Actions → Grant payment terms**.
 - **They apply in the cloud portal**, and you review the application under
-  **Applications**. (Staging only for now: in production, grant terms
-  directly.) The review page shows what they asked for, their fraud check,
+  **Applications**. The review page shows what they asked for, their fraud check,
   their situation in their own words and the account's current terms.
   **Approve** grants the terms. **Decline** asks for a reason, a message to
   the customer and internal notes the customer never sees. If the account
@@ -302,7 +285,7 @@ onto the contract.
 ## Setting up a contract
 
 On the billing account, open **Actions → Set up contract**. The contract page
-**(#806)** has four parts.
+has four parts.
 
 ### Contract fees
 
@@ -315,12 +298,12 @@ contract can have up to 20 fees, counting those from the price list.
 |---|---|
 | **Name** | What the invoice calls it, such as "Setup fee" or "Dedicated server" |
 | **Amount (USD)** | The price of one, such as `800` or `800.00` |
-| **Quantity** **(#806)** | How many, from 1 to 10,000. Four servers at $800 is one fee with quantity 4, charged $3,200 |
+| **Quantity** | How many, from 1 to 10,000. Four servers at $800 is one fee with quantity 4, charged $3,200 |
 | **Charged** | **Once** (charged at the start) or **Monthly** |
-| **Per** **(#806)** | Optional unit the amount is per, such as `port` or `kW`. Only a label: the invoice then reads "Cross connect: 2 port × $120.00" instead of "Cross connect × 2" |
-| **Service** **(#806)** | Optional. Pick one only if the fee is for a particular service. Setup, support and rack fees usually aren't |
+| **Per** | Optional unit the amount is per, such as `port` or `kW`. Only a label: the invoice then reads "Cross connect: 2 port × $120.00" instead of "Cross connect × 2" |
+| **Service** | Optional. Pick one only if the fee is for a particular service. Setup, support and rack fees usually aren't |
 
-### Price list (#806)
+### Price list
 
 What the contract bills from the platform's prices: usage, and any fees the
 platform lists, such as a server type or a cross connect. A new contract
