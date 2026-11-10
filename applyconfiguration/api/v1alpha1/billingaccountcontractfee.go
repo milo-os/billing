@@ -35,8 +35,8 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	PricingUnit *string `json:"pricingUnit,omitempty"`
 	// Currency is the ISO 4217 currency code of amount.
 	Currency *string `json:"currency,omitempty"`
-	// Interval is how often a Recurring fee is charged. Empty for a OneTime
-	// fee.
+	// Interval is how often a Recurring fee is charged (monthly, quarterly
+	// or annual), so amount is per interval. Empty for a OneTime fee.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
 }
 

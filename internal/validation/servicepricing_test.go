@@ -383,6 +383,15 @@ func TestValidateServicePricingCreate_FeeWithoutService(t *testing.T) {
 		t.Errorf("unexpected errors: %v", errs)
 	}
 
+	for _, interval := range []billingv1alpha1.ChargeInterval{billingv1alpha1.ChargeIntervalQuarterly, billingv1alpha1.ChargeIntervalAnnual} {
+		periodic := fee.DeepCopy()
+		periodic.Name = "support-" + string(interval)
+		periodic.Spec.Interval = interval
+		if errs := ValidateServicePricingCreate(context.Background(), newPricingClient(), periodic); len(errs) != 0 {
+			t.Errorf("%s fee: unexpected errors: %v", interval, errs)
+		}
+	}
+
 	usage := usagePricing("", billingv1alpha1.PricingRate{Flat: "0.03"})
 	cl := newPricingClient(testMeter(billingv1alpha1.PhasePublished, "compute.datumapis.com"))
 	errs := ValidateServicePricingCreate(context.Background(), cl, usage)
@@ -585,6 +594,13 @@ func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
 			name:      "different unit",
 			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.PricingUnit = "cable" }),
 			wantField: "spec.pricingUnit",
+		},
+		{
+			// An amount per year isn't a price for the same thing as one
+			// per month, so a customer's own fee keeps the list interval.
+			name:      "different interval",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Interval = billingv1alpha1.ChargeIntervalAnnual }),
+			wantField: "spec.interval",
 		},
 	}
 	for _, tc := range tests {

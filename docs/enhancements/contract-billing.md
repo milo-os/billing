@@ -120,6 +120,8 @@ A contract's fees and rates are also harder to set up than they should be:
   same meter in the same units as the list pricing.
 - Letting customers request invoices.
 - Invoicing usage on request. Usage stays on the normal cycle.
+- Billing usage, or a whole Offer, on a period other than monthly. Only fees
+  can have their own period.
 
 ## Proposal
 
@@ -265,6 +267,38 @@ spec:
   reference's discount applies to that total.
 - `quantity` is for fees only. The Offer controller refuses to publish an Offer
   that sets it on a `Usage` pricing, whose quantity is what was used.
+
+**Fees have their own billing period.** A `Recurring` fee's `interval` is
+`monthly`, `quarterly` or `annual`, and its amount is per interval. Offers are
+billed monthly, so a contract can charge a monthly server fee and an annual
+support fee side by side, each on its own period.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: premium-support-annual-v1
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  currency: USD
+  displayName: Premium support
+  amount: "12000.00"
+  interval: annual
+```
+
+- A fee's periods are counted from the account's billing day. On a contract
+  starting on 18 April, an annual fee is charged every 18 April and a quarterly
+  one every 18 January, April, July and October. On an account without a
+  contract they're counted from its billing anchor in the same way.
+- Each charge goes on the account's invoice for that month, with its monthly
+  fees and usage.
+- The interval belongs to the pricing, since it changes what the amount means:
+  $12,000 a year is a different price from $1,000 a month. A customer's own fee
+  `basedOn` a list fee must have the same interval.
+- Usage is still billed monthly. Billing usage quarterly would also change the
+  usage cycles the portals, Patch and `datumctl billing` show, which all assume
+  a month.
 
 **Fees can have a unit.** A fee may set `pricingUnit`, the unit its amount is
 per, as a `Usage` pricing does. It's a label only: it doesn't change what's
@@ -578,6 +612,14 @@ An invoicing provider:
   has a `pricingUnit` ("Cross connect: 4 port × $300.00"), and otherwise with
   the quantity when it's more than 1 ("Dedicated server × 3").
 - Doesn't need `serviceRef` on a fee.
+- Charges a `Recurring` fee once per its `interval`, with periods counted from
+  the account's billing day.
+
+OpenMeter lets a rate card bill on its own cadence when it lines up with the
+plan's, as `P3M` and `P1Y` do with the plans' `P1M`. So openmeter-provider gives
+each fee's rate card the cadence of its interval: `P1M`, `P3M` or `P1Y`. A card's
+periods follow its cadence from the subscription's billing anchor, and OpenMeter
+invoices each charge with whatever else is due then.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
@@ -725,3 +767,5 @@ list price.
   invoices and in portals.
 - 2026-11-06: Staff pick fees from the price list too, and a customer's own
   fee amount is a fee `basedOn` the list one, so the list price stays visible.
+- 2026-11-10: Recurring fees can be quarterly or annual, each on its own
+  period within an Offer billed monthly.
