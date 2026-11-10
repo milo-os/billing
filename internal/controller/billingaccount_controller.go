@@ -456,15 +456,16 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 			contract.UsageBilled = true
 		case billingv1alpha1.ChargeTypeOneTime, billingv1alpha1.ChargeTypeRecurring:
 			contract.Fees = append(contract.Fees, billingv1alpha1.BillingAccountContractFee{
-				Name:        sp.Name,
-				DisplayName: sp.Spec.DisplayName,
-				ServiceRef:  sp.Spec.ServiceRef,
-				ChargeType:  sp.Spec.ChargeType,
-				Amount:      sp.Spec.Amount,
-				Quantity:    validation.SnapshotQuantity(sp),
-				PricingUnit: sp.Spec.PricingUnit,
-				Currency:    sp.Spec.Currency,
-				Interval:    sp.Spec.Interval,
+				Name:          sp.Name,
+				DisplayName:   sp.Spec.DisplayName,
+				ServiceRef:    sp.Spec.ServiceRef,
+				ChargeType:    sp.Spec.ChargeType,
+				Amount:        sp.Spec.Amount,
+				Quantity:      validation.SnapshotQuantity(sp),
+				PricingUnit:   sp.Spec.PricingUnit,
+				Currency:      sp.Spec.Currency,
+				Interval:      sp.Spec.Interval,
+				BillingTiming: validation.SnapshotBillingTiming(sp),
 			})
 		}
 	}

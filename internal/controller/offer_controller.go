@@ -124,6 +124,27 @@ func (r *OfferReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 				})
 				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
 			}
+
+			// Only Recurring fees have a billing timing: a OneTime fee
+			// is invoiced when it's charged and usage in arrears.
+			if names := validation.PricingsWithBillingTimingNotRecurring(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "BillingTimingNotRecurring",
+					Message: "billingTiming is only allowed for Recurring fees; set on: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "BillingTimingNotRecurring",
+					Message:            "Offer sets a billing timing on a pricing that isn't a Recurring fee and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
 			offer.Spec.ServicePricings = snapshots
 			if err := r.client.Update(ctx, &offer); err != nil {
 				return ctrl.Result{}, fmt.Errorf("writing servicePricings snapshot: %w", err)
@@ -215,11 +236,18 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 		if quantity == 0 && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
 			quantity = 1
 		}
+		// Recurring fees are billed in arrears unless the ref says. A
+		// timing on any other pricing is kept so publishing can refuse it.
+		timing := ref.BillingTiming
+		if timing == "" && sp.Spec.ChargeType == billingv1alpha1.ChargeTypeRecurring {
+			timing = billingv1alpha1.BillingTimingInArrears
+		}
 		snapshots = append(snapshots, billingv1alpha1.ServicePricingSnapshot{
-			Name:     sp.Name,
-			Discount: discount,
-			Quantity: quantity,
-			Spec:     *sp.Spec.DeepCopy(),
+			Name:          sp.Name,
+			Discount:      discount,
+			Quantity:      quantity,
+			BillingTiming: timing,
+			Spec:          *sp.Spec.DeepCopy(),
 		})
 	}
 	return snapshots, nil

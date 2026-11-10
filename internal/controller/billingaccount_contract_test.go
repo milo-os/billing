@@ -78,6 +78,7 @@ func TestAccountContract(t *testing.T) {
 	crossConnects.Spec.ServiceRef = ""
 	crossConnects.Spec.PricingUnit = "port"
 	crossConnects.Quantity = 4
+	crossConnects.BillingTiming = billingv1alpha1.BillingTimingInArrears
 
 	tests := []struct {
 		name        string
@@ -97,7 +98,7 @@ func TestAccountContract(t *testing.T) {
 				BillingDayOfMonth: 18,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "acme-setup", DisplayName: "Setup fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD"},
-					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "2400.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly},
+					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "2400.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInAdvance},
 				},
 				UsageBilled: true,
 			},
@@ -112,19 +113,21 @@ func TestAccountContract(t *testing.T) {
 				StartsAt:          metav1.NewTime(time.Date(2026, time.March, 31, 0, 0, 0, 0, time.UTC)),
 				BillingDayOfMonth: 31,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
-					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "900", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly},
+					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "900", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInAdvance},
 				},
 			},
 		},
 		{
-			name:        "fee without a service, with quantity and unit",
+			// Recurring fees published before billingTiming existed were
+			// billed in advance, and still are.
+			name:        "fee without a service, with quantity, unit and timing",
 			entitlement: contractEntitlement("acme-ports", startsAt),
 			offer:       publishedOffer("acme-ports", billingv1alpha1.OfferLaunchStageGA, crossConnects),
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(startsAt),
 				BillingDayOfMonth: 18,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
-					{Name: "cross-connect-300", DisplayName: "Cross connect", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly},
+					{Name: "cross-connect-300", DisplayName: "Cross connect", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInArrears},
 				},
 			},
 		},

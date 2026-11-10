@@ -521,6 +521,13 @@ type BillingAccountContractFee struct {
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// BillingTiming is when a Recurring fee is invoiced: InAdvance at the
+	// start of each period, or InArrears at its end, with that period's
+	// usage. Empty for a OneTime fee, which is invoiced when it's charged.
+	//
+	// +kubebuilder:validation:Optional
+	BillingTiming BillingTiming `json:"billingTiming,omitempty"`
 }
 
 // BillingAccount is the Schema for the billingaccounts API. It represents a

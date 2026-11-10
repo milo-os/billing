@@ -84,6 +84,13 @@ func ValidateOfferServicePricingRefs(
 				quantityOnUsageMessage,
 			))
 		}
+		if ref.BillingTiming != "" && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("billingTiming"),
+				ref.BillingTiming,
+				billingTimingNotRecurringMessage,
+			))
+		}
 		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
 	}
 
@@ -99,6 +106,35 @@ func ValidateOfferServicePricingRefs(
 
 const quantityOnUsageMessage = "quantity is only allowed for OneTime and Recurring fees; " +
 	"a Usage pricing is charged for what was used"
+
+const billingTimingNotRecurringMessage = "billingTiming is only allowed for Recurring fees; " +
+	"a OneTime fee is invoiced when it's charged and usage at the end of the period"
+
+// SnapshotBillingTiming returns when a Recurring fee in a snapshot is
+// invoiced: the snapshot's billingTiming, or InAdvance for a snapshot taken
+// before it existed, which providers billed in advance. Empty for OneTime
+// and Usage pricings.
+func SnapshotBillingTiming(sp billingv1alpha1.ServicePricingSnapshot) billingv1alpha1.BillingTiming {
+	if sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+		return ""
+	}
+	if sp.BillingTiming != "" {
+		return sp.BillingTiming
+	}
+	return billingv1alpha1.BillingTimingInAdvance
+}
+
+// PricingsWithBillingTimingNotRecurring returns the names of OneTime and
+// Usage pricings that carry a billingTiming, which only Recurring fees may.
+func PricingsWithBillingTimingNotRecurring(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring && p.BillingTiming != "" {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
 
 // SnapshotQuantity returns how many of a fee an Offer charges: the
 // snapshot's quantity, or 1 for a snapshot taken before quantities
@@ -177,6 +213,13 @@ func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.E
 				field.NewPath("spec", "servicePricings").Index(i).Child("quantity"),
 				snap.Quantity,
 				quantityOnUsageMessage,
+			))
+		}
+		if snap.BillingTiming != "" && snap.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("billingTiming"),
+				snap.BillingTiming,
+				billingTimingNotRecurringMessage,
 			))
 		}
 	}

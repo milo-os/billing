@@ -51,10 +51,10 @@ Two things are missing, and this enhancement adds them:
   1st.
 - **A preview of the first invoice.** An `InvoiceRequest` with mode `Preview`
   asks the invoicing provider what the account will be invoiced next. Before a
-  contract starts, that's its first invoice: the setup fee and the first month,
-  worked out without creating anything, so staff can check them before anything
-  reaches the customer. The first invoice itself is sent automatically when the
-  contract starts.
+  contract starts, that's its first invoice: the setup fee, and the first
+  month of any fee billed in advance, worked out without creating anything, so
+  staff can check them before anything reaches the customer. The first invoice
+  itself is sent automatically when the contract starts.
 
 A contract's charges also need to fit what was negotiated, and this enhancement
 covers that too:
@@ -67,6 +67,13 @@ covers that too:
 - **Pricing chosen per contract.** Staff pick the platform's usage pricings
   and fees for a contract directly, rather than copying another Offer's, and
   can give the customer their own price with a pricing based on the list one.
+- **Fees billed in advance or in arrears.** One-time fees are invoiced when
+  they're charged and usage at the end of each month. Each recurring fee is
+  billed in arrears, with the month's usage, unless the contract bills it in
+  advance.
+- **Changes at any time.** A change to a contract applies when it's made, not
+  from the next billing date, so a fee added mid-month is charged from that
+  day.
 
 ## Motivation
 
@@ -98,8 +105,8 @@ A contract's fees and rates are also harder to set up than they should be:
 
 - Let a contract set the day its charges start and bill on.
 - Move an existing account onto a contract without a gap in its billing.
-- Amend a contract's charges from the next billing date, so each invoice
-  carries one price.
+- Amend a contract at any time, with the change applying when it's made.
+- Bill each recurring fee in advance or in arrears, as the contract says.
 - Let staff preview a contract's first invoice, and an account's next one, from
   the staff portal, without access to the billing provider.
 - Keep `Invoice` provider-written: a request leads to an invoice, but only the
@@ -197,18 +204,30 @@ such as the account's discounts in its status, shows the contract's Offer early.
 
 ### Amending a Contract
 
-Changing a contract's charges, such as its monthly fee, a fee's quantity or a
-usage rate, means a new Offer and pointing `offerRef` at it. For an entitlement
-with a contract that has started, the provider applies the new Offer from the
-account's next billing date: the current month is billed as agreed, and each
-invoice carries one price.
-Entitlements without a contract still change immediately, as an account
-switching Offers in the portal expects.
+Changing a contract's charges, such as adding a fee, changing a fee's quantity
+or a usage rate, means a new Offer and pointing `offerRef` at it. A contract can
+be changed at any time, whatever its billing day or payment terms, and once it
+has started the change applies when it's made:
 
-The amended Offer leaves out one-time fees already charged, such as the setup
-fee. Providers charge a `OneTime` pricing when the Offer's charges start, which
-for openmeter-provider means whenever the account's subscription changes plan,
-so keeping the setup fee in would charge it again.
+- **Usage** is rated at the old rates up to the change and the new ones after
+  it. Both appear on the invoice at the end of the month, as usual.
+- **Fees billed in arrears** that are added, removed or changed are charged
+  for the part of the month each applied to, by time. A fourth cross connect
+  added on 2 May to a contract billed on the 18th is charged from 2 May, on the
+  invoice of 18 May, beside the three charged for the whole month.
+- **New one-time fees** are invoiced when they're added. A one-time fee is
+  charged once: an amendment that leaves it in, such as the setup fee, doesn't
+  charge it again, and one that leaves it out doesn't refund it.
+- **Fees billed in advance** change from the next billing date, since the
+  current month is already invoiced. That covers adding one, removing one,
+  changing its quantity or amount, and moving a fee between in advance and in
+  arrears. A customer's new rack price, for example, is a new pricing replacing
+  the old one, and changing both at the boundary means the current month isn't
+  charged twice.
+
+Before a contract starts, its Offer can change freely, and the contract starts
+on whichever Offer it names then. Entitlements without a contract also change
+immediately, as an account switching Offers in the portal expects.
 
 ### Contract Fees
 
@@ -292,6 +311,51 @@ spec:
 - It's a short label such as `port`, `kW` or `rack`, shown as written, so
   staff choose the form that reads well after a number.
 
+**Fees are billed in advance or in arrears.** When each charge is invoiced
+depends on its type:
+
+- A `OneTime` fee is always billed in advance: it's invoiced when it's
+  charged, so a setup fee is payable when the contract starts.
+- Usage is always billed in arrears: a month's usage is invoiced at the end of
+  that month.
+- A `Recurring` fee is billed in arrears by default, so each month's fee is
+  invoiced at the end of the month, on the same invoice as that month's usage.
+  An Offer's `servicePricingRefs[].billingTiming: InAdvance` bills it at the
+  start of each month instead, as is usual for rent-like charges such as rack
+  space.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: contract-ba-acme-20261110120000
+spec:
+  launchStage: GA
+  chargeTypes: [OneTime, Recurring, Usage]
+  servicePricingRefs:
+    - name: contract-ba-acme-20261110120000-fee-1   # Setup fee
+    - name: rack-space-v1
+      billingTiming: InAdvance
+    - name: cross-connect-v1
+      quantity: 4                                   # billed in arrears
+    - name: compute-vcpu-v1
+```
+
+A contract starting on 18 April with that Offer gets its first invoice on 18
+April, with the setup fee and the first month's rack space. On 18 May it gets
+the next: April's cross connects and usage, and May's rack space.
+
+- How a fee is billed is a term of the contract, not of the price, so like
+  `quantity` it's on the Offer's reference, and one list fee can be billed in
+  advance for one customer and in arrears for another.
+- `billingTiming` is for `Recurring` fees only. The Offer controller refuses to
+  publish an Offer that sets it on a `OneTime` or `Usage` pricing, whose timing
+  is fixed.
+- It's copied into the fee's snapshot on publish, as `InArrears` when the
+  reference leaves it out. Providers bill a `Recurring` snapshot without it, one
+  published before it existed, in advance, as they did then, so contracts
+  already running keep their timing until they're amended.
+
 ### Contract Usage Pricing
 
 A contract that bills usage lists `Usage` pricings in its Offer, next to its
@@ -354,7 +418,7 @@ spec:
   list price, the discount and the net amount, so it remains the better choice
   when the customer expects to see list prices.
 - Like any pricing, a customer pricing can't be changed once created. A new
-  rate is a new pricing in a new Offer, applied from the next billing date.
+  rate is a new pricing in a new Offer, applied when the Offer is.
 
 Customer pricings are made in the staff portal, as contract fees already are.
 This replaces the [pricing enhancement](https://github.com/datum-cloud/enhancements/pull/932)'s
@@ -416,7 +480,7 @@ status:
   lines:
     - description: Server installation
       amount: "1500.00"
-    - description: Dedicated server
+    - description: Rack space
       period:
         start: "2026-04-18T00:00:00Z"
         end: "2026-05-17T23:59:59Z"
@@ -436,14 +500,17 @@ fee. Usage isn't covered.
 
 - **Preview** reports what the account will be invoiced next, with lines and a
   total before tax, without creating anything. Before a contract starts that's
-  its first invoice, worked out from the Offer and the start date. After it
-  starts, it's the next invoice: one waiting to be issued, or the charges for
-  later periods.
+  its first invoice, worked out from the Offer and the start date: its one-time
+  fees and the first month of fees billed in advance. Fees billed in arrears
+  aren't on it; they're invoiced at the end of the month. After it starts, it's
+  the next invoice: one waiting to be issued, or the charges for later
+  periods.
 - **Issue** asks the provider to invoice the fixed charges now and send them,
   with `status.invoiceRef` naming the resulting `Invoice`. It's only useful
   with a provider that holds fixed charges until the end of the billing cycle.
   OpenMeter doesn't: it invoices in-advance charges as soon as they're due, so a
-  contract's setup fee and first month are invoiced the moment it starts, and
+  contract's setup fee and first month in advance are invoiced the moment it
+  starts, and
   openmeter-provider fails Issue requests as `Unsupported`.
 
 A request is done once its phase is `Succeeded` or `Failed`; to ask again,
@@ -462,7 +529,8 @@ In the staff portal, on the customer's billing account:
 1. **Payment terms.** Grant invoice terms with a `BillingArrangement`, with the
    contract's PO number and agreement reference, which print on every invoice.
 2. **Offer.** List the contract's fees, each with its amount, how it's charged
-   and how many, and a service only if it's for one. Tick the usage pricings
+   and how many, and a service only if it's for one. Recurring fees are billed
+   in arrears unless staff choose in advance. Tick the usage pricings
    the contract bills, if any, with a discount or the customer's own rates for
    each. The portal creates the pricings the contract needs, an Offer with them
    and the usage pricings, publishes it and points the account's
@@ -470,8 +538,9 @@ In the staff portal, on the customer's billing account:
 3. **Check.** Before the start date, create a `Preview` request and compare the
    first invoice's lines with the contract.
 
-When the contract starts, the first invoice (setup fee and first month) is sent
-automatically, and later months follow each cycle.
+When the contract starts, the first invoice (setup fee and the first month of
+any fee billed in advance) is sent automatically, and later months follow each
+cycle, with fees billed in arrears and usage for the month just ended.
 
 ### What Customers See
 
@@ -499,6 +568,7 @@ status:
         quantity: 3
         currency: USD
         interval: monthly
+        billingTiming: InArrears
     usageBilled: true
 ```
 
@@ -508,9 +578,11 @@ status:
 - Each fee's `amount` is its unit amount, and `quantity` how many the contract
   charges, so the portal shows "3 × $1,000.00", or "4 port × $300.00" for a fee
   with a `pricingUnit`. A fee without a service has no `serviceRef`.
-- An amended contract shows the new Offer's fees as soon as `offerRef` changes,
-  although they're billed from the next billing date, and leaves out the
-  one-time fees already charged.
+- A recurring fee's `billingTiming` says whether it's billed in advance or in
+  arrears, so the portal can say when each fee is invoiced. One-time fees
+  leave it out.
+- An amended contract shows the new Offer's fees as soon as `offerRef`
+  changes, although fees billed in advance change from the next billing date.
 - Once the contract has started, billing cycles follow `billingDayOfMonth`
   instead of the payment terms' `invoiceDayOfMonth`: in the portal's usage
   cycles, and in the usage tools of Patch and `datumctl billing`.
@@ -548,9 +620,14 @@ For `ServicePricing`:
 For `Offer`:
 
 - `servicePricingRefs[].quantity` is a whole number from 1 to 10,000.
+- `servicePricingRefs[].billingTiming` is an enum of `InAdvance` and
+  `InArrears`.
 - The Offer controller refuses to publish an Offer with `quantity` on a `Usage`
   pricing, as it refuses one that prices a meter twice, and copies `quantity`
   into each fee's snapshot, defaulting to 1.
+- It also refuses one with `billingTiming` on anything but a `Recurring`
+  pricing, and copies `billingTiming` into each recurring fee's snapshot,
+  defaulting to `InArrears`.
 
 ### Provider Requirements
 
@@ -561,8 +638,12 @@ An invoicing provider:
 - When a contract is added to an entitlement it already bills, keeps billing
   the account as before until `contract.startsAt`, then moves it onto
   `offerRef` and the contract's billing day.
-- Once a contract has started, applies a change of `offerRef` from the
-  account's next billing date.
+- Once a contract has started, applies a change of `offerRef` when it's
+  made: usage, fees billed in arrears and new one-time fees at once, prorated
+  by time, and fees billed in advance from the next billing date. It never
+  charges a one-time fee twice.
+- Bills each `Recurring` fee by its snapshot's `billingTiming`, and one
+  without it in advance.
 - Fulfils `InvoiceRequest`s for accounts it invoices, writing status only:
   - Lines and total cover the account's fixed charges, after discounts and
     before tax.
@@ -586,25 +667,67 @@ pricing, so a fee keeps its key when only its quantity changes. Fees without a
 service leave it out of the rate card's description. Customer usage pricings
 need no change: the provider rates their snapshot like any other.
 
+Rate cards for `OneTime` fees are in advance, as are `Recurring` fees whose
+snapshot says `InAdvance` or leaves `billingTiming` out. Other `Recurring` fees
+are in arrears. Plans leave OpenMeter's proration on, its default, so a fee in
+arrears is charged by time for a part month.
+
 For openmeter-provider, the start date becomes the subscription's billing
 anchor, and the provider subscribes the account on that day (straight away for
 today). It waits rather than scheduling a subscription ahead, because OpenMeter
 can't delete a scheduled subscription cleanly. OpenMeter then invoices the setup
-fee and first month straight away, since in-advance charges are invoiced as soon
-as they're due. Before the start, a Preview prices those charges from the Offer
+fee and the first month of fees billed in advance straight away, since
+in-advance charges are invoiced as soon as they're due. Before the start, a Preview prices those charges from the Offer
 itself; after it, a Preview shows the draft waiting to be issued or the charges
 for later periods. Issue requests fail as `Unsupported`.
 
 The provider waits in the same way to move an account onto a contract: the
 account's subscription carries on until the start date, then changes plan with
-the contract's start date as its new billing anchor. For an amendment it waits
-until the end of the subscription's current billing period and changes plan
-then, timed at that boundary so the old Offer bills the whole period. It records
-on the entitlement that the contract has started, so a change made after that
-is treated as an amendment rather than the move onto the contract, and when an
-amendment is due, so one that misses its boundary (the provider was down, say)
-is made as soon as it can rather than a month late.
+the contract's start date as its new billing anchor. It records on the
+entitlement that the contract has started, so a change made after that is
+treated as an amendment rather than the move onto the contract.
 ([openmeter-provider#93](https://github.com/milo-os/openmeter-provider/pull/93))
+
+An amendment doesn't change plan. A plan change in OpenMeter ends the
+subscription and starts another, which would:
+
+- invoice the old subscription's usage straight away, on an invoice of its own,
+  rather than at the end of the month;
+- charge each in-advance fee again for the rest of the month, since OpenMeter
+  doesn't credit the part of an issued invoice that the old subscription no
+  longer covers;
+- charge every one-time fee in the new plan again, as part of a new
+  subscription.
+
+Instead the provider edits the account's subscription in place, comparing its
+items with the new Offer's rate cards by key:
+
+- One edit, with timing `immediate`, makes the changes that apply at once:
+  usage rate cards and fees in arrears that are added, removed or replaced, and
+  new one-time fees. OpenMeter closes a replaced item at the edit and prorates
+  both versions, and invoices the usage and fees of both on the usual invoice.
+- A second, with timing `next_billing_cycle`, makes the changes to fees in
+  advance.
+- Items whose rate card is unchanged, and one-time fees already on the
+  subscription, are left alone, so nothing is charged twice. A one-time fee
+  missing from the new Offer stays on the subscription.
+
+The subscription stays on the plan it started with, so the provider records the
+Offer it last applied on the entitlement and compares the subscription's items,
+not its plan, with that Offer to decide whether it's up to date. An amendment
+made while a `next_billing_cycle` edit is still waiting replaces what's
+waiting.
+
+This needs OpenMeter's v3 subscription edit API, added after the version
+deployed (1.0.0-beta.232): v1 edits can't carry a usage rate card's
+`unit_config`. So OpenMeter is upgraded first. To be checked against a running
+OpenMeter before relying on it:
+
+- how a second edit replaces a waiting `next_billing_cycle` edit;
+- that proration of a fee replaced mid-month rounds each part to the cent,
+  which can leave the two parts a cent off the full price;
+- that an immediate edit adds no invoice of its own for fees in arrears or
+  usage.
 
 ### RBAC
 
@@ -725,3 +848,8 @@ list price.
   invoices and in portals.
 - 2026-11-06: Staff pick fees from the price list too, and a customer's own
   fee amount is a fee `basedOn` the list one, so the list price stays visible.
+- 2026-11-10: Recurring fees are billed in arrears unless the Offer's
+  reference says `InAdvance`. A started contract's amendments apply when
+  they're made, except to fees in advance, which change from the next billing
+  date, and openmeter-provider edits the subscription in place rather than
+  changing plan.

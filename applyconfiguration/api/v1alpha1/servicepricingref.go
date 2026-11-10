@@ -4,6 +4,10 @@
 
 package v1alpha1
 
+import (
+	apiv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+)
+
 // ServicePricingRefApplyConfiguration represents a declarative configuration of the ServicePricingRef type for use
 // with apply.
 //
@@ -23,6 +27,13 @@ type ServicePricingRefApplyConfiguration struct {
 	// whose quantity is what was used: the Offer controller won't publish
 	// an Offer that sets it there.
 	Quantity *int32 `json:"quantity,omitempty"`
+	// BillingTiming is when a Recurring fee is invoiced: InArrears, the
+	// default, at the end of each period with that period's usage, or
+	// InAdvance at its start. Only allowed on a Recurring pricing: a
+	// OneTime fee is always invoiced when it's charged and usage at the end
+	// of the period, and the Offer controller won't publish an Offer that
+	// sets it on either.
+	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
 }
 
 // ServicePricingRefApplyConfiguration constructs a declarative configuration of the ServicePricingRef type for use with
@@ -60,5 +71,13 @@ func (b *ServicePricingRefApplyConfiguration) WithDiscount(value *DiscountApplyC
 // If called multiple times, the Quantity field is set to the value of the last call.
 func (b *ServicePricingRefApplyConfiguration) WithQuantity(value int32) *ServicePricingRefApplyConfiguration {
 	b.Quantity = &value
+	return b
+}
+
+// WithBillingTiming sets the BillingTiming field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BillingTiming field is set to the value of the last call.
+func (b *ServicePricingRefApplyConfiguration) WithBillingTiming(value apiv1alpha1.BillingTiming) *ServicePricingRefApplyConfiguration {
+	b.BillingTiming = &value
 	return b
 }
