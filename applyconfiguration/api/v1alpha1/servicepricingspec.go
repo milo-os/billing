@@ -69,7 +69,9 @@ type ServicePricingSpecApplyConfiguration struct {
 	Amount *string `json:"amount,omitempty"`
 	// Trigger identifies when a OneTime charge fires.
 	Trigger *apiv1alpha1.ChargeTrigger `json:"trigger,omitempty"`
-	// Interval is the cadence for a Recurring charge.
+	// Interval is the cadence for a Recurring charge: monthly, quarterly
+	// or annual. It's the fee's own, so an Offer billed monthly can charge
+	// an annual fee once a year, on the account's billing day.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
 	// BasedOn names the list pricing, in the same namespace, that this
 	// pricing gives a customer their own price for. It must have the same

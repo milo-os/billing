@@ -239,9 +239,14 @@ spec:
                           maxLength: 128
                           type: string
                         interval:
-                          description: Interval is the cadence for a Recurring charge.
+                          description: |-
+                            Interval is the cadence for a Recurring charge: monthly, quarterly
+                            or annual. It's the fee's own, so an Offer billed monthly can charge
+                            an annual fee once a year, on the account's billing day.
                           enum:
                           - monthly
+                          - quarterly
+                          - annual
                           type: string
                         metric:
                           description: |-
