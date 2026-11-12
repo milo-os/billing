@@ -236,12 +236,12 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 		if quantity == 0 && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
 			quantity = 1
 		}
-		// Recurring fees are billed in arrears unless the ref says. A
-		// timing on any other pricing is kept so publishing can refuse it.
+		// The timing is copied only when the ref sets it: a Recurring fee
+		// without one is billed in advance (validation.SnapshotBillingTiming),
+		// as providers that don't read billingTiming bill every fee, so a
+		// snapshot never says InArrears for a fee already billed in advance.
+		// A timing on any other pricing is kept so publishing can refuse it.
 		timing := ref.BillingTiming
-		if timing == "" && sp.Spec.ChargeType == billingv1alpha1.ChargeTypeRecurring {
-			timing = billingv1alpha1.BillingTimingInArrears
-		}
 		snapshots = append(snapshots, billingv1alpha1.ServicePricingSnapshot{
 			Name:          sp.Name,
 			Discount:      discount,

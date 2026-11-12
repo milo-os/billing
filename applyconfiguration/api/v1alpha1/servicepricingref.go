@@ -27,9 +27,12 @@ type ServicePricingRefApplyConfiguration struct {
 	// whose quantity is what was used: the Offer controller won't publish
 	// an Offer that sets it there.
 	Quantity *int32 `json:"quantity,omitempty"`
-	// BillingTiming is when a Recurring fee is invoiced: InArrears, the
-	// default, at the end of each period with that period's usage, or
-	// InAdvance at its start. Only allowed on a Recurring pricing: a
+	// BillingTiming is when a Recurring fee is invoiced: InArrears at the
+	// end of each period with that period's usage, or InAdvance at its
+	// start. Unset, the fee is billed in advance, as every fee was before
+	// this field existed; the staff portal sets InArrears on new contract
+	// fees unless staff choose in advance. Only allowed on a Recurring
+	// pricing: a
 	// OneTime fee is always invoiced when it's charged and usage at the end
 	// of the period, and the Offer controller won't publish an Offer that
 	// sets it on either.

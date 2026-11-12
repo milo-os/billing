@@ -26,9 +26,9 @@ type ServicePricingSnapshotApplyConfiguration struct {
 	// existed) as 1. Unset for Usage pricings.
 	Quantity *int32 `json:"quantity,omitempty"`
 	// BillingTiming is when a Recurring fee is invoiced, captured from the
-	// reference when the Offer becomes GA: InArrears unless the reference
-	// set it. Providers bill a Recurring snapshot without it, one taken
-	// before it existed, in advance. Unset for OneTime and Usage pricings.
+	// reference when the Offer becomes GA, and only when the reference sets
+	// it. Providers bill a Recurring snapshot without it in advance. Unset
+	// for OneTime and Usage pricings.
 	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	Spec *ServicePricingSpecApplyConfiguration `json:"spec,omitempty"`

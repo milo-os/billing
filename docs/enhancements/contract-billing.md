@@ -69,8 +69,9 @@ covers that too:
   can give the customer their own price with a pricing based on the list one.
 - **Fees billed in advance or in arrears.** One-time fees are invoiced when
   they're charged and usage at the end of each month. Each recurring fee is
-  billed in arrears, with the month's usage, unless the contract bills it in
-  advance.
+  billed in advance or in arrears, as the contract says, and the staff portal
+  bills new contract fees in arrears, with the month's usage, unless staff
+  choose in advance.
 - **Changes at any time.** A change to a contract applies when it's made, not
   from the next billing date, so a fee added mid-month is charged from that
   day.
@@ -318,11 +319,13 @@ depends on its type:
   charged, so a setup fee is payable when the contract starts.
 - Usage is always billed in arrears: a month's usage is invoiced at the end of
   that month.
-- A `Recurring` fee is billed in arrears by default, so each month's fee is
-  invoiced at the end of the month, on the same invoice as that month's usage.
-  An Offer's `servicePricingRefs[].billingTiming: InAdvance` bills it at the
-  start of each month instead, as is usual for rent-like charges such as rack
-  space.
+- A `Recurring` fee is billed as the Offer's `servicePricingRefs[].billingTiming`
+  says. `InArrears` invoices each month's fee at the end of the month, on the
+  same invoice as that month's usage; `InAdvance` bills it at the start of
+  each month, as is usual for rent-like charges such as rack space. The staff
+  portal sets `InArrears` on new contract fees unless staff choose in advance.
+  A reference without it is billed in advance, as every fee was before the
+  field existed.
 
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
@@ -337,7 +340,8 @@ spec:
     - name: rack-space-v1
       billingTiming: InAdvance
     - name: cross-connect-v1
-      quantity: 4                                   # billed in arrears
+      quantity: 4
+      billingTiming: InArrears
     - name: compute-vcpu-v1
 ```
 
@@ -351,10 +355,16 @@ the next: April's cross connects and usage, and May's rack space.
 - `billingTiming` is for `Recurring` fees only. The Offer controller refuses to
   publish an Offer that sets it on a `OneTime` or `Usage` pricing, whose timing
   is fixed.
-- It's copied into the fee's snapshot on publish, as `InArrears` when the
-  reference leaves it out. Providers bill a `Recurring` snapshot without it, one
-  published before it existed, in advance, as they did then, so contracts
-  already running keep their timing until they're amended.
+- It's copied into the fee's snapshot on publish, only when the reference sets
+  it. Providers bill a `Recurring` snapshot without it in advance, as they did
+  before it existed, so contracts already running keep their timing until
+  they're amended.
+- Billing never fills in `InArrears` itself. A provider that doesn't read
+  `billingTiming` yet bills every fee in advance; if billing recorded
+  `InArrears` for such a fee, the provider would invoice the period it had
+  already billed in advance again at its end once it started reading the
+  field. So the staff portal only offers the choice once openmeter-provider
+  reads it.
 
 ### Contract Usage Pricing
 
@@ -626,8 +636,8 @@ For `Offer`:
   pricing, as it refuses one that prices a meter twice, and copies `quantity`
   into each fee's snapshot, defaulting to 1.
 - It also refuses one with `billingTiming` on anything but a `Recurring`
-  pricing, and copies `billingTiming` into each recurring fee's snapshot,
-  defaulting to `InArrears`.
+  pricing, and copies `billingTiming` into each recurring fee's snapshot when
+  the reference sets it.
 
 ### Provider Requirements
 
@@ -853,3 +863,8 @@ list price.
   they're made, except to fees in advance, which change from the next billing
   date, and openmeter-provider edits the subscription in place rather than
   changing plan.
+- 2026-11-12: Billing no longer defaults `billingTiming` to `InArrears`: a
+  reference without it is billed in advance, and the staff portal sets
+  `InArrears` on new contract fees instead. A default filled in before
+  openmeter-provider read the field would have recorded fees it bills in
+  advance as `InArrears`, and charged their period again once it did.

@@ -182,9 +182,12 @@ type ServicePricingRef struct {
 	// +kubebuilder:validation:Maximum=10000
 	Quantity int32 `json:"quantity,omitempty"`
 
-	// BillingTiming is when a Recurring fee is invoiced: InArrears, the
-	// default, at the end of each period with that period's usage, or
-	// InAdvance at its start. Only allowed on a Recurring pricing: a
+	// BillingTiming is when a Recurring fee is invoiced: InArrears at the
+	// end of each period with that period's usage, or InAdvance at its
+	// start. Unset, the fee is billed in advance, as every fee was before
+	// this field existed; the staff portal sets InArrears on new contract
+	// fees unless staff choose in advance. Only allowed on a Recurring
+	// pricing: a
 	// OneTime fee is always invoiced when it's charged and usage at the end
 	// of the period, and the Offer controller won't publish an Offer that
 	// sets it on either.
@@ -221,9 +224,9 @@ type ServicePricingSnapshot struct {
 	Quantity int32 `json:"quantity,omitempty"`
 
 	// BillingTiming is when a Recurring fee is invoiced, captured from the
-	// reference when the Offer becomes GA: InArrears unless the reference
-	// set it. Providers bill a Recurring snapshot without it, one taken
-	// before it existed, in advance. Unset for OneTime and Usage pricings.
+	// reference when the Offer becomes GA, and only when the reference sets
+	// it. Providers bill a Recurring snapshot without it in advance. Unset
+	// for OneTime and Usage pricings.
 	//
 	// +kubebuilder:validation:Optional
 	BillingTiming BillingTiming `json:"billingTiming,omitempty"`
