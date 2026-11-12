@@ -128,6 +128,8 @@ A contract's fees and rates are also harder to set up than they should be:
   same meter in the same units as the list pricing.
 - Letting customers request invoices.
 - Invoicing usage on request. Usage stays on the normal cycle.
+- Billing usage, or a whole Offer, on a period other than monthly. Only fees
+  can have their own period.
 
 ## Proposal
 
@@ -285,6 +287,38 @@ spec:
   reference's discount applies to that total.
 - `quantity` is for fees only. The Offer controller refuses to publish an Offer
   that sets it on a `Usage` pricing, whose quantity is what was used.
+
+**Fees have their own billing period.** A `Recurring` fee's `interval` is
+`monthly`, `quarterly` or `annual`, and its amount is per interval. Offers are
+billed monthly, so a contract can charge a monthly server fee and an annual
+support fee side by side, each on its own period.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ServicePricing
+metadata:
+  name: premium-support-annual-v1
+  namespace: milo-system
+spec:
+  chargeType: Recurring
+  currency: USD
+  displayName: Premium support
+  amount: "12000.00"
+  interval: annual
+```
+
+- A fee's periods are counted from the account's billing day. On a contract
+  starting on 18 April, an annual fee is charged every 18 April and a quarterly
+  one every 18 January, April, July and October. On an account without a
+  contract they're counted from its billing anchor in the same way.
+- Each charge goes on the account's invoice for that month, with its monthly
+  fees and usage.
+- The interval belongs to the pricing, since it changes what the amount means:
+  $12,000 a year is a different price from $1,000 a month. A customer's own fee
+  `basedOn` a list fee must have the same interval.
+- Usage is still billed monthly. Billing usage quarterly would also change the
+  usage cycles the portals, Patch and `datumctl billing` show, which all assume
+  a month.
 
 **Fees can have a unit.** A fee may set `pricingUnit`, the unit its amount is
 per, as a `Usage` pricing does. It's a label only: it doesn't change what's
@@ -669,6 +703,57 @@ An invoicing provider:
   has a `pricingUnit` ("Cross connect: 4 port × $300.00"), and otherwise with
   the quantity when it's more than 1 ("Dedicated server × 3").
 - Doesn't need `serviceRef` on a fee.
+- Charges a `Recurring` fee once per its `interval`, with periods counted from
+  the account's billing day.
+- Holds a change to a quarterly or annual fee billed in advance until the end
+  of the fee's own period, and never sends it late: a missed boundary waits for
+  the next one.
+
+OpenMeter lets a rate card bill on its own cadence when it lines up with the
+plan's, as `P3M` and `P1Y` do with the plans' `P1M`. So openmeter-provider gives
+each fee's rate card the cadence of its interval: `P1M`, `P3M` or `P1Y`. A card's
+periods follow its cadence from the subscription's billing anchor, and OpenMeter
+invoices each charge with whatever else is due then.
+
+A quarterly or annual fee billed in advance needs care when a contract is
+amended. It should change at the end of its own period, but OpenMeter's
+`next_billing_cycle` edit timing is the end of the subscription's monthly
+billing period, not the rate card's, and an edit to a running subscription
+can't take a custom time. Edited at the next monthly billing date, an annual
+fee charged on 18 April would end on, say, 18 July, and the new version would
+be charged pro rata from 18 July to the next 18 April. OpenMeter wouldn't credit
+the year already invoiced: an issued invoice can't change, and its subscription
+sync only records a validation issue against it. The customer would pay twice
+for July to April.
+
+Changing plan, as amendments did before, doesn't avoid this. Ending the old
+subscription in July leaves the year's invoice standing in the same way, and
+the new subscription charges every one-time fee again. A plan change timed for
+18 April would be safe, but it would hold back the whole amendment, usage
+prices and monthly fees included, for up to a year.
+
+What made the old plan changes safe was their timing: they waited for a
+billing date when nothing had been paid in advance. With monthly fees that's
+every billing date; with an annual fee it's only the anniversary. So
+openmeter-provider keeps that timing for just the fees that need it, and uses
+the hold it already has for deferred plan changes (`periodChangeTime` and
+`ChangeDue`):
+
+- The rest of the amendment is sent as an edit straight away.
+- A change to a quarterly or annual in-advance fee is held, with the end of the
+  fee's own period as its boundary instead of the subscription's month.
+- It's sent as an edit to that fee alone, not a plan change, so one-time fees
+  aren't charged again. Since an edit can't take a custom time, the provider
+  sends it during the last monthly billing period before the boundary with
+  `next_billing_cycle` timing, which lands on the boundary.
+- If the provider misses that month, because it was down, say, the change waits
+  for the fee's next period. That's unlike a deferred plan change, which
+  `ChangeDue` then makes straight away: once the boundary has passed, the next
+  period has been invoiced at the old price, and a late change would charge
+  that period twice.
+
+Fees billed in arrears don't need any of this: the old version is charged pro
+rata up to the change and the new one from it.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
@@ -863,6 +948,8 @@ list price.
   they're made, except to fees in advance, which change from the next billing
   date, and openmeter-provider edits the subscription in place rather than
   changing plan.
+- 2026-11-10: Recurring fees can be quarterly or annual, each on its own
+  period within an Offer billed monthly.
 - 2026-11-12: Billing no longer defaults `billingTiming` to `InArrears`: a
   reference without it is billed in advance, and the staff portal sets
   `InArrears` on new contract fees instead. A default filled in before

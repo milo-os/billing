@@ -516,8 +516,8 @@ type BillingAccountContractFee struct {
 	// +kubebuilder:validation:Required
 	Currency string `json:"currency"`
 
-	// Interval is how often a Recurring fee is charged. Empty for a OneTime
-	// fee.
+	// Interval is how often a Recurring fee is charged (monthly, quarterly
+	// or annual), so amount is per interval. Empty for a OneTime fee.
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`

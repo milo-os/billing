@@ -387,10 +387,12 @@ spec:
                           type: string
                         interval:
                           description: |-
-                            Interval is how often a Recurring fee is charged. Empty for a OneTime
-                            fee.
+                            Interval is how often a Recurring fee is charged (monthly, quarterly
+                            or annual), so amount is per interval. Empty for a OneTime fee.
                           enum:
                           - monthly
+                          - quarterly
+                          - annual
                           type: string
                         name:
                           description: Name is the metadata.name of the fee's ServicePricing.

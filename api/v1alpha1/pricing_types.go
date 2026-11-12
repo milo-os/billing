@@ -27,13 +27,20 @@ const (
 	ChargeTriggerBillingAccountActivation ChargeTrigger = "BillingAccountActivation"
 )
 
-// ChargeInterval is the cadence for a Recurring charge.
-// +kubebuilder:validation:Enum=monthly
+// ChargeInterval is the cadence for a Recurring charge. It's the fee's
+// own: an Offer is billed monthly, and a quarterly or annual fee in it is
+// charged every third or twelfth month, counted from the account's billing
+// day.
+// +kubebuilder:validation:Enum=monthly;quarterly;annual
 type ChargeInterval string
 
 const (
 	// ChargeIntervalMonthly bills once per calendar month.
 	ChargeIntervalMonthly ChargeInterval = "monthly"
+	// ChargeIntervalQuarterly bills once every three months.
+	ChargeIntervalQuarterly ChargeInterval = "quarterly"
+	// ChargeIntervalAnnual bills once a year.
+	ChargeIntervalAnnual ChargeInterval = "annual"
 )
 
 // BillingTiming is when a Recurring fee is invoiced for each period.
