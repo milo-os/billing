@@ -614,8 +614,9 @@ An invoicing provider:
 - Doesn't need `serviceRef` on a fee.
 - Charges a `Recurring` fee once per its `interval`, with periods counted from
   the account's billing day.
-- Changes a quarterly or annual fee billed in advance at the end of its own
-  period when a contract is amended, not at the next monthly billing date.
+- Holds a change to a quarterly or annual fee billed in advance until the end
+  of the fee's own period, and never sends it late: a missed boundary waits for
+  the next one.
 
 OpenMeter lets a rate card bill on its own cadence when it lines up with the
 plan's, as `P3M` and `P1Y` do with the plans' `P1M`. So openmeter-provider gives
@@ -632,11 +633,36 @@ fee charged on 18 April would end on, say, 18 July, and the new version would
 be charged pro rata from 18 July to the next 18 April. OpenMeter wouldn't credit
 the year already invoiced: an issued invoice can't change, and its subscription
 sync only records a validation issue against it. The customer would pay twice
-for July to April. So openmeter-provider holds a change to a quarterly or annual
-in-advance fee until the last month of the fee's current period, and then sends
-it as a `next_billing_cycle` edit, which lands on the fee's own period end.
-Fees billed in arrears don't need this: the old version is charged pro rata up
-to the change and the new one from it.
+for July to April.
+
+Changing plan, as amendments did before, doesn't avoid this. Ending the old
+subscription in July leaves the year's invoice standing in the same way, and
+the new subscription charges every one-time fee again. A plan change timed for
+18 April would be safe, but it would hold back the whole amendment, usage
+prices and monthly fees included, for up to a year.
+
+What made the old plan changes safe was their timing: they waited for a
+billing date when nothing had been paid in advance. With monthly fees that's
+every billing date; with an annual fee it's only the anniversary. So
+openmeter-provider keeps that timing for just the fees that need it, and uses
+the hold it already has for deferred plan changes (`periodChangeTime` and
+`ChangeDue`):
+
+- The rest of the amendment is sent as an edit straight away.
+- A change to a quarterly or annual in-advance fee is held, with the end of the
+  fee's own period as its boundary instead of the subscription's month.
+- It's sent as an edit to that fee alone, not a plan change, so one-time fees
+  aren't charged again. Since an edit can't take a custom time, the provider
+  sends it during the last monthly billing period before the boundary with
+  `next_billing_cycle` timing, which lands on the boundary.
+- If the provider misses that month, because it was down, say, the change waits
+  for the fee's next period. That's unlike a deferred plan change, which
+  `ChangeDue` then makes straight away: once the boundary has passed, the next
+  period has been invoiced at the old price, and a late change would charge
+  that period twice.
+
+Fees billed in arrears don't need any of this: the old version is charged pro
+rata up to the change and the new one from it.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
