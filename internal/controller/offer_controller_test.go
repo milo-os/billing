@@ -153,6 +153,45 @@ func TestOfferReconcile_RefusesQuantityOnUsage(t *testing.T) {
 	}
 }
 
+func TestOfferReconcile_SnapshotsFeePeriods(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeRecurring}
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "cross-connect-300", Periods: 36},
+		{Name: "support-500"},
+	}
+	got := reconcileOffer(t, offer,
+		monthlyFeePricing("cross-connect-300", "300.00"),
+		monthlyFeePricing("support-500", "500.00"),
+	)
+
+	want := map[string]int32{"cross-connect-300": 36, "support-500": 0}
+	if len(got.Spec.ServicePricings) != len(want) {
+		t.Fatalf("snapshot = %+v, want %d pricings", got.Spec.ServicePricings, len(want))
+	}
+	for _, snap := range got.Spec.ServicePricings {
+		if snap.Periods != want[snap.Name] {
+			t.Errorf("%s periods = %d, want %d", snap.Name, snap.Periods, want[snap.Name])
+		}
+	}
+}
+
+func TestOfferReconcile_RefusesPeriodsNotRecurring(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "compute-cpu-allocated-v1", Periods: 12},
+	}
+	got := reconcileOffer(t, offer, cpuAllocatedPricing("compute-cpu-allocated-v1", "0.025"))
+
+	if len(got.Spec.ServicePricings) != 0 {
+		t.Errorf("snapshot written for an Offer with periods on a Usage pricing: %+v", got.Spec.ServicePricings)
+	}
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, ConditionTypePublished)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "PeriodsNotRecurring" {
+		t.Errorf("Published condition = %+v, want False/PeriodsNotRecurring", cond)
+	}
+}
+
 func TestOfferReconciler_BuildSnapshots_Discounts(t *testing.T) {
 	scheme := runtime.NewScheme()
 	if err := billingv1alpha1.AddToScheme(scheme); err != nil {

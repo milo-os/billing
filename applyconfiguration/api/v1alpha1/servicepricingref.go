@@ -23,6 +23,13 @@ type ServicePricingRefApplyConfiguration struct {
 	// whose quantity is what was used: the Offer controller won't publish
 	// an Offer that sets it there.
 	Quantity *int32 `json:"quantity,omitempty"`
+	// Periods is how many of its intervals a Recurring fee is charged for,
+	// counted from the contract's start: 36 on a monthly fee is three
+	// years, and 4 on an annual fee is four. The fee stops after its last
+	// period. Unset, it's charged for as long as the account is on the
+	// Offer. Only allowed on a Recurring pricing: the Offer controller
+	// won't publish an Offer that sets it on any other.
+	Periods *int32 `json:"periods,omitempty"`
 }
 
 // ServicePricingRefApplyConfiguration constructs a declarative configuration of the ServicePricingRef type for use with
@@ -60,5 +67,13 @@ func (b *ServicePricingRefApplyConfiguration) WithDiscount(value *DiscountApplyC
 // If called multiple times, the Quantity field is set to the value of the last call.
 func (b *ServicePricingRefApplyConfiguration) WithQuantity(value int32) *ServicePricingRefApplyConfiguration {
 	b.Quantity = &value
+	return b
+}
+
+// WithPeriods sets the Periods field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Periods field is set to the value of the last call.
+func (b *ServicePricingRefApplyConfiguration) WithPeriods(value int32) *ServicePricingRefApplyConfiguration {
+	b.Periods = &value
 	return b
 }

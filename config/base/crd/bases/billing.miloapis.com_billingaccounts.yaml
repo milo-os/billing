@@ -376,6 +376,13 @@ spec:
                             fee").
                           maxLength: 128
                           type: string
+                        endsAt:
+                          description: |-
+                            EndsAt is when a Recurring fee with periods stops: the end of its
+                            last period, on the contract's billing day. Empty when the fee has
+                            no end.
+                          format: date-time
+                          type: string
                         interval:
                           description: |-
                             Interval is how often a Recurring fee is charged (monthly, quarterly
@@ -390,6 +397,13 @@ spec:
                           maxLength: 253
                           minLength: 1
                           type: string
+                        periods:
+                          description: |-
+                            Periods is how many intervals a Recurring fee is charged for,
+                            counted from startsAt. Empty when the fee has no end.
+                          format: int32
+                          minimum: 1
+                          type: integer
                         pricingUnit:
                           description: |-
                             PricingUnit is what amount is per (e.g. "port"), so the fee reads

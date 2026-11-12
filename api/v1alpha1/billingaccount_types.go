@@ -521,6 +521,20 @@ type BillingAccountContractFee struct {
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// Periods is how many intervals a Recurring fee is charged for,
+	// counted from startsAt. Empty when the fee has no end.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	Periods int32 `json:"periods,omitempty"`
+
+	// EndsAt is when a Recurring fee with periods stops: the end of its
+	// last period, on the contract's billing day. Empty when the fee has
+	// no end.
+	//
+	// +kubebuilder:validation:Optional
+	EndsAt *metav1.Time `json:"endsAt,omitempty"`
 }
 
 // BillingAccount is the Schema for the billingaccounts API. It represents a

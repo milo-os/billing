@@ -390,6 +390,17 @@ func TestValidateOfferServicePricingRefs(t *testing.T) {
 			t.Errorf("want one error on quantity, got %v", errs)
 		}
 	})
+
+	t.Run("periods on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", Periods: 12},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].periods" {
+			t.Errorf("want one error on periods, got %v", errs)
+		}
+	})
 }
 
 func TestValidateOfferUpdate_SnapshotQuantityOnUsage(t *testing.T) {
@@ -404,6 +415,47 @@ func TestValidateOfferUpdate_SnapshotQuantityOnUsage(t *testing.T) {
 	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
 	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].quantity" {
 		t.Errorf("want one error on quantity, got %v", errs)
+	}
+}
+
+func TestValidateOfferUpdate_SnapshotPeriodsNotRecurring(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, Periods: 12, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].periods" {
+		t.Errorf("want one error on periods, got %v", errs)
+	}
+}
+
+func TestFeeEndsAt(t *testing.T) {
+	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name     string
+		startsAt time.Time
+		interval billingv1alpha1.ChargeInterval
+		periods  int32
+		want     time.Time
+	}{
+		{"no end", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalMonthly, 0, time.Time{}},
+		{"36 monthly", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalMonthly, 36, day(2029, time.April, 18)},
+		{"unset interval is monthly", day(2026, time.April, 18), "", 2, day(2026, time.June, 18)},
+		{"4 quarterly", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalQuarterly, 4, day(2027, time.April, 18)},
+		{"3 annual", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalAnnual, 3, day(2029, time.April, 18)},
+		{"31st into a short month", day(2026, time.January, 31), billingv1alpha1.ChargeIntervalMonthly, 1, day(2026, time.February, 28)},
+		{"29 February into a non-leap year", day(2028, time.February, 29), billingv1alpha1.ChargeIntervalAnnual, 1, day(2029, time.February, 28)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FeeEndsAt(tt.startsAt, tt.interval, tt.periods); !got.Equal(tt.want) {
+				t.Errorf("FeeEndsAt() = %v, want %v", got, tt.want)
+			}
+		})
 	}
 }
 

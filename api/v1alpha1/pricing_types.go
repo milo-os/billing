@@ -175,6 +175,18 @@ type ServicePricingRef struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10000
 	Quantity int32 `json:"quantity,omitempty"`
+
+	// Periods is how many of its intervals a Recurring fee is charged for,
+	// counted from the contract's start: 36 on a monthly fee is three
+	// years, and 4 on an annual fee is four. The fee stops after its last
+	// period. Unset, it's charged for as long as the account is on the
+	// Offer. Only allowed on a Recurring pricing: the Offer controller
+	// won't publish an Offer that sets it on any other.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1200
+	Periods int32 `json:"periods,omitempty"`
 }
 
 // ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
@@ -203,6 +215,15 @@ type ServicePricingSnapshot struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10000
 	Quantity int32 `json:"quantity,omitempty"`
+
+	// Periods is how many of its intervals a Recurring fee is charged for,
+	// counted from the contract's start, captured from the reference when
+	// the Offer becomes GA. Unset when the fee has no end.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=1200
+	Periods int32 `json:"periods,omitempty"`
 
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	//
