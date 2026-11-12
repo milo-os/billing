@@ -12,7 +12,7 @@
 # Node and pnpm versions must match package.json's engines/packageManager.
 # Node 25+ no longer ships corepack, so pnpm is installed at its pinned version.
 
-FROM node:26.13.0-slim AS build
+FROM node:26.13.1-slim AS build
 WORKDIR /app
 RUN npm install --global pnpm@12.16.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
@@ -20,7 +20,7 @@ RUN pnpm install --frozen-lockfile
 COPY . .
 RUN pnpm run build
 
-FROM node:26.13.0-slim
+FROM node:26.13.1-slim
 WORKDIR /app
 COPY --from=build /app/dist ./dist
 COPY serve.ts ./
