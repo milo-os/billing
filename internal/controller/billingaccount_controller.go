@@ -455,7 +455,7 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 		case billingv1alpha1.ChargeTypeUsage:
 			contract.UsageBilled = true
 		case billingv1alpha1.ChargeTypeOneTime, billingv1alpha1.ChargeTypeRecurring:
-			contract.Fees = append(contract.Fees, billingv1alpha1.BillingAccountContractFee{
+			fee := billingv1alpha1.BillingAccountContractFee{
 				Name:        sp.Name,
 				DisplayName: sp.Spec.DisplayName,
 				ServiceRef:  sp.Spec.ServiceRef,
@@ -465,7 +465,13 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 				PricingUnit: sp.Spec.PricingUnit,
 				Currency:    sp.Spec.Currency,
 				Interval:    sp.Spec.Interval,
-			})
+			}
+			if sp.Spec.ChargeType == billingv1alpha1.ChargeTypeRecurring && sp.Periods > 0 {
+				fee.Periods = sp.Periods
+				endsAt := metav1.NewTime(validation.FeeEndsAt(startsAt.Time, sp.Spec.Interval, sp.Periods))
+				fee.EndsAt = &endsAt
+			}
+			contract.Fees = append(contract.Fees, fee)
 		}
 	}
 	return contract
