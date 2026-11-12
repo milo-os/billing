@@ -174,6 +174,40 @@ The `BillingAccount` policy also gets an audit rule for a person setting
 `spec.defaultPaymentMethodRef` with a merge patch, so the timeline says "made
 payment method card-1 the default" instead of "updated billing account".
 
+### Contracts
+
+Contracts are recorded from audit events, by the `BillingEntitlement` and
+`Offer` policies.
+
+- The **`BillingEntitlement`** policy writes to the organization's timeline,
+  where the account's people read it:
+
+  | Action | Summary |
+  | --- | --- |
+  | Set up a contract, with a new entitlement or by adding `spec.contract` to one | Jo set up a contract for billing account acme on offer contract-acme-1, starting 24 November 2026 |
+  | Change a contract's fees (a new `offerRef`) | Jo changed the contract fees for billing account acme: now on offer contract-acme-2 |
+  | Move an account without a contract to another Offer | Jo switched billing account acme to offer payg-v6 |
+  | Remove the entitlement | Jo removed the contract and offer contract-acme-1 from billing account acme |
+
+- The **`Offer`** policy writes to the platform timeline, since Offers are
+  cluster-scoped. That suits draft contracts, which stay off the customer's
+  timeline until they're published:
+
+  | Action | Summary |
+  | --- | --- |
+  | Save a draft | Jo saved a draft contract for billing account acme in organization acme-corp: 5 prices, starting 24 November 2026 |
+  | Edit a draft | Jo updated the draft contract for billing account acme in organization acme-corp: 6 prices |
+  | Discard a draft, or publish it, which copies it first | Jo removed the draft contract for billing account acme in organization acme-corp |
+  | A contract's Offer made on setup, a fee change or publishing | Jo created the contract offer contract-acme-1 for billing account acme in organization acme-corp: 5 prices |
+
+  The policy finds a contract's Offer by the `contract-billing-account` and
+  `contract-organization` labels the staff portal sets, and a draft's start
+  date in its `contract-starts-at` annotation.
+
+- **Controllers' writes stay off both timelines.** service-catalog seeding the
+  default Offer, openmeter-provider's annotations and the Offer controller's
+  snapshots are all excluded by the `system:` prefix.
+
 ## Provider checklist
 
 1. Import `go.miloapis.com/billing/api/v1alpha1` for the reasons, annotation
