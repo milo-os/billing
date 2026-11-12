@@ -400,6 +400,51 @@ the next: April's cross connects and usage, and May's rack space.
   field. So the staff portal only offers the choice once openmeter-provider
   reads it.
 
+**Fees can run for a set number of periods.** An Offer's
+`servicePricingRefs[].periods` says how many of its intervals a `Recurring` fee
+is charged for, so one contract can charge a server for three years and its
+support for one. Quotes are written this way: each recurring line has a period
+and a count of them, so 36 monthly is a three-year term and 3 annual is the
+same term paid yearly.
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: Offer
+metadata:
+  name: acme-contract
+spec:
+  servicePricingRefs:
+    - name: dedicated-server-1000
+      quantity: 3
+      periods: 36
+    - name: premium-support-annual-v1
+      periods: 1
+```
+
+- Periods are counted from the contract's start, on its billing day. The fee
+  stops after its last one: 36 monthly periods from 18 April 2026 end on
+  18 April 2029, and the fee isn't charged from then.
+- Without `periods` a fee is charged for as long as the account is on the
+  Offer, as it is today.
+- On an account without a contract, periods count from when the account was
+  first billed on the Offer, its subscription's start. There's no
+  `status.contract` to show the end on, so it's meant for contracts.
+- It's only for `Recurring` fees. A `OneTime` fee is charged once, and a
+  `Usage` pricing for what was used.
+- It belongs on the Offer's reference, like `quantity`, because it's part of
+  the deal rather than the price: the same list fee can run for one customer
+  for a year and for another for three.
+- A fee added by an amendment still counts from the contract's start, so its
+  end stays on a billing date the rest of the contract shares. Staff set
+  `periods` for the end they want: a fee added in the seventh month of a
+  three-year contract that should run to its end has 36 monthly periods, not
+  30.
+- The staff portal labels it "Renewals", as quotes do, with the same help
+  text: how many periods the fee runs for.
+- A contract's own term, and what happens when it ends, is
+  [End of Term](#end-of-term). A fee's periods are separate from it: a fee can
+  end before the contract does.
+
 ### Contract Usage Pricing
 
 A contract that bills usage lists `Usage` pricings in its Offer, next to its
@@ -613,6 +658,8 @@ status:
         currency: USD
         interval: monthly
         billingTiming: InArrears
+        periods: 36
+        endsAt: "2029-04-18T00:00:00Z"
     usageBilled: true
 ```
 
@@ -625,6 +672,9 @@ status:
 - A recurring fee's `billingTiming` says whether it's billed in advance or in
   arrears, so the portal can say when each fee is invoiced. One-time fees
   leave it out.
+- A fee with `periods` shows them and `endsAt`, when it stops, worked out from
+  the contract's start, billing day and the fee's interval. The portal can show
+  "36 months, until 18 April 2029" without doing the date arithmetic itself.
 - An amended contract shows the new Offer's fees as soon as `offerRef`
   changes, although fees billed in advance change from the next billing date.
 - Once the contract has started, billing cycles follow `billingDayOfMonth`
@@ -666,12 +716,17 @@ For `Offer`:
 - `servicePricingRefs[].quantity` is a whole number from 1 to 10,000.
 - `servicePricingRefs[].billingTiming` is an enum of `InAdvance` and
   `InArrears`.
+- `servicePricingRefs[].periods` is a whole number from 1 to 1,200, and the
+  webhook rejects it on a pricing that isn't a `Recurring` fee.
 - The Offer controller refuses to publish an Offer with `quantity` on a `Usage`
   pricing, as it refuses one that prices a meter twice, and copies `quantity`
   into each fee's snapshot, defaulting to 1.
 - It also refuses one with `billingTiming` on anything but a `Recurring`
   pricing, and copies `billingTiming` into each recurring fee's snapshot when
   the reference sets it.
+- It refuses, with reason `PeriodsNotRecurring`, to publish an Offer that sets
+  `periods` on a pricing that isn't a `Recurring` fee, and copies `periods`
+  into the snapshot unchanged.
 
 ### Provider Requirements
 
@@ -708,6 +763,8 @@ An invoicing provider:
 - Holds a change to a quarterly or annual fee billed in advance until the end
   of the fee's own period, and never sends it late: a missed boundary waits for
   the next one.
+- Stops charging a fee with `periods` after its last period, so its last charge
+  is for the period ending on the fee's `endsAt`.
 
 OpenMeter lets a rate card bill on its own cadence when it lines up with the
 plan's, as `P3M` and `P1Y` do with the plans' `P1M`. So openmeter-provider gives
@@ -754,6 +811,16 @@ the hold it already has for deferred plan changes (`periodChangeTime` and
 
 Fees billed in arrears don't need any of this: the old version is charged pro
 rata up to the change and the new one from it.
+
+Ending a fee after its `periods` uses the same hold. OpenMeter can end one item
+of a subscription early, by removing it, but only when the edit takes effect:
+an item can't be given an end date in advance. So openmeter-provider holds the
+removal and sends it during the last monthly billing period before the fee's
+`endsAt`, timed `next_billing_cycle`, so it lands on that date. Sent any later,
+the fee's next period would already be charged in advance, and OpenMeter won't
+credit it. Unlike an amendment, a missed end can't wait for the next boundary,
+which would charge more periods: the provider removes the fee straight away
+and reports the period that was charged after the end, for staff to credit.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
@@ -868,6 +935,10 @@ is still running, without anyone deciding to.
 Continuing past the term also needs the account to stay payable: if its invoice
 terms end with the contract, the renewal flag covers them too.
 
+A fee's own `periods` stays separate from the contract's term. Whether a fee
+may run past the contract's end, and whether a fee that ends can carry on
+month-to-month like the contract, are for this design to settle.
+
 ### Contract Rates for Customers
 
 `status.contract` says whether a contract bills usage, but not at what rates.
@@ -916,6 +987,18 @@ a discount, how many a contract charges belongs on the Offer's reference.
 **Listing a fee more than once.** References are keyed by name, and charging
 three servers as three lines would repeat the same line on every invoice.
 
+**Counting a fee's periods from when it was added.** A fee added by an
+amendment could count from the amendment instead of the contract's start. But
+nothing records when a fee joined an Offer: `status.contract` is worked out
+from the entitlement and the Offer each time, and an amendment publishes a new
+Offer. Counting from the start keeps the end date something billing can
+always recompute, and on a billing date the contract shares.
+
+**An end date instead of a count of periods.** `endsAt` on the reference would
+say the same thing, but staff could set a date that isn't a billing date, and
+the fee's last charge would be a part period. Quotes count periods, so the
+count carries over from a quote unchanged.
+
 **Rate overrides on the Offer's reference.** Overriding a usage pricing's rates
 on `servicePricingRefs` would save creating a pricing, but prices would then
 live in two places, the snapshot would have to merge them, and the webhook's
@@ -955,3 +1038,5 @@ list price.
   `InArrears` on new contract fees instead. A default filled in before
   openmeter-provider read the field would have recorded fees it bills in
   advance as `InArrears`, and charged their period again once it did.
+- 2026-11-12: Recurring fees can run for a set number of `periods`, counted
+  from the contract's start, with their end shown in `status.contract`.

@@ -6,6 +6,7 @@ package v1alpha1
 
 import (
 	apiv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 // BillingAccountContractFeeApplyConfiguration represents a declarative configuration of the BillingAccountContractFee type for use
@@ -42,6 +43,13 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	// start of each period, or InArrears at its end, with that period's
 	// usage. Empty for a OneTime fee, which is invoiced when it's charged.
 	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
+	// Periods is how many intervals a Recurring fee is charged for,
+	// counted from startsAt. Empty when the fee has no end.
+	Periods *int32 `json:"periods,omitempty"`
+	// EndsAt is when a Recurring fee with periods stops: the end of its
+	// last period, on the contract's billing day. Empty when the fee has
+	// no end.
+	EndsAt *v1.Time `json:"endsAt,omitempty"`
 }
 
 // BillingAccountContractFeeApplyConfiguration constructs a declarative configuration of the BillingAccountContractFee type for use with
@@ -127,5 +135,21 @@ func (b *BillingAccountContractFeeApplyConfiguration) WithInterval(value apiv1al
 // If called multiple times, the BillingTiming field is set to the value of the last call.
 func (b *BillingAccountContractFeeApplyConfiguration) WithBillingTiming(value apiv1alpha1.BillingTiming) *BillingAccountContractFeeApplyConfiguration {
 	b.BillingTiming = &value
+	return b
+}
+
+// WithPeriods sets the Periods field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Periods field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithPeriods(value int32) *BillingAccountContractFeeApplyConfiguration {
+	b.Periods = &value
+	return b
+}
+
+// WithEndsAt sets the EndsAt field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the EndsAt field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithEndsAt(value v1.Time) *BillingAccountContractFeeApplyConfiguration {
+	b.EndsAt = &value
 	return b
 }

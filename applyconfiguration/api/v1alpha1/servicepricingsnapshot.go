@@ -30,6 +30,10 @@ type ServicePricingSnapshotApplyConfiguration struct {
 	// it. Providers bill a Recurring snapshot without it in advance. Unset
 	// for OneTime and Usage pricings.
 	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
+	// Periods is how many of its intervals a Recurring fee is charged for,
+	// counted from the contract's start, captured from the reference when
+	// the Offer becomes GA. Unset when the fee has no end.
+	Periods *int32 `json:"periods,omitempty"`
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	Spec *ServicePricingSpecApplyConfiguration `json:"spec,omitempty"`
 }
@@ -69,6 +73,14 @@ func (b *ServicePricingSnapshotApplyConfiguration) WithQuantity(value int32) *Se
 // If called multiple times, the BillingTiming field is set to the value of the last call.
 func (b *ServicePricingSnapshotApplyConfiguration) WithBillingTiming(value apiv1alpha1.BillingTiming) *ServicePricingSnapshotApplyConfiguration {
 	b.BillingTiming = &value
+	return b
+}
+
+// WithPeriods sets the Periods field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Periods field is set to the value of the last call.
+func (b *ServicePricingSnapshotApplyConfiguration) WithPeriods(value int32) *ServicePricingSnapshotApplyConfiguration {
+	b.Periods = &value
 	return b
 }
 

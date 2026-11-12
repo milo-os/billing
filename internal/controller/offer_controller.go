@@ -145,6 +145,27 @@ func (r *OfferReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 				})
 				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
 			}
+
+			// Only Recurring fees run for a number of periods: a OneTime
+			// fee is charged once, and a Usage pricing for what was used.
+			if names := validation.PricingsWithPeriodsNotRecurring(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "PeriodsNotRecurring",
+					Message: "periods is only allowed for Recurring fees; set on: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "PeriodsNotRecurring",
+					Message:            "Offer sets periods on a pricing that isn't a Recurring fee and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
 			offer.Spec.ServicePricings = snapshots
 			if err := r.client.Update(ctx, &offer); err != nil {
 				return ctrl.Result{}, fmt.Errorf("writing servicePricings snapshot: %w", err)
@@ -247,7 +268,10 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 			Discount:      discount,
 			Quantity:      quantity,
 			BillingTiming: timing,
-			Spec:          *sp.Spec.DeepCopy(),
+			// Kept on any pricing so publishing can refuse it where it
+			// isn't a Recurring fee.
+			Periods: ref.Periods,
+			Spec:    *sp.Spec.DeepCopy(),
 		})
 	}
 	return snapshots, nil

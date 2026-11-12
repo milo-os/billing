@@ -5,6 +5,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -91,6 +92,13 @@ func ValidateOfferServicePricingRefs(
 				billingTimingNotRecurringMessage,
 			))
 		}
+		if ref.Periods > 0 && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("periods"),
+				ref.Periods,
+				periodsNotRecurringMessage,
+			))
+		}
 		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
 	}
 
@@ -134,6 +142,53 @@ func PricingsWithBillingTimingNotRecurring(pricings []billingv1alpha1.ServicePri
 		}
 	}
 	return names
+}
+
+const periodsNotRecurringMessage = "periods is only allowed for Recurring fees; " +
+	"a OneTime fee is charged once and a Usage pricing for what was used"
+
+// PricingsWithPeriodsNotRecurring returns the names of pricings other than
+// Recurring fees that carry periods, which only Recurring fees may.
+func PricingsWithPeriodsNotRecurring(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring && p.Periods > 0 {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
+
+// IntervalMonths returns how many months a Recurring fee's interval is:
+// 1 for monthly (and an unset interval), 3 for quarterly, 12 for annual.
+func IntervalMonths(interval billingv1alpha1.ChargeInterval) int {
+	switch interval {
+	case billingv1alpha1.ChargeIntervalQuarterly:
+		return 3
+	case billingv1alpha1.ChargeIntervalAnnual:
+		return 12
+	default:
+		return 1
+	}
+}
+
+// FeeEndsAt returns when a Recurring fee charged for periods intervals
+// from startsAt stops: periods intervals after startsAt, on startsAt's day
+// of the month, or the month's last day when it's shorter. It returns the
+// zero time when periods is 0, for a fee with no end.
+func FeeEndsAt(startsAt time.Time, interval billingv1alpha1.ChargeInterval, periods int32) time.Time {
+	if periods <= 0 {
+		return time.Time{}
+	}
+	start := startsAt.UTC()
+	months := IntervalMonths(interval) * int(periods)
+	first := time.Date(start.Year(), start.Month()+time.Month(months), 1, 0, 0, 0, 0, time.UTC)
+	day := start.Day()
+	if lastDay := time.Date(first.Year(), first.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(); day > lastDay {
+		day = lastDay
+	}
+	return time.Date(first.Year(), first.Month(), day,
+		start.Hour(), start.Minute(), start.Second(), start.Nanosecond(), time.UTC)
 }
 
 // SnapshotQuantity returns how many of a fee an Offer charges: the
@@ -220,6 +275,13 @@ func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.E
 				field.NewPath("spec", "servicePricings").Index(i).Child("billingTiming"),
 				snap.BillingTiming,
 				billingTimingNotRecurringMessage,
+			))
+		}
+		if snap.Periods > 0 && snap.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("periods"),
+				snap.Periods,
+				periodsNotRecurringMessage,
 			))
 		}
 	}

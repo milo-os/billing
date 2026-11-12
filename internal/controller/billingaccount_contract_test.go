@@ -80,6 +80,12 @@ func TestAccountContract(t *testing.T) {
 	crossConnects.Quantity = 4
 	crossConnects.BillingTiming = billingv1alpha1.BillingTimingInArrears
 
+	support := fee("support-annual", "Premium support", billingv1alpha1.ChargeTypeRecurring, "1200.00")
+	support.Spec.Interval = billingv1alpha1.ChargeIntervalAnnual
+	support.Periods = 3
+	setup := fee("acme-setup", "Setup fee", billingv1alpha1.ChargeTypeOneTime, "5000.00")
+	endsAt := metav1.NewTime(time.Date(2029, time.April, 18, 0, 0, 0, 0, time.UTC))
+
 	tests := []struct {
 		name        string
 		entitlement *billingv1alpha1.BillingEntitlement
@@ -128,6 +134,19 @@ func TestAccountContract(t *testing.T) {
 				BillingDayOfMonth: 18,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "cross-connect-300", DisplayName: "Cross connect", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInArrears},
+				},
+			},
+		},
+		{
+			name:        "fee with periods ends after its last one",
+			entitlement: contractEntitlement("acme-term", startsAt),
+			offer:       publishedOffer("acme-term", billingv1alpha1.OfferLaunchStageGA, setup, support),
+			want: &billingv1alpha1.BillingAccountContract{
+				StartsAt:          metav1.NewTime(startsAt),
+				BillingDayOfMonth: 18,
+				Fees: []billingv1alpha1.BillingAccountContractFee{
+					{Name: "acme-setup", DisplayName: "Setup fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD"},
+					{Name: "support-annual", DisplayName: "Premium support", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "1200.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalAnnual, BillingTiming: billingv1alpha1.BillingTimingInAdvance, Periods: 3, EndsAt: &endsAt},
 				},
 			},
 		},
