@@ -354,6 +354,15 @@ spec:
                             "2400.00"). The contract charges it quantity times.
                           pattern: ^(0|[1-9]\d*)(\.\d+)?$
                           type: string
+                        billingTiming:
+                          description: |-
+                            BillingTiming is when a Recurring fee is invoiced: InAdvance at the
+                            start of each period, or InArrears at its end, with that period's
+                            usage. Empty for a OneTime fee, which is invoiced when it's charged.
+                          enum:
+                          - InAdvance
+                          - InArrears
+                          type: string
                         chargeType:
                           allOf:
                           - enum:

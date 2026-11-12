@@ -137,6 +137,57 @@ func TestOfferReconcile_SnapshotsFeeQuantities(t *testing.T) {
 	}
 }
 
+func TestOfferReconcile_SnapshotsBillingTiming(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeRecurring, billingv1alpha1.ChargeTypeUsage}
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "rack-space-1000", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+		{Name: "cross-connect-300", BillingTiming: billingv1alpha1.BillingTimingInArrears},
+		// Without a timing the snapshot leaves it unset, which reads as in
+		// advance: how a provider that doesn't read billingTiming bills it,
+		// so it never bills a period again when it starts reading it.
+		{Name: "rack-space-unset-1000"},
+		{Name: "compute-cpu-allocated-v1"},
+	}
+	got := reconcileOffer(t, offer,
+		monthlyFeePricing("rack-space-1000", "1000.00"),
+		monthlyFeePricing("cross-connect-300", "300.00"),
+		monthlyFeePricing("rack-space-unset-1000", "1000.00"),
+		cpuAllocatedPricing("compute-cpu-allocated-v1", "0.025"),
+	)
+
+	want := map[string]billingv1alpha1.BillingTiming{
+		"rack-space-1000":          billingv1alpha1.BillingTimingInAdvance,
+		"cross-connect-300":        billingv1alpha1.BillingTimingInArrears,
+		"rack-space-unset-1000":    "",
+		"compute-cpu-allocated-v1": "",
+	}
+	if len(got.Spec.ServicePricings) != len(want) {
+		t.Fatalf("snapshot = %+v, want %d pricings", got.Spec.ServicePricings, len(want))
+	}
+	for _, snap := range got.Spec.ServicePricings {
+		if snap.BillingTiming != want[snap.Name] {
+			t.Errorf("%s billingTiming = %q, want %q", snap.Name, snap.BillingTiming, want[snap.Name])
+		}
+	}
+}
+
+func TestOfferReconcile_RefusesBillingTimingOnUsage(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "compute-cpu-allocated-v1", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+	}
+	got := reconcileOffer(t, offer, cpuAllocatedPricing("compute-cpu-allocated-v1", "0.025"))
+
+	if len(got.Spec.ServicePricings) != 0 {
+		t.Errorf("snapshot written for an Offer with a billing timing on a Usage pricing: %+v", got.Spec.ServicePricings)
+	}
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, ConditionTypePublished)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "BillingTimingNotRecurring" {
+		t.Errorf("Published condition = %+v, want False/BillingTimingNotRecurring", cond)
+	}
+}
+
 func TestOfferReconcile_RefusesQuantityOnUsage(t *testing.T) {
 	offer := gaOffer()
 	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{

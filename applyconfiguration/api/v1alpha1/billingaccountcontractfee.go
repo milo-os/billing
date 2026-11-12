@@ -39,6 +39,10 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	// Interval is how often a Recurring fee is charged (monthly, quarterly
 	// or annual), so amount is per interval. Empty for a OneTime fee.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
+	// BillingTiming is when a Recurring fee is invoiced: InAdvance at the
+	// start of each period, or InArrears at its end, with that period's
+	// usage. Empty for a OneTime fee, which is invoiced when it's charged.
+	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
 	// Periods is how many intervals a Recurring fee is charged for,
 	// counted from startsAt. Empty when the fee has no end.
 	Periods *int32 `json:"periods,omitempty"`
@@ -123,6 +127,14 @@ func (b *BillingAccountContractFeeApplyConfiguration) WithCurrency(value string)
 // If called multiple times, the Interval field is set to the value of the last call.
 func (b *BillingAccountContractFeeApplyConfiguration) WithInterval(value apiv1alpha1.ChargeInterval) *BillingAccountContractFeeApplyConfiguration {
 	b.Interval = &value
+	return b
+}
+
+// WithBillingTiming sets the BillingTiming field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BillingTiming field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithBillingTiming(value apiv1alpha1.BillingTiming) *BillingAccountContractFeeApplyConfiguration {
+	b.BillingTiming = &value
 	return b
 }
 

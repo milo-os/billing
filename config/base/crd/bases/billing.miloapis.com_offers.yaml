@@ -110,6 +110,20 @@ spec:
                     ServicePricingRef names a ServicePricing resource referenced by an Offer
                     while in Draft. Namespace defaults to milo-system when omitted.
                   properties:
+                    billingTiming:
+                      description: |-
+                        BillingTiming is when a Recurring fee is invoiced: InArrears at the
+                        end of each period with that period's usage, or InAdvance at its
+                        start. Unset, the fee is billed in advance, as every fee was before
+                        this field existed; the staff portal sets InArrears on new contract
+                        fees unless staff choose in advance. Only allowed on a Recurring
+                        pricing: a OneTime fee is always invoiced when it's charged and usage
+                        at the end of the period, and the Offer controller won't publish an
+                        Offer that sets it on either.
+                      enum:
+                      - InAdvance
+                      - InArrears
+                      type: string
                     discount:
                       description: Discount specifies an optional discount override
                         for this service pricing.
@@ -174,6 +188,16 @@ spec:
                     ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
                     at Offer publish time, plus the source ServicePricing name.
                   properties:
+                    billingTiming:
+                      description: |-
+                        BillingTiming is when a Recurring fee is invoiced, captured from the
+                        reference when the Offer becomes GA, and only when the reference sets
+                        it. Providers bill a Recurring snapshot without it in advance. Unset
+                        for OneTime and Usage pricings.
+                      enum:
+                      - InAdvance
+                      - InArrears
+                      type: string
                     discount:
                       description: |-
                         Discount is the resolved discount for this service pricing snapshot,

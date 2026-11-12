@@ -43,6 +43,19 @@ const (
 	ChargeIntervalAnnual ChargeInterval = "annual"
 )
 
+// BillingTiming is when a Recurring fee is invoiced for each period.
+// +kubebuilder:validation:Enum=InAdvance;InArrears
+type BillingTiming string
+
+const (
+	// BillingTimingInAdvance invoices each period's fee when the period
+	// starts.
+	BillingTimingInAdvance BillingTiming = "InAdvance"
+	// BillingTimingInArrears invoices each period's fee when the period
+	// ends, with that period's usage.
+	BillingTimingInArrears BillingTiming = "InArrears"
+)
+
 // OfferLaunchStage is the lifecycle stage of an Offer.
 // +kubebuilder:validation:Enum=Draft;GA
 type OfferLaunchStage string
@@ -176,6 +189,18 @@ type ServicePricingRef struct {
 	// +kubebuilder:validation:Maximum=10000
 	Quantity int32 `json:"quantity,omitempty"`
 
+	// BillingTiming is when a Recurring fee is invoiced: InArrears at the
+	// end of each period with that period's usage, or InAdvance at its
+	// start. Unset, the fee is billed in advance, as every fee was before
+	// this field existed; the staff portal sets InArrears on new contract
+	// fees unless staff choose in advance. Only allowed on a Recurring
+	// pricing: a OneTime fee is always invoiced when it's charged and usage
+	// at the end of the period, and the Offer controller won't publish an
+	// Offer that sets it on either.
+	//
+	// +kubebuilder:validation:Optional
+	BillingTiming BillingTiming `json:"billingTiming,omitempty"`
+
 	// Periods is how many of its intervals a Recurring fee is charged for,
 	// counted from the contract's start: 36 on a monthly fee is three
 	// years, and 4 on an annual fee is four. The fee stops after its last
@@ -215,6 +240,14 @@ type ServicePricingSnapshot struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=10000
 	Quantity int32 `json:"quantity,omitempty"`
+
+	// BillingTiming is when a Recurring fee is invoiced, captured from the
+	// reference when the Offer becomes GA, and only when the reference sets
+	// it. Providers bill a Recurring snapshot without it in advance. Unset
+	// for OneTime and Usage pricings.
+	//
+	// +kubebuilder:validation:Optional
+	BillingTiming BillingTiming `json:"billingTiming,omitempty"`
 
 	// Periods is how many of its intervals a Recurring fee is charged for,
 	// counted from the contract's start, captured from the reference when

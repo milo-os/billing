@@ -4,6 +4,10 @@
 
 package v1alpha1
 
+import (
+	apiv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+)
+
 // ServicePricingSnapshotApplyConfiguration represents a declarative configuration of the ServicePricingSnapshot type for use
 // with apply.
 //
@@ -21,6 +25,11 @@ type ServicePricingSnapshotApplyConfiguration struct {
 	// quantity, and treat an unset quantity (in a snapshot taken before it
 	// existed) as 1. Unset for Usage pricings.
 	Quantity *int32 `json:"quantity,omitempty"`
+	// BillingTiming is when a Recurring fee is invoiced, captured from the
+	// reference when the Offer becomes GA, and only when the reference sets
+	// it. Providers bill a Recurring snapshot without it in advance. Unset
+	// for OneTime and Usage pricings.
+	BillingTiming *apiv1alpha1.BillingTiming `json:"billingTiming,omitempty"`
 	// Periods is how many of its intervals a Recurring fee is charged for,
 	// counted from the contract's start, captured from the reference when
 	// the Offer becomes GA. Unset when the fee has no end.
@@ -56,6 +65,14 @@ func (b *ServicePricingSnapshotApplyConfiguration) WithDiscount(value *DiscountA
 // If called multiple times, the Quantity field is set to the value of the last call.
 func (b *ServicePricingSnapshotApplyConfiguration) WithQuantity(value int32) *ServicePricingSnapshotApplyConfiguration {
 	b.Quantity = &value
+	return b
+}
+
+// WithBillingTiming sets the BillingTiming field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BillingTiming field is set to the value of the last call.
+func (b *ServicePricingSnapshotApplyConfiguration) WithBillingTiming(value apiv1alpha1.BillingTiming) *ServicePricingSnapshotApplyConfiguration {
+	b.BillingTiming = &value
 	return b
 }
 

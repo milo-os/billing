@@ -391,6 +391,16 @@ func TestValidateOfferServicePricingRefs(t *testing.T) {
 		}
 	})
 
+	t.Run("billingTiming on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", BillingTiming: billingv1alpha1.BillingTimingInArrears},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].billingTiming" {
+			t.Errorf("want one error on billingTiming, got %v", errs)
+		}
+	})
 	t.Run("periods on a Usage pricing rejected", func(t *testing.T) {
 		offer := newDraftOffer("compute-pro-v1")
 		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
@@ -401,6 +411,73 @@ func TestValidateOfferServicePricingRefs(t *testing.T) {
 			t.Errorf("want one error on periods, got %v", errs)
 		}
 	})
+}
+
+func TestValidateOfferServicePricingRefs_BillingTimingOnFees(t *testing.T) {
+	monthly := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "rack-space-1000", Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeRecurring,
+			Currency:   "USD",
+			Amount:     "1000.00",
+			Interval:   billingv1alpha1.ChargeIntervalMonthly,
+		},
+	}
+	setup := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-1500", Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(monthly, setup).Build()
+
+	offer := newDraftOffer("contract")
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "rack-space-1000", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+		{Name: "setup-1500", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+	}
+	errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[1].billingTiming" {
+		t.Errorf("want one error on the one-time fee's billingTiming, got %v", errs)
+	}
+}
+
+func TestValidateOfferUpdate_SnapshotBillingTimingNotRecurring(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, BillingTiming: billingv1alpha1.BillingTimingInAdvance, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].billingTiming" {
+		t.Errorf("want one error on billingTiming, got %v", errs)
+	}
+}
+
+func TestSnapshotBillingTiming(t *testing.T) {
+	recurring := billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeRecurring}
+	tests := []struct {
+		name string
+		snap billingv1alpha1.ServicePricingSnapshot
+		want billingv1alpha1.BillingTiming
+	}{
+		{"recurring from before billingTiming", billingv1alpha1.ServicePricingSnapshot{Spec: recurring}, billingv1alpha1.BillingTimingInAdvance},
+		{"recurring in arrears", billingv1alpha1.ServicePricingSnapshot{Spec: recurring, BillingTiming: billingv1alpha1.BillingTimingInArrears}, billingv1alpha1.BillingTimingInArrears},
+		{"one-time", billingv1alpha1.ServicePricingSnapshot{Spec: billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeOneTime}}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SnapshotBillingTiming(tt.snap); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
 }
 
 func TestValidateOfferUpdate_SnapshotQuantityOnUsage(t *testing.T) {
