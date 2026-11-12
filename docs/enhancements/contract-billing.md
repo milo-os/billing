@@ -614,12 +614,29 @@ An invoicing provider:
 - Doesn't need `serviceRef` on a fee.
 - Charges a `Recurring` fee once per its `interval`, with periods counted from
   the account's billing day.
+- Changes a quarterly or annual fee billed in advance at the end of its own
+  period when a contract is amended, not at the next monthly billing date.
 
 OpenMeter lets a rate card bill on its own cadence when it lines up with the
 plan's, as `P3M` and `P1Y` do with the plans' `P1M`. So openmeter-provider gives
 each fee's rate card the cadence of its interval: `P1M`, `P3M` or `P1Y`. A card's
 periods follow its cadence from the subscription's billing anchor, and OpenMeter
 invoices each charge with whatever else is due then.
+
+A quarterly or annual fee billed in advance needs care when a contract is
+amended. It should change at the end of its own period, but OpenMeter's
+`next_billing_cycle` edit timing is the end of the subscription's monthly
+billing period, not the rate card's, and an edit to a running subscription
+can't take a custom time. Edited at the next monthly billing date, an annual
+fee charged on 18 April would end on, say, 18 July, and the new version would
+be charged pro rata from 18 July to the next 18 April. OpenMeter wouldn't credit
+the year already invoiced: an issued invoice can't change, and its subscription
+sync only records a validation issue against it. The customer would pay twice
+for July to April. So openmeter-provider holds a change to a quarterly or annual
+in-advance fee until the last month of the fee's current period, and then sends
+it as a `next_billing_cycle` edit, which lands on the fee's own period end.
+Fees billed in arrears don't need this: the old version is charged pro rata up
+to the change and the new one from it.
 
 OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
