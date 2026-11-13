@@ -218,9 +218,11 @@ has started the change applies when it's made:
   for the part of the month each applied to, by time. A fourth cross connect
   added on 2 May to a contract billed on the 18th is charged from 2 May, on the
   invoice of 18 May, beside the three charged for the whole month.
-- **New one-time fees** are invoiced when they're added. A one-time fee is
-  charged once: an amendment that leaves it in, such as the setup fee, doesn't
-  charge it again, and one that leaves it out doesn't refund it.
+- **One-time fees** can't be part of an amendment once the contract has
+  started: billing's webhook refuses an Offer that charges one, because
+  providers charge an Offer's one-time fees whenever an account moves onto it,
+  so the setup fee would be charged again. An amendment that leaves the setup
+  fee out doesn't refund it. A one-off charge mid-contract isn't supported yet.
 - **Fees billed in advance** change from the next billing date, since the
   current month is already invoiced. That covers adding one, removing one,
   changing its quantity or amount, and moving a fee between in advance and in
