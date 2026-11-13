@@ -236,8 +236,8 @@ made-up customer, Example Co:
 | | Agreed |
 |---|---|
 | Setup fee | $2,000, once |
-| Dedicated servers | 4 at $800 each a month |
-| Cross connects | 2 ports at $120 a port a month (list price $150) |
+| Dedicated servers | 4 at $800 each a month, billed in advance |
+| Cross connects | 2 ports at $120 a port a month (list price $150), billed in advance |
 | Usage | Billed at list prices |
 | Start | 1 December |
 | Payment | Net 30, PO 4500012345 |
@@ -279,11 +279,36 @@ contract can have up to 20 fees, counting those from the price list.
 | Field | What to enter |
 |---|---|
 | **Name** | What the invoice calls it, such as "Setup fee" or "Dedicated server" |
-| **Amount (USD)** | The price of one, such as `800` or `800.00` |
+| **Amount (USD)** | The price of one for one period, such as `800` or `800.00` |
 | **Quantity** | How many, from 1 to 10,000. Four servers at $800 is one fee with quantity 4, charged $3,200 |
-| **Charged** | **Once** (charged at the start) or **Monthly** |
+| **Charged** | **Once** (charged at the start) or **Recurring** |
+| **Every** | For a recurring fee: **Month**, **Quarter** or **Year** |
+| **Billed** | For a recurring fee: **In arrears** (the default) or **In advance**. See [How fees are billed](#how-fees-are-billed) |
+| **Renewals** | For a recurring fee: how many periods it's charged for, counted from the start date. 36 monthly is three years. Leave it blank for a fee with no end |
 | **Per** | Optional unit the amount is per, such as `port` or `kW`. Only a label: the invoice then reads "Cross connect: 2 port × $120.00" instead of "Cross connect × 2" |
 | **Service** | Optional. Pick one only if the fee is for a particular service. Setup, support and rack fees usually aren't |
+
+### How fees are billed
+
+Every fee is billed on the contract's billing day, the day of the month it
+starts on.
+
+- **In advance** invoices a period's fee when the period starts, as is usual
+  for rent-like charges such as rack space or servers. The first period is on
+  the first invoice.
+- **In arrears** invoices it when the period ends, on the same invoice as
+  that period's usage. Nothing for it is on the first invoice.
+- **Quarterly** and **yearly** fees are billed every 3 or 12 months from the
+  start date, on the billing day. A yearly fee billed in advance is charged
+  in full on the first invoice and then on each anniversary.
+- A fee with **renewals** stops after its last period: billed in advance, its
+  last charge is at the start of its last period; in arrears, at its end. It
+  stops on its own: you don't need to change the contract. The Contract card
+  shows when it ends.
+
+For example, a $600 quarterly audit with 2 renewals, billed in arrears, on a
+contract starting 1 January is charged $600 on 1 April and $600 on 1 July,
+and then never again.
 
 ### Price list
 
@@ -294,6 +319,9 @@ contract that charges only its fees.
 
 For each row you tick:
 
+- **Billed** and **Renewals**, for a fee: as for a contract fee (see
+  [How fees are billed](#how-fees-are-billed)). How often it's charged comes
+  from the price list.
 - **Qty**, for a fee: how many.
 - **% off**: a discount on that row.
 - **Customer price**, or **Customer rates** for usage: the customer's agreed
@@ -333,7 +361,8 @@ for a full first month.
 
 The summary on the right adds it all up as you type: the fees, the usage
 billed, and what the first invoice and each month after will come to, before
-discounts and tax, plus any usage.
+discounts and tax, plus any usage. The first invoice has the one-time fees
+and every fee billed in advance.
 
 Click **Set up contract** to save. The portal creates the contract's prices
 and its Offer, and moves the account onto it from the start date. The
@@ -350,9 +379,11 @@ On the Contract card, click **Preview first invoice**. The billing provider
 works out the invoice from the contract and shows each line and the **Total
 before tax**. Nothing is created and nothing is sent to the customer.
 
-The preview covers the contract's fees only: the setup fee and the first
-month. Usage is never on a preview. It's billed after the month it's used in,
-so the first invoice has none anyway.
+The preview covers the contract's fees only: the one-time fees and the
+first period of each fee billed in advance. Fees billed in arrears aren't on
+it: they're invoiced at the end of their first period. Usage is never on a
+preview. It's billed after the month it's used in, so the first invoice has
+none anyway.
 
 If the preview is wrong, use **Change fees** on the Contract card before the
 start date. Until the contract starts, everything can be changed, setup fees
@@ -374,10 +405,19 @@ customer prices, then click **Change fees**.
 - **After it starts**, the new fees apply from the next billing date, so the
   current month is billed as agreed. The Contract card shows **New fees take
   effect on** that date.
+- **A contract with a quarterly or yearly fee billed in advance changes at the
+  end of that fee's period**, not the next billing date: the end of the
+  current quarter, or the contract's anniversary. The customer has already
+  paid for the whole period, and changing earlier would charge part of it
+  again. With a yearly fee billed in advance, a change can take up to a year
+  to apply, so check the **New fees take effect on** date with the customer.
+- **Fees with renewals keep ending on time** while a change waits, by the
+  contract as it was.
 - **One-time fees aren't charged again.** Once the contract has started, its
   setup fee has been charged, so the page leaves it out and won't let you add
-  a one-time fee. A one-off charge in the middle of a contract can't be made
-  from the staff portal yet: ask the billing team.
+  a one-time fee. Billing refuses one too, however the change is made. A
+  one-off charge in the middle of a contract can't be made from the staff
+  portal yet: ask the billing team.
 
 Each change creates a new Offer for the contract. Don't edit or reuse a
 contract's Offers directly.
@@ -390,9 +430,10 @@ contract's Offers directly.
 | You save a contract | Its prices and Offer are created, and the account is set to move onto it at the start date | Staff portal |
 | Until the start date | The account is billed as before | OpenMeter |
 | The contract's start date | The account moves onto the contract. The first invoice (setup fee and first month) is created and sent a few minutes later | OpenMeter |
-| Each billing date | An invoice for the next month's fees and the last month's usage, with discounts applied | OpenMeter |
+| Each billing date | An invoice for the fees billed in advance for the period starting, the fees billed in arrears for the period ending, and the last month's usage, with discounts applied. Quarterly and yearly fees only every 3 or 12 months | OpenMeter |
+| A fee's last renewal ends | It's removed and not charged again | Billing provider |
 | An invoice is issued | Card accounts are charged. Invoice accounts are emailed the invoice, payable within their net days | Stripe |
-| You change a started contract | The new fees start on the next billing date | OpenMeter |
+| You change a started contract | The new fees start on the next billing date, or at the end of the period of a quarterly or yearly fee billed in advance | OpenMeter |
 
 You never create or send invoices by hand.
 
@@ -401,8 +442,9 @@ You never create or send invoices by hand.
 In the cloud portal, on their billing page:
 
 - **Contract**: the start date, the billing day, and each fee with its
-  quantity, such as "4 × $800.00" or "2 port × $120.00". They see it as soon
-  as the contract is set up, before it starts. Fees are shown before
+  quantity, such as "4 × $800.00" or "2 port × $120.00", how often it's
+  charged, whether in advance or in arrears, and when a fee with renewals
+  ends. They see it as soon as the contract is set up, before it starts. Fees are shown before
   discounts. A changed contract shows the new fees straight away, even
   though they're billed from the next billing date.
 - **Payment terms**: net days, PO number and agreement reference.
@@ -430,6 +472,8 @@ your internal notes and reasons.
 | The preview says "There's nothing to invoice yet" | Everything due has already been invoiced. Previews don't include usage |
 | "The first invoice hasn't come through yet" | It arrives a few minutes after the contract starts. If it hasn't after an hour, ask the billing team |
 | A published Offer has no **Published at** date after a few minutes | Its charge types probably don't cover every price in it. Create a new Offer with the right charge types |
+| A fee with renewals is still on an invoice after it should have ended | Ask the billing team. The periods charged after its end need crediting |
+| A contract starting today has a smaller first invoice | It was charged from when you saved it, not midnight. Start contracts tomorrow or later for a full first month |
 | A customer says their invoice is wrong | Compare it with the Contract card and a preview, then ask the billing team. Don't edit anything in Stripe or OpenMeter |
 
 ## Further reading
