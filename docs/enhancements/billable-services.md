@@ -149,49 +149,40 @@ owning repositories before production adoption.
 
 ### API
 
-Make BillableService cluster-scoped, consistent with platform-wide Offers and
-meters. Its `metadata.name` is the stable billing identifier, not a catalog
-serviceName. Prices remain namespaced and reference it explicitly.
-
-Illustrative new resource:
+Proposed resource:
 
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
 kind: BillableService
+# Cluster-scoped; prices stay in namespaced ServicePricing resources.
 metadata:
+  # Stable billing ID, separate from the catalog's serviceName.
   name: dedicated-server
 spec:
+  # Required billing name. Edits affect only newly published Offers.
   displayName: Dedicated Server
+  # Optional customer-facing description. No internal notes.
   description: Dedicated hardware with installation and monthly operation.
+  # Defaults to Active. Can move to Retired, but not back.
   phase: Active
+  # Optional Service object references: [{name: dedicated-compute}].
+  # Names must be unique. Linking does not publish or grant access.
+  catalogServiceRefs: []
+  # Allowed MeterDefinition references: [{name: server-hours}].
+  # Names must be unique. Leave empty for fee-only services.
+  meterRefs: []
+# Written by the controller, not the author.
+status:
+  # Reports readiness and broken references.
+  conditions: []
+  # Last metadata.generation checked by the controller.
+  observedGeneration: 1
 ```
 
-Proposed fields:
-
-| Field | Meaning |
-| --- | --- |
-| `spec.displayName` | Required billing-facing service name; mutable for future publications. |
-| `spec.description` | Optional customer-safe description; not internal notes or negotiated terms. |
-| `spec.phase` | `Active` (default) or `Retired`; retirement is forward-only. |
-| `spec.catalogServiceRefs[]` | Optional references by catalog Service object name, not serviceName; associations only. |
-| `spec.meterRefs[]` | Explicit allowed MeterDefinition object references for new Usage prices; empty for fee-only services. |
-| `status.conditions` | Readiness and invalid-reference diagnostics. |
-| `status.observedGeneration` | Generation evaluated by the controller. |
-
-Use name-keyed list semantics for both reference lists. Do not add a second
-mutable identifier or put prices inside this resource. The catalog association
-does not imply that the BillableService is public or that buying it grants
-catalog entitlements.
-
-Add `ServicePricing.spec.billableServiceRef: {name: dedicated-server}`. Keep
-ServicePricing's existing displayName as the invoice-line label: for example,
-“Server installation” and “Monthly dedicated server” can belong to the same
-BillableService without losing their distinct descriptions.
-
-For catalog-backed usage, a BillableService such as `managed-compute` can list
-the compute catalog Service and the existing CPU and memory MeterDefinitions.
-A second service can list a different subset of those meters. The public
-catalog name, billing name, and meter name need not match.
+Prices use `ServicePricing.spec.billableServiceRef: {name: dedicated-server}`.
+Each price keeps its own invoice-line label, such as “Server installation” or
+“Monthly dedicated server”. Both reference lists are keyed by name. Catalog,
+billing, and meter names do not need to match.
 
 ### Behavioral Rules
 
