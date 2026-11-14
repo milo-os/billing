@@ -44,11 +44,10 @@ one catalog Service.
 Keep the existing commercial flow:
 
 ```text
-Catalog Service (optional association)
-  └── BillableService ← ServicePricing ← Offer ← BillingEntitlement
-                           ↑                         └── BillingAccount
-                    MeterDefinition
-                    (usage pricing only)
+BillableService ← ServicePricing ← Offer ← BillingEntitlement
+                       ↑                         └── BillingAccount
+                MeterDefinition
+                (usage pricing only)
 ```
 
 BillableService supplies billing identity and descriptive metadata.
@@ -56,6 +55,11 @@ ServicePricing continues to define a price, Offer selects prices and quantities,
 and BillingEntitlement assigns an Offer to an account. Creating a BillableService
 does not publish a catalog entry, grant access, provision resources, or charge
 a customer.
+
+The dependency stays one-way: Service Catalog uses the billing API. Billing
+does not import catalog API types, read or watch catalog resources, or require
+the catalog API to be installed. Any mapping to catalog Services belongs in
+Service Catalog, not in BillableService.
 
 This is a scope proposal, not an implemented API. External provider and catalog
 changes below are integration requirements; their implementations were not
@@ -82,8 +86,8 @@ inspected as part of this repository review.
 - Sell private or pre-catalog services through the existing billing workflow.
 - Give related setup, recurring, and usage prices a shared service identity.
 - Use billing names and groupings that differ from public catalog names.
-- Support one catalog Service mapping to several BillableServices, and a
-  BillableService associated with several catalog Services for reporting.
+- Let Service Catalog map its Services to billing identities without billing
+  needing to know about those mappings.
 - Preserve historical commercial terms and existing usage-meter identities.
 - Keep catalog publication and service access separate from billing setup.
 
@@ -102,10 +106,10 @@ inspected as part of this repository review.
 ## Proposal
 
 Introduce a platform-managed BillableService resource and an explicit reference
-from ServicePricing. Catalog associations are optional. Snapshot the billing
+from ServicePricing. Do not add catalog references. Snapshot the billing
 identity when an Offer is published so later metadata changes do not change
 what an account purchased. Adopt the new path incrementally alongside legacy
-catalog references.
+serviceRef values without looking them up in the catalog.
 
 ### User Stories
 
@@ -122,8 +126,8 @@ catalog references.
 
 This proposal retains the existing one-Offer-per-account model, immutable prices,
 and immutable published Offer snapshots. BillableService does not grant service
-access. Provider and catalog integration work must be coordinated across their
-owning repositories before production adoption.
+access. Coordinate provider and catalog writers before switching them to the
+new format, but keep billing independent of catalog availability.
 
 ### Risks and Mitigations
 
@@ -158,9 +162,6 @@ spec:
   description: Dedicated hardware with installation and monthly operation.
   # Defaults to Active. Can move to Retired, but not back.
   phase: Active
-  # Optional Service object references: [{name: dedicated-compute}].
-  # Names must be unique. Linking does not publish or grant access.
-  catalogServiceRefs: []
   # Allowed MeterDefinition references: [{name: server-hours}].
   # Names must be unique. Leave empty for fee-only services.
   meterRefs: []
@@ -174,7 +175,7 @@ status:
 
 Prices use `ServicePricing.spec.billableServiceRef: {name: dedicated-server}`.
 Each price keeps its own invoice-line label, such as “Server installation” or
-“Monthly dedicated server”. Both reference lists are keyed by name. Catalog,
+“Monthly dedicated server”. Meter references are keyed by name. Catalog,
 billing, and meter names do not need to match.
 
 ### Behavioral Rules
@@ -183,7 +184,7 @@ billing, and meter names do not need to match.
 
 - New explicit references must resolve to an Active BillableService. Admission
   validates the actual referenced objects, not just a potentially stale Ready
-  condition. Invalid associations are also surfaced by reconciliation.
+  condition. Invalid billing references are also surfaced by reconciliation.
 - A Usage pricing's metric must resolve to an existing, non-Retired meter, as
   today. On the new reference path, that meter must appear in the BillableService's
   explicit meterRefs; do not require catalog-label equality.
@@ -196,15 +197,15 @@ billing, and meter names do not need to match.
   Usage, OneTime, and Recurring prices.
 - A `basedOn` pricing must preserve its source's billableServiceRef. A negotiated
   rate is another price for the same service, not a new billing identity.
-- Associations and meter allowlists can change for future prices/publications.
+- Meter allowlists can change for future prices/publications.
   Revalidate them when an Offer is published, including for an older price.
   Such edits must not invalidate or rerate an already published Offer.
 
 #### Snapshots and History
 
 Extend each ServicePricingSnapshot with an optional resolved BillableService
-snapshot containing its name, UID, displayName, description, and catalog
-associations. Snapshot at Offer publication; continue snapshotting the pricing
+snapshot containing its name, UID, displayName, and description.
+Snapshot at Offer publication; continue snapshotting the pricing
 spec, including the new reference, as today.
 
 Providers and billing read models must use the published snapshot, not a live
@@ -229,10 +230,9 @@ by this lifecycle and would require a separate Offer/assignment policy.
 
 Reject deletion while any ServicePricing or published Offer references the
 BillableService. Prefer retirement and retained identities over destructive
-cleanup. Do not cascade deletion from catalog Services: deleting or removing a
-catalog association must not delete billing products or terminate billing.
-Missing catalog associations block new publication until repaired, not ongoing
-rating of immutable snapshots.
+cleanup. Catalog deletion or downtime must not affect billing publication,
+validation, or ongoing charges. Billing does not check catalog resources or
+use them as owners of billing resources.
 
 Staff can manage BillableServices; catalog automation receives narrowly scoped
 permissions for resources it manages. Consumers receive only the billing
@@ -247,15 +247,17 @@ catalog Service that generates billing prices, then generate prices referencing
 it. Use a deterministic naming policy and explicit managed-by metadata.
 Detect collisions and fail visibly rather than adopting a staff-managed object.
 
-The default mapping is a convenience, not a one-to-one domain constraint.
-Staff-managed BillableServices can associate with the same catalog Service and
-select its meters without being reconciled back to the catalog's display name.
+Service Catalog owns any mapping between its Services and BillableServices.
+It can map one Service to several billing identities or several Services to
+one identity. Billing neither stores nor validates these mappings.
+Staff-managed BillableServices can select the same billing meters without
+being reconciled back to a catalog display name.
 Define field ownership before enabling automation; do not let two controllers
 overwrite the same metadata or meter list. No owner reference should cause
 catalog deletion to garbage-collect billing identities.
 
-If a private service later enters the catalog, attach the catalog association
-to its existing BillableService. Do not create a replacement billing identity
+If a private service later enters the catalog, reference its existing
+BillableService from the catalog side. Do not create a replacement billing identity
 or migrate contracts just to publish marketing/catalog information.
 
 ### Delivery Scope
@@ -287,12 +289,12 @@ are required to begin selling standalone services.
 
 ### Acceptance Criteria
 
-- A staff user creates a BillableService with no catalog association, adds
+- A staff user creates a BillableService, adds
   setup/monthly prices, publishes an Offer, and assigns it to an account.
   Invoice preview and invoice issuance preserve quantities and line labels.
 - A metered standalone service works without a catalog ownership label;
   nonexistent, unassociated, or Retired meters are rejected on new publication.
-- Two BillableServices associated with one catalog Service retain independent
+- Two BillableServices mapped by one catalog Service retain independent
   billing labels. The same meter cannot be priced twice in one Offer.
 - Creating a service or assigning billing terms does not create catalog access
   entitlements or make an unpublished service publicly discoverable.
@@ -305,6 +307,10 @@ are required to begin selling standalone services.
   charges, change meter keys, or unexpectedly alter billing dates.
 - Authorization tests prevent consumers from enumerating staff/private services;
   provider conformance tests cover both snapshot versions and historical reads.
+- With no catalog API installed or catalog permissions granted, billing can
+  create and validate services and prices, publish Offers, and continue billing.
+  Cover both the new reference path and legacy serviceRef prices. Billing must
+  have no catalog API imports, lookups, watches, or reference validation.
 
 ### Decisions to Confirm Before Implementation
 
@@ -364,14 +370,17 @@ across Offers, stopping new authoring, continued existing billing, and reenablem
    formats before publishing Offers with the new billing identity.
 2. **Support two explicit paths.** During migration accept either legacy
    serviceRef or billableServiceRef, never both. Usage requires one; existing
-   unassociated fixed fees remain valid. Preserve existing catalog validation
-   on the legacy path and apply the new rules only on the new path.
+   unassociated fixed fees remain valid. Treat legacy serviceRef as a stored
+   identifier, not a catalog API reference. Keep the existing meter-label check
+   for legacy Usage prices using billing's MeterDefinition. Remove catalog
+   existence checks for legacy fees; those strings no longer prove a catalog
+   Service exists. Neither path may call the catalog API.
 3. **Seed identities and update writers.** Inventory existing catalog identities,
    meters, prices, provider integrations, and downstream consumers. Create
    deterministic defaults, establish meter associations, then update catalog
-   generation and staff tooling. Standalone authoring must work with no catalog
-   Service and must not require listing catalog Services when no association
-   is provided.
+   generation and staff tooling. Catalog-side tooling supplies mappings; billing
+   does not discover them by querying catalog resources. All billing authoring
+   and validation must work without the catalog API installed.
 4. **Publish new prices and Offers.** Do not mutate immutable ServicePricing
    specs or published Offer snapshots. Create successors where migration is
    wanted and move accounts through the existing entitlement/contract amendment
@@ -407,8 +416,9 @@ supported rollback once new-format Offers are active.
 
 #### Is the rollout accompanied by any deprecations and/or removals of features, APIs, fields of API types, flags, etc.?
 
-The initial release is additive. Legacy serviceRef authoring is a later
-deprecation candidate, not an initial removal; historical readers remain.
+The API changes are additive. Remove the legacy fee check that queries catalog
+Services, along with billing's catalog read permissions. Legacy serviceRef
+authoring is a later deprecation candidate; historical readers remain.
 
 ### Monitoring Requirements
 
@@ -451,9 +461,9 @@ and publication. Avoid customer/account IDs as metric labels.
 #### Does this feature depend on any specific services running in the cluster?
 
 It depends on the billing API, admission webhooks, controllers, IAM enforcement,
-and providers that consume Offer snapshots. Catalog integration additionally
-requires service-catalog, but standalone services without catalog associations
-must not require catalog reads. Unavailable dependencies should block new
+and providers that consume Offer snapshots. Service Catalog is a billing API
+client, not a billing dependency. Its absence must not block billing operations,
+including legacy price validation. Unavailable billing dependencies should block new
 validation/publication rather than silently accept unresolved identities;
 existing published snapshots remain self-contained for service identity.
 
@@ -462,8 +472,8 @@ existing published snapshots remain self-contained for service identity.
 #### Will enabling / using this feature result in any new API calls?
 
 Yes: BillableService watches and reference lookups during price creation, Offer
-publication, and deletion checks. Use cached indexes for reverse references and
-avoid full catalog scans on the standalone path.
+publication, and deletion checks. Use cached indexes for reverse references.
+There are no catalog API calls on any billing path.
 
 #### Will enabling / using this feature result in introducing new API types?
 
@@ -516,8 +526,8 @@ admission responses and status; preserve prior published snapshots.
 
 #### What steps should be taken if SLOs are not being met to determine the problem?
 
-Check resource conditions and observedGeneration, referenced meters and catalog
-objects, controller ownership and permissions, the published snapshot, and
+Check resource conditions and observedGeneration, referenced billing meters,
+controller ownership and permissions, the published snapshot, and
 provider versions/logs. Compare invoice previews before further assignments.
 Stop new authoring/migrations if correctness is in doubt; do not rewrite
 historical snapshots as an operational repair.
