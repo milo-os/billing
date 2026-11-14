@@ -77,13 +77,6 @@ inspected as part of this repository review.
   `serviceRef`. The provider UI's usage rollup derives service labels from
   meter-name prefixes rather than an explicit billing identity.
 
-Relevant implementation points:
-`api/v1alpha1/servicepricing_types.go`, `api/v1alpha1/pricing_types.go`,
-`api/v1alpha1/meterdefinition_types.go`, `internal/validation/servicepricing.go`,
-`internal/validation/offer.go`, `internal/controller/offer_controller.go`,
-`internal/controller/billingaccount_controller.go`, and
-`ui/provider/src/lib/usage.ts`.
-
 ### Goals
 
 - Sell private or pre-catalog services through the existing billing workflow.
@@ -272,8 +265,7 @@ or migrate contracts just to publish marketing/catalog information.
 - Implement the resource, explicit pricing reference, meter allowlists,
   admission rules, lifecycle controller, and guarded deletion.
 - Extend Offer snapshot publication and customer-price validation.
-- Add generated artifacts, sample manifests, operator permissions, protected
-  resource registration, activity policy, and staff authoring documentation.
+- Support staff permissions, activity history, and setup guidance.
 - Update account projections and provider contracts for dual-format consumption.
 - Prove a standalone setup fee plus monthly fee can be assigned and invoiced
   without creating a catalog Service. Prove standalone metered pricing as well.
@@ -367,10 +359,9 @@ across Offers, stopping new authoring, continued existing billing, and reenablem
 
 ### Rollout, Upgrade and Rollback Planning
 
-1. **Add the resource and tolerant readers.** Ship CRD, client/applyconfiguration
-   generation, validation, controller, IAM/RBAC, discovery, activity policies,
-   and optional reference/snapshot fields. Upgrade providers and read models
-   to accept both legacy and new Offers before producing new snapshots.
+1. **Support old and new Offers.** Add BillableService with staff permissions
+   and activity history. Update providers and billing views to accept both
+   formats before publishing Offers with the new billing identity.
 2. **Support two explicit paths.** During migration accept either legacy
    serviceRef or billableServiceRef, never both. Usage requires one; existing
    unassociated fixed fees remain valid. Preserve existing catalog validation
