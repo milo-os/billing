@@ -12,22 +12,19 @@ latest-milestone: "v0"
   - [Non-Goals](#non-goals)
 - [Proposal](#proposal)
   - [User Stories](#user-stories)
+  - [Customer and Staff Experience](#customer-and-staff-experience)
   - [Notes/Constraints/Caveats](#notesconstraintscaveats)
   - [Risks and Mitigations](#risks-and-mitigations)
 - [Design Details](#design-details)
+  - [Current Billing Model](#current-billing-model)
   - [API](#api)
   - [Behavioral Rules](#behavioral-rules)
   - [Catalog Integration](#catalog-integration)
   - [Delivery Scope](#delivery-scope)
   - [Acceptance Criteria](#acceptance-criteria)
   - [Decisions to Confirm Before Implementation](#decisions-to-confirm-before-implementation)
+  - [Technical Readiness](#technical-readiness)
 - [Production Readiness Review Questionnaire](#production-readiness-review-questionnaire)
-  - [Feature Enablement and Rollback](#feature-enablement-and-rollback)
-  - [Rollout, Upgrade and Rollback Planning](#rollout-upgrade-and-rollback-planning)
-  - [Monitoring Requirements](#monitoring-requirements)
-  - [Dependencies](#dependencies)
-  - [Scalability](#scalability)
-  - [Troubleshooting](#troubleshooting)
 - [Implementation History](#implementation-history)
 - [Drawbacks](#drawbacks)
 - [Alternatives](#alternatives)
@@ -35,114 +32,118 @@ latest-milestone: "v0"
 
 ## Summary
 
-Introduce `billing.miloapis.com/v1alpha1.BillableService`: a stable identity for
-**what a provider sells**, independent of how it is advertised, provisioned,
-or priced. A BillableService can exist without a public Service Catalog entry,
-and several BillableServices can represent different commercial aspects of
-one catalog Service.
+BillableService represents a service we sell, whether or not it appears in the
+public Service Catalog. It gives related setup, recurring, and usage charges a
+shared billing name while allowing billing to describe a service differently
+from the catalog.
 
-Keep the existing commercial flow:
-
-```text
-BillableService ← ServicePricing ← Offer ← BillingEntitlement
-                       ↑                         └── BillingAccount
-                MeterDefinition
-                (usage pricing only)
-```
-
-BillableService supplies billing identity and descriptive metadata.
-ServicePricing continues to define a price, Offer selects prices and quantities,
-and BillingEntitlement assigns an Offer to an account. Creating a BillableService
-does not publish a catalog entry, grant access, provision resources, or charge
-a customer.
-
-The dependency stays one-way: Service Catalog uses the billing API. Billing
-does not import catalog API types, read or watch catalog resources, or require
-the catalog API to be installed. Any mapping to catalog Services belongs in
-Service Catalog, not in BillableService.
-
-This is a scope proposal, not an implemented API. External provider and catalog
-changes below are integration requirements; their implementations were not
-inspected as part of this repository review.
+Staff can sell private services through the existing billing workflow. Customers
+see clear service names and charges, and their billing history stays unchanged
+when catalog listings or service names change. Billing works independently of
+Service Catalog.
 
 ## Motivation
 
-- `ServicePricing.spec.serviceRef` is a catalog `Service.spec.serviceName`, not
-  a Kubernetes object reference. Usage pricing requires it and validates it
-  against the meter's `services.miloapis.com/service` label.
-- OneTime and Recurring prices already allow no service reference. When one is
-  supplied, validation lists catalog Services to find a matching serviceName.
-  Consequently, a standalone fee is possible today, but a reusable independent
-  billing-service identity is not.
-- Prices are immutable. Published Offers snapshot pricing specs, and an Offer
-  can price a given usage meter only once. Customer-specific `basedOn` prices
-  preserve the source price's identity and shape while changing amounts.
-- BillingAccount contract and discount projections carry the existing
-  `serviceRef`. The provider UI's usage rollup derives service labels from
-  meter-name prefixes rather than an explicit billing identity.
+Not everything we sell is ready for the public catalog. A dedicated-server
+contract, support package, or early service may need billing before it has a
+public listing. A catalog service may also need several billing names to match
+how customers buy it.
+
+Standalone fees are already possible, but they lack a shared service identity.
+We need a consistent way to group and describe these charges without creating
+catalog entries just to support billing.
 
 ### Goals
 
-- Sell private or pre-catalog services through the existing billing workflow.
-- Give related setup, recurring, and usage prices a shared service identity.
-- Use billing names and groupings that differ from public catalog names.
-- Let Service Catalog map its Services to billing identities without billing
-  needing to know about those mappings.
-- Preserve historical commercial terms and existing usage-meter identities.
-- Keep catalog publication and service access separate from billing setup.
+- Sell services before or without a public catalog listing.
+- Group setup, recurring, and usage charges under one billing service.
+- Use billing names that match the customer agreement.
+- Preserve agreed prices, billing dates, and invoice history.
+- Let private services enter the catalog without replacing customer agreements.
+- Keep billing independent of catalog availability.
 
 ### Non-Goals
 
-- A second public catalog, shopping cart, order system, or provisioning API.
-- A new account-level purchase/subscription resource or multiple simultaneous
-  Offers per account; continue composing purchases into the account's Offer.
-- New charge types, tax calculation, revenue recognition, or provider SKU IDs
-  in the core API.
-- Splitting one meter's usage into several charges within an Offer, changing
-  meter aggregation, or rewriting usage events.
-- Tenant-authored private product catalogs. Initial authoring is platform staff
-  or trusted controller only; consumer visibility is a separate permission.
+- A second public catalog, checkout, or service provisioning system.
+- New charge types, tax rules, or revenue accounting.
+- Changes to how usage is measured or permission to charge twice for the same usage.
+- Customer-managed service catalogs; staff manage billing services initially.
+- A new way to purchase or assign services outside the existing billing workflow.
 
 ## Proposal
 
-Introduce a platform-managed BillableService resource and an explicit reference
-from ServicePricing. Do not add catalog references. Snapshot the billing
-identity when an Offer is published so later metadata changes do not change
-what an account purchased. Adopt the new path incrementally alongside legacy
-serviceRef values without looking them up in the catalog.
+Give staff a reusable billing service with a name and description. Staff attach
+prices to it and sell it through the existing offer and account workflow.
+One service can have setup, recurring, and usage charges, each with its own
+invoice-line description.
+
+The public catalog can use these billing services, but billing does not need a
+catalog listing to operate. Publishing a private service later does not require
+recreating its billing setup or customer agreements.
 
 ### User Stories
 
-- As a billing operator, I can sell setup and monthly dedicated-server services
-  before they have a public catalog entry.
-- As a product operator, I can represent one catalog service as several billing
-  services with distinct names and meter selections.
-- As a customer, I see consistent service identities and invoice-line labels
-  without later catalog edits rewriting my billing history.
-- As a platform operator, I can bring a private service into the catalog without
-  replacing its billing identity or recreating customer contracts.
+- As a billing operator, I can sell installation and monthly dedicated-server
+  service before it appears in the public catalog.
+- As a product operator, I can use different billing names for parts of one
+  catalog service to match how customers buy them.
+- As a customer, I can understand which service each charge belongs to, and
+  later name changes do not rewrite my past invoices.
+- As a platform operator, I can publish a private service without disrupting
+  existing customer billing.
+
+### Customer and Staff Experience
+
+Staff select a billing service when setting up prices, then use the existing
+offer workflow to agree charges with a customer. For example, “Dedicated Server”
+can include “Server installation” and “Monthly dedicated server” charges.
+Invoice previews show the agreed names, quantities, and amounts before billing.
+
+Customers see only the service details relevant to their account. Creating a
+billing service does not make it public, grant service access, provision it, or
+charge anyone by itself.
+
+Staff can retire a service to stop creating new prices and offers for it.
+Existing agreements continue. Already published offers remain assignable;
+a broader stop-sales policy is outside this proposal.
 
 ### Notes/Constraints/Caveats
 
-This proposal retains the existing one-Offer-per-account model, immutable prices,
-and immutable published Offer snapshots. BillableService does not grant service
-access. Coordinate provider and catalog writers before switching them to the
-new format, but keep billing independent of catalog availability.
+This is a proposal, not a released feature. Existing customers are not moved
+automatically. Adoption must preserve their agreed terms and must not repeat
+setup charges or interrupt service.
 
 ### Risks and Mitigations
 
-- **Changed historical charges or labels:** snapshot billing identity and retain
-  dual readers; never reinterpret the existing serviceRef field.
-- **Duplicate metered charges:** retain one-price-per-meter-per-Offer validation
-  even when several BillableServices allow the same meter.
-- **Private offering disclosure:** restrict authoring and discovery to staff;
-  expose only authorized account-specific billing views to consumers.
-- **Controller ownership conflicts:** establish deterministic naming and field
-  ownership, reject collisions, and avoid catalog-driven garbage collection.
-- **Unsafe provider migration:** require conformance tests for stable provider
-  identifiers, effective dates, and one-time charge idempotency before rollout.
+- **Unexpected charges:** check invoice previews and confirm that moving an
+  account neither repeats fees nor changes billing dates.
+- **Confusing names:** keep service names and individual charge descriptions
+  distinct, and preserve the names recorded with existing agreements.
+- **Private service disclosure:** limit management to staff and show customers
+  only their own billing details.
+- **Disrupted existing billing:** introduce the change gradually and stop new
+  adoption if invoice amounts or billing behavior differ from expectations.
 
 ## Design Details
+
+### Current Billing Model
+
+ServicePricing defines prices, Offer groups prices and quantities, and
+BillingEntitlement assigns an Offer to a BillingAccount. BillableService adds
+identity without replacing those responsibilities.
+
+Legacy serviceRef values identify catalog services. Usage pricing checks them
+against billing meter labels; fixed fees currently query catalog Services when
+a reference is supplied. Remove that catalog lookup during this change.
+
+Prices and published Offer snapshots are immutable. Customer-specific basedOn
+prices preserve the source identity. Account views carry serviceRef, while
+usage views currently derive names from meter prefixes. These consumers need
+to support the new identity without changing historical records.
+
+The dependency stays one-way: Service Catalog uses the billing API. Billing
+must not import catalog types, read or watch catalog resources, or require the
+catalog API to be installed. Service Catalog owns all catalog-to-billing mappings.
 
 ### API
 
@@ -325,14 +326,21 @@ are required to begin selling standalone services.
 - **Provider readiness:** inventory every consumer of serviceRef and agree on
   dual-read rollout and provider identity preservation before switching writers.
 
-## Production Readiness Review Questionnaire
+### API Alternatives
+
+Do not redefine serviceRef in place: that would make old and new identities
+ambiguous in published snapshots. Use an explicit billableServiceRef and keep
+legacy readers. Do not move prices or account assignments onto BillableService;
+ServicePricing, Offer, and BillingEntitlement retain those responsibilities.
+
+### Technical Readiness
 
 These answers describe the proposed implementation. Tests, capacity measurements,
 and operational thresholds remain prerequisites for implementation approval.
 
-### Feature Enablement and Rollback
+#### Feature Enablement and Rollback
 
-#### How can this feature be enabled / disabled in a live cluster?
+##### How can this feature be enabled / disabled in a live cluster?
 
 - [x] Other
   - Enable through additive CRD/controller deployment, dual-reader provider
@@ -342,28 +350,28 @@ and operational thresholds remain prerequisites for implementation approval.
   - No control-plane downtime or node reprovisioning is intended. Verify rolling
     deployment compatibility before production enablement.
 
-#### Does enabling the feature change any default behavior?
+##### Does enabling the feature change any default behavior?
 
 No existing price or account is migrated automatically. Catalog-generated new
 prices adopt the new reference only after the catalog writer is upgraded.
 
-#### Can the feature be disabled once it has been enabled (i.e. can we roll back the enablement)?
+##### Can the feature be disabled once it has been enabled (i.e. can we roll back the enablement)?
 
 New authoring can be stopped. Removing support or downgrading to binaries that
 discard the new fields is unsafe once active Offers contain new snapshots.
 Existing billing must continue using dual readers.
 
-#### What happens if we reenable the feature if it was previously rolled back?
+##### What happens if we reenable the feature if it was previously rolled back?
 
 Resume authoring against retained identities and snapshots. Reconciliation must
 not duplicate default BillableServices, provider subscriptions, or setup charges.
 
-#### Are there any tests for feature enablement/disablement?
+##### Are there any tests for feature enablement/disablement?
 
 Not yet. Add end-to-end coverage for legacy-only operation, mixed references
 across Offers, stopping new authoring, continued existing billing, and reenablement.
 
-### Rollout, Upgrade and Rollback Planning
+#### Rollout, Upgrade and Rollback Planning
 
 1. **Support old and new Offers.** Add BillableService with staff permissions
    and activity history. Update providers and billing views to accept both
@@ -391,7 +399,7 @@ across Offers, stopping new authoring, continued existing billing, and reenablem
    billing. Removing serviceRef or requiring BillableService for all fixed fees
    is a later, explicitly versioned compatibility decision.
 
-#### How can a rollout or rollback fail? Can it impact already running workloads?
+##### How can a rollout or rollback fail? Can it impact already running workloads?
 
 Old providers can ignore new identity fields; incompatible schemas can discard
 them; naming collisions or invalid meter associations can block publication.
@@ -400,7 +408,7 @@ conformance before account migrations and deploy readers before writers.
 Provisioned workloads should be unaffected because billing identity does not
 control access, but billing failures can affect downstream account workflows.
 
-#### What specific metrics should inform a rollback?
+##### What specific metrics should inform a rollback?
 
 Track admission failures, reconciliation errors, Offer publication latency,
 provider synchronization failures, and invoice-preview discrepancies against
@@ -408,27 +416,27 @@ the pre-rollout baseline. Duplicate charges or changed historical amounts are
 stop-rollout conditions. Metric names and alert thresholds remain to be agreed
 with the owning teams; none are claimed to exist specifically for this feature.
 
-#### Were upgrade and rollback tested? Was the upgrade->downgrade->upgrade path tested?
+##### Were upgrade and rollback tested? Was the upgrade->downgrade->upgrade path tested?
 
 No implementation exists yet. Test reader-first upgrades and writer-disable /
 reenable cycles before rollout. Downgrade to a pre-support binary is not a
 supported rollback once new-format Offers are active.
 
-#### Is the rollout accompanied by any deprecations and/or removals of features, APIs, fields of API types, flags, etc.?
+##### Is the rollout accompanied by any deprecations and/or removals of features, APIs, fields of API types, flags, etc.?
 
 The API changes are additive. Remove the legacy fee check that queries catalog
 Services, along with billing's catalog read permissions. Legacy serviceRef
 authoring is a later deprecation candidate; historical readers remain.
 
-### Monitoring Requirements
+#### Monitoring Requirements
 
-#### How can an operator determine if the feature is in use by workloads?
+##### How can an operator determine if the feature is in use by workloads?
 
 Inspect BillableService resources, prices with billableServiceRef, and published
 Offer snapshots referenced by BillingEntitlements. Resource existence alone
 does not establish that an account is being charged.
 
-#### How can someone using this feature know that it is working for their instance?
+##### How can someone using this feature know that it is working for their instance?
 
 - [x] API .status
   - Proposed condition: `Ready` on BillableService, with observedGeneration
@@ -437,28 +445,28 @@ does not establish that an account is being charged.
   - Confirm the assigned Offer's snapshot and account-specific invoice preview
     carry the intended service identity, quantities, labels, and charges.
 
-#### What are the reasonable SLOs (Service Level Objectives) for the enhancement?
+##### What are the reasonable SLOs (Service Level Objectives) for the enhancement?
 
 Preserve existing publication and billing objectives without introducing an
 extra runtime lookup for rating published Offers. Numeric availability and
 latency targets must be established from current baselines before rollout.
 
-#### What are the SLIs (Service Level Indicators) an operator can use to determine the health of the service?
+##### What are the SLIs (Service Level Indicators) an operator can use to determine the health of the service?
 
 Proposed indicators are reference-validation success rate, reconciliation error
 rate, time to Ready, Offer publication latency, provider synchronization success,
 and invoice-preview correctness. Billing controllers and providers should expose
 aggregate measurements; concrete metric names remain an implementation decision.
 
-#### Are there any missing metrics that would be useful to have to improve observability of this feature?
+##### Are there any missing metrics that would be useful to have to improve observability of this feature?
 
 Inventory existing instrumentation first. Add missing counters for unresolved
 references and publication failures, plus latency measurements for reconciliation
 and publication. Avoid customer/account IDs as metric labels.
 
-### Dependencies
+#### Dependencies
 
-#### Does this feature depend on any specific services running in the cluster?
+##### Does this feature depend on any specific services running in the cluster?
 
 It depends on the billing API, admission webhooks, controllers, IAM enforcement,
 and providers that consume Offer snapshots. Service Catalog is a billing API
@@ -467,64 +475,64 @@ including legacy price validation. Unavailable billing dependencies should block
 validation/publication rather than silently accept unresolved identities;
 existing published snapshots remain self-contained for service identity.
 
-### Scalability
+#### Scalability
 
-#### Will enabling / using this feature result in any new API calls?
+##### Will enabling / using this feature result in any new API calls?
 
 Yes: BillableService watches and reference lookups during price creation, Offer
 publication, and deletion checks. Use cached indexes for reverse references.
 There are no catalog API calls on any billing path.
 
-#### Will enabling / using this feature result in introducing new API types?
+##### Will enabling / using this feature result in introducing new API types?
 
 Yes: cluster-scoped BillableService and its list type, plus reference and snapshot
 fields on existing billing APIs.
 
-#### Will enabling / using this feature result in any new calls to the cloud provider?
+##### Will enabling / using this feature result in any new calls to the cloud provider?
 
 No infrastructure cloud-provider calls are proposed. Billing-provider adapters
 may need product metadata synchronization; verify this in their owning repos.
 
-#### Will enabling / using this feature result in increasing size or count of the existing API objects?
+##### Will enabling / using this feature result in increasing size or count of the existing API objects?
 
 Yes: Offer snapshots and account projections gain billing metadata, and migration
 creates successor prices and Offers. Establish field/list bounds and measure
 large Offers against API object-size limits before implementation approval.
 
-#### Will enabling / using this feature result in increasing time taken by any operations covered by existing SLIs/SLOs?
+##### Will enabling / using this feature result in increasing time taken by any operations covered by existing SLIs/SLOs?
 
 Reference validation and publication add lookup work. Rating published Offers
 must not add a live BillableService lookup. Benchmark admission and publication.
 
-#### Will enabling / using this feature result in non-negligible increase of resource usage in any components?
+##### Will enabling / using this feature result in non-negligible increase of resource usage in any components?
 
 Controllers gain caches/indexes and providers process larger snapshots. The
 impact is not measured yet; load-test representative service, meter, and Offer
 counts before setting capacity expectations.
 
-#### Can enabling / using this feature result in resource exhaustion of some node resources (PIDs, sockets, inodes, etc.)?
+##### Can enabling / using this feature result in resource exhaustion of some node resources (PIDs, sockets, inodes, etc.)?
 
 No per-service processes or persistent sockets are proposed. Unbounded lists,
 snapshots, or reconciliation retries could still exhaust memory or API capacity;
 bound inputs, use indexes, and retain rate-limited reconciliation.
 
-### Troubleshooting
+#### Troubleshooting
 
-#### How does this feature react if the API server is unavailable?
+##### How does this feature react if the API server is unavailable?
 
 New validation, authoring, and publication cannot complete. Controllers retry
 when connectivity returns. Do not claim uninterrupted billing: existing provider
 behavior governs outages, although service identity in published snapshots
 requires no new live lookup.
 
-#### What are other known failure modes?
+##### What are other known failure modes?
 
 Anticipated failures include missing/retired references, stale readiness,
 catalog-controller naming collisions, permission errors, old provider readers,
 and incorrect account-specific meter mappings. Surface reference failures in
 admission responses and status; preserve prior published snapshots.
 
-#### What steps should be taken if SLOs are not being met to determine the problem?
+##### What steps should be taken if SLOs are not being met to determine the problem?
 
 Check resource conditions and observedGeneration, referenced billing meters,
 controller ownership and permissions, the published snapshot, and
@@ -532,40 +540,49 @@ provider versions/logs. Compare invoice previews before further assignments.
 Stop new authoring/migrations if correctness is in doubt; do not rewrite
 historical snapshots as an operational repair.
 
+## Production Readiness Review Questionnaire
+
+Not yet tested. The full questionnaire and technical rollout plan are under
+[Technical Readiness](#technical-readiness). Product release checks are:
+
+- **Enablement and rollback:** staff opt in; stopping adoption must not stop
+  billing for existing customers.
+- **Rollout:** preserve prices, billing dates, and history, with no duplicate fees.
+- **Monitoring:** confirm correct invoice previews and timely billing; pause
+  adoption if charges differ from the agreement.
+- **Dependencies:** selling and billing must work without Service Catalog.
+- **Capacity:** support expected service and customer volumes without slowing
+  down billing. Capacity testing is still required.
+- **Support:** staff need clear failure messages and a way to check an affected
+  customer's agreement and invoice before making changes.
+
 ## Implementation History
 
-- 2026-11-13: Initial scope proposal and alignment with the Datum enhancement
-  template. `v0` identifies this initial proposal milestone, not a shipped release.
-  No runtime implementation or production-readiness testing has been completed.
+- 2026-11-13: Initial proposal using the Datum enhancement template. The v0
+  milestone is a proposal, not a shipped release. No implementation is complete.
 
 ## Drawbacks
 
-- Adds another resource for operators to understand and manage.
-- Requires coordinated changes across billing, catalog, providers, and read models.
-- Dual reference paths and immutable historical snapshots extend compatibility
-  obligations beyond the initial migration.
-- Explicit meter associations and deletion protection add reconciliation and
-  lifecycle complexity that unassociated fixed fees do not require.
+- Staff have another concept to manage alongside catalog services and prices.
+- Different catalog and billing names may confuse staff without clear guidance.
+- Adoption requires coordination across catalog, billing, and invoicing teams.
+- Supporting existing agreements alongside the new approach adds ongoing work.
 
 ## Alternatives
 
-**Continue unassociated fixed fees:** already solves ad hoc charging, but not
-stable service identity, service grouping, or catalog-independent usage pricing.
+**Keep using standalone fees:** enough for one-off charges, but does not provide
+consistent service names or grouping across setup, recurring, and usage charges.
 
-**Create hidden catalog Services:** retains billing's dependence on catalog
-structure and still conflates commercial identity with operational identity.
+**Create hidden catalog services:** avoids public listings but still makes
+billing depend on catalog setup and structure.
 
-**Redefine serviceRef in place:** appears smaller, but makes old and new
-identifiers ambiguous and risks changing the meaning of immutable snapshots.
-An explicit new reference makes compatibility and migration auditable.
+**Use catalog names for billing:** simpler, but does not support services sold
+before listing or agreements that describe services differently.
 
-**Put prices or account assignments on BillableService:** duplicates
-ServicePricing, Offer, and BillingEntitlement responsibilities without solving
-an additional requirement. Keep this resource narrowly focused on identity.
+**Create a separate sales workflow:** adds complexity when existing pricing,
+offers, and account assignment already cover the purchase process.
 
 ## Infrastructure Needed
 
-No new external infrastructure is proposed. Use the existing Kubernetes API,
-billing controller/webhook deployment, IAM, and provider integration environment.
-Integration testing needs catalog-backed and standalone fixtures plus provider
-sandbox coverage for invoice previews and one-time-charge idempotency.
+No new external service is proposed. Existing billing and invoicing systems
+need to support the change and be tested before customer adoption.
