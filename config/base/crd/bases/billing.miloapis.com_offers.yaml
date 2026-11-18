@@ -258,7 +258,7 @@ spec:
                             whether it's flat or tiered, and tier bounds. A OneTime or Recurring
                             pricing must match it in everything but its amount and displayName:
                             serviceRef, pricingUnit, trigger and interval. Either kind has its
-                            list pricing's sku.
+                            list pricing's sku and tax.
 
                             Billing doesn't change with basedOn: it records which list price the
                             customer's price replaces, so portals can show them side by side.
@@ -408,6 +408,32 @@ spec:
                           maxLength: 64
                           pattern: ^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$
                           type: string
+                        tax:
+                          description: |-
+                            Tax says how this price's charges are taxed. Without it, they're
+                            taxed by the billing profile's default, as every charge was before
+                            prices carried their own. A customer's pricing with basedOn has its
+                            list pricing's tax, as it has its SKU.
+                          minProperties: 1
+                          properties:
+                            code:
+                              description: |-
+                                Code is the tax engine's code for what this price sells, which sets
+                                the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+                                codes (e.g. "txcd_10103001" for software as a service). Finance
+                                chooses it. Omitted, the billing profile's default code applies.
+                              maxLength: 64
+                              pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]*$
+                              type: string
+                            taxable:
+                              description: |-
+                                Taxable is false for a charge that's never taxed, wherever the
+                                customer is. Omitted, the charge is taxable.
+                              type: boolean
+                          type: object
+                          x-kubernetes-validations:
+                          - message: code can't be set on a pricing that isn't taxable
+                            rule: '!has(self.taxable) || self.taxable || !has(self.code)'
                         trigger:
                           description: Trigger identifies when a OneTime charge fires.
                           enum:

@@ -356,6 +356,21 @@ SKU, and a new price for the same product keeps it. Stripe only sees it as
 part of the line's description, since OpenMeter puts nothing else of ours on
 Stripe's lines.
 
+**Prices can say how they're taxed.** A pricing's `tax.code` is the tax
+engine's code for what it sells, chosen by finance: with Stripe Tax, one of
+Stripe's tax codes, such as `txcd_10103001`. `tax.taxable: false` marks a
+charge that's never taxed, and can't have a code. Without `tax`, charges are
+taxed by the billing profile's default, as every charge was before. Like the
+SKU, tax describes the product: a pricing with `basedOn` must have its list
+pricing's tax.
+
+```yaml
+spec:
+  sku: DC-CAB-01
+  tax:
+    code: txcd_20030000
+```
+
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
 kind: ServicePricing
@@ -858,6 +873,10 @@ quantity, and the unit if there is one, to its name. Rate card keys stay per
 pricing, so a fee keeps its key when only its quantity changes. Fees without a
 service leave it out of the rate card's description. A pricing's `sku`, when
 it has one, starts the rate card's name in brackets, for fees and usage alike.
+A pricing's `tax` becomes its rate card's tax config, for fees and usage
+alike: its code, or the tax engine's nontaxable code when `taxable` is false.
+OpenMeter's Stripe app puts that code on the Stripe line, so each line is
+taxed as its product.
 Customer usage pricings need no change: the provider rates their snapshot like
 any other.
 
@@ -1076,3 +1095,5 @@ list price.
   is listed with each fee in `status.contract`.
 - 2026-11-18: Contracts can bill on the account's invoice day with a prorated
   first period (`contract.billingDay: InvoiceDay`).
+- 2026-11-18: Pricings can set `tax`, a tax code or not taxable, which their
+  rate cards and invoice lines carry.

@@ -102,6 +102,10 @@ func validateBasedOnSpec(spec, list *billingv1alpha1.ServicePricingSpec, fldPath
 	same("pricingUnit", spec.PricingUnit, list.PricingUnit)
 	same("currency", spec.Currency, list.Currency)
 	same("sku", spec.SKU, list.SKU)
+	if taxCode(spec.Tax) != taxCode(list.Tax) || spec.Tax.IsTaxable() != list.Tax.IsTaxable() {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("tax"), spec.Tax,
+			"must match tax of the pricing it's based on"))
+	}
 	if spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
 		same("trigger", string(spec.Trigger), string(list.Trigger))
 		same("interval", string(spec.Interval), string(list.Interval))
@@ -417,4 +421,12 @@ func validatePricingTiers(tiers []billingv1alpha1.PricingTierBand, fldPath *fiel
 	}
 
 	return allErrs
+}
+
+// taxCode is a pricing tax's code, or "" when it has none.
+func taxCode(t *billingv1alpha1.PricingTax) string {
+	if t == nil {
+		return ""
+	}
+	return t.Code
 }

@@ -174,6 +174,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.PaymentTermsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PricingRate"):
 		return &apiv1alpha1.PricingRateApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PricingTax"):
+		return &apiv1alpha1.PricingTaxApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PricingTierBand"):
 		return &apiv1alpha1.PricingTierBandApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ProjectRef"):
