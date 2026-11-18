@@ -1,0 +1,5083 @@
+# Every write rule must match only requests that succeeded (2xx) and skip dry
+# runs: the activity processor applies no global filter, so a rejected or dry-run
+# request would otherwise show up as a change that never happened.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: 'billing.miloapis.com-billingaccount: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: &id001
+      metadata:
+        name: obj-1
+        namespace: default
+      spec: {}
+      status: {}
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccount: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingaccountbinding: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangement: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementapplication: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingarrangementdecline: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: dry-run create is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: dry-run update is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: dry-run patch is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-billingentitlement: dry-run delete is not an activity'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: dry-run create is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-invoicerequest: dry-run delete is not an activity'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: dry-run create is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: dry-run update is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: dry-run patch is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-offer: dry-run delete is not an activity'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (400) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (403) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (404) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (409) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (422) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected create (500) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: dry-run create is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1?dryRun=All
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (400) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (403) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (404) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (409) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (422) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected update (500) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: dry-run update is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (400) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (403) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (404) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (409) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (422) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected patch (500) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: dry-run patch is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (400) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 400
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 400
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (403) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 403
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 403
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (404) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 404
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 404
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (409) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 409
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 409
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (422) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 422
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 422
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: rejected delete (500) is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 500
+    requestObject:
+      spec: {}
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Failure
+      code: 500
+  exp_no_match: true
+- name: 'billing.miloapis.com-paymentmethod: dry-run delete is not an activity'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_no_match: true

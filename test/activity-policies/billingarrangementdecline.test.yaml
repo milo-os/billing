@@ -1,0 +1,98 @@
+# BillingArrangementDecline: declining a payment terms application. The decline
+# message and internal notes never reach a summary.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: decline
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: acme-decline
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline
+    responseStatus:
+      code: 201
+    requestObject: &id001
+      metadata:
+        name: acme-decline
+        namespace: organization-acme
+      spec:
+        applicationRef:
+          name: acme-apply
+        message: 'Internal note: add a card to continue.'
+        internalNotes: Internal note that must never appear
+    responseObject: *id001
+  exp_summary: alice@example.com declined the payment terms application acme-apply
+- name: decline without the application reference
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: acme-decline
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-decline
+        namespace: organization-acme
+      spec: {}
+  exp_summary: alice@example.com declined a payment terms application (acme-decline)
+- name: correct the message
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: acme-decline
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        message: x
+    responseObject: *id001
+  exp_summary: alice@example.com updated the decline of payment terms application acme-apply
+- name: delete returning the object
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: acme-decline
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline
+    responseStatus:
+      code: 200
+    responseObject: *id001
+  exp_summary: alice@example.com deleted the decline of payment terms application acme-apply, so it's awaiting review again
+- name: delete returning Status
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: acme-decline
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementdeclines/acme-decline
+    responseStatus:
+      code: 200
+    responseObject:
+      kind: Status
+      status: Success
+  exp_summary: alice@example.com deleted the payment terms decline acme-decline

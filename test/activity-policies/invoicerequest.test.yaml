@@ -1,0 +1,124 @@
+# InvoiceRequest: issuing and previewing an invoice.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: issue
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: acme-first-invoice
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        mode: Issue
+    responseObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        mode: Issue
+  exp_summary: alice@example.com issued an invoice to billing account acme
+- name: preview
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: acme-first-invoice
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        mode: Preview
+    responseObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        mode: Preview
+  exp_summary: alice@example.com previewed the next invoice for billing account acme
+- name: request without a mode
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: acme-first-invoice
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec: {}
+  exp_summary: alice@example.com requested an invoice (acme-first-invoice)
+- name: delete returning the object
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: acme-first-invoice
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-first-invoice
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        mode: Issue
+  exp_summary: alice@example.com deleted the invoice request acme-first-invoice for billing account acme
+- name: delete returning Status
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: acme-first-invoice
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/invoicerequests/acme-first-invoice
+    responseStatus:
+      code: 200
+    responseObject:
+      kind: Status
+      status: Success
+  exp_summary: alice@example.com deleted the invoice request acme-first-invoice

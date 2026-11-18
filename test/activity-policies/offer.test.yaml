@@ -1,0 +1,225 @@
+# Offer: the platform timeline as draft contracts are saved, edited and removed,
+# and contract and platform offers are created and published.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: save a draft contract with a start date
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+        annotations:
+          billing.miloapis.com/contract-starts-at: '2026-11-24T00:00:00Z'
+      spec:
+        launchStage: Draft
+        servicePricingRefs:
+        - &id001
+          name: fee
+          namespace: milo-system
+        - *id001
+        - *id001
+        - *id001
+        - *id001
+  exp_rule: create-contract-draft
+  exp_summary: 'alice@example.com saved a draft contract for billing account acme in organization acme-corp: 5 prices, starting
+    24 November 2026'
+- name: save a draft fee change with one price
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+      spec:
+        launchStage: Draft
+        servicePricingRefs:
+        - name: fee
+          namespace: milo-system
+  exp_rule: create-contract-draft
+  exp_summary: 'alice@example.com saved a draft contract for billing account acme in organization acme-corp: 1 price'
+- name: edit a draft contract
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 200
+    requestObject:
+      spec: {}
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+      spec:
+        launchStage: Draft
+        servicePricingRefs:
+        - &id002
+          name: fee
+          namespace: milo-system
+        - *id002
+        - *id002
+        - *id002
+        - *id002
+        - *id002
+  exp_rule: update-contract-draft
+  exp_summary: 'alice@example.com updated the draft contract for billing account acme in organization acme-corp: 6 prices'
+- name: remove a draft contract
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+      spec:
+        launchStage: Draft
+        servicePricingRefs:
+        - &id003
+          name: fee
+          namespace: milo-system
+        - *id003
+        - *id003
+        - *id003
+        - *id003
+        - *id003
+  exp_rule: delete-contract-draft
+  exp_summary: alice@example.com removed the draft contract for billing account acme in organization acme-corp
+- name: create a contract offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+      spec:
+        launchStage: GA
+        servicePricingRefs:
+        - &id004
+          name: fee
+          namespace: milo-system
+        - *id004
+        - *id004
+        - *id004
+        - *id004
+  exp_rule: create-contract
+  exp_summary: 'alice@example.com created the contract offer contract-acme-1 for billing account acme in organization acme-corp:
+    5 prices'
+- name: delete a contract offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: contract-acme-1
+        labels:
+          billing.miloapis.com/contract-billing-account: acme
+          billing.miloapis.com/contract-organization: acme-corp
+      spec:
+        launchStage: GA
+        servicePricingRefs:
+        - &id005
+          name: fee
+          namespace: milo-system
+        - *id005
+        - *id005
+        - *id005
+        - *id005
+  exp_rule: delete-contract
+  exp_summary: alice@example.com deleted the contract offer contract-acme-1 for billing account acme in organization acme-corp
+- name: publish a platform offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        launchStage: GA
+    responseObject: &id006
+      metadata:
+        name: payg-v7
+      spec:
+        launchStage: Draft
+  exp_rule: publish
+  exp_summary: alice@example.com published offer contract-acme-1
+- name: create a platform offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: contract-acme-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/contract-acme-1
+    responseStatus:
+      code: 201
+    responseObject: *id006
+  exp_rule: create
+  exp_summary: alice@example.com created offer contract-acme-1
