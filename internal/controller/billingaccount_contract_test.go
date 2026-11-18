@@ -154,7 +154,7 @@ func TestAccountContract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := accountContract(tt.entitlement, tt.offer); !reflect.DeepEqual(got, tt.want) {
+			if got := accountContract(tt.entitlement, tt.offer, 1); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("accountContract() = %+v, want %+v", got, tt.want)
 			}
 		})
@@ -180,5 +180,32 @@ func TestReconcileContract(t *testing.T) {
 		publishedOffer("payg", billingv1alpha1.OfferLaunchStageGA, snapshot("alb-requests", "ALB Requests", -1)),
 	); got != nil {
 		t.Errorf("contract = %+v, want none", got)
+	}
+}
+
+// A contract billed on the invoice day bills on the account's day, and a fee
+// with periods counts them from its first billing date, after the prorated
+// first period.
+func TestAccountContract_BilledOnInvoiceDay(t *testing.T) {
+	startsAt := time.Date(2026, time.April, 18, 0, 0, 0, 0, time.UTC)
+	monthly := fee("ports", "Cross connect", billingv1alpha1.ChargeTypeRecurring, "300.00")
+	monthly.Periods = 12
+	annual := fee("support-annual", "Premium support", billingv1alpha1.ChargeTypeRecurring, "1200.00")
+	annual.Spec.Interval = billingv1alpha1.ChargeIntervalAnnual
+	annual.Periods = 3
+	be := contractEntitlement("acme-term", startsAt)
+	be.Spec.Contract.BillingDay = billingv1alpha1.ContractBillingDayInvoiceDay
+
+	got := accountContract(be, publishedOffer("acme-term", billingv1alpha1.OfferLaunchStageGA, monthly, annual), 5)
+	if got == nil || got.BillingDayOfMonth != 5 {
+		t.Fatalf("billing day = %+v, want the invoice day, 5", got)
+	}
+	for i, want := range []time.Time{
+		time.Date(2027, time.May, 5, 0, 0, 0, 0, time.UTC),     // 18 April to 5 May, then 12 months
+		time.Date(2030, time.January, 5, 0, 0, 0, 0, time.UTC), // to 5 January 2027, then 3 years
+	} {
+		if end := got.Fees[i].EndsAt; end == nil || !end.Time.Equal(want) {
+			t.Errorf("fee %s ends %v, want %v", got.Fees[i].Name, end, want)
+		}
 	}
 }

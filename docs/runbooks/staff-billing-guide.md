@@ -291,8 +291,8 @@ contract can have up to 20 fees, counting those from the price list.
 
 ### How fees are billed
 
-Every fee is billed on the contract's billing day, the day of the month it
-starts on.
+Every fee is billed on the contract's billing day: the day of the month it
+starts on, or the invoice day (see [Billing day](#billing-day)).
 
 - **In advance** invoices a period's fee when the period starts, as is usual
   for rent-like charges such as rack space or servers. The first period is on
@@ -347,9 +347,23 @@ It can't be in the past: charges can't be backdated. A contract signed before
 it's entered starts on the day you enter it, or on a later date such as when
 the hardware is handed over.
 
-The start date is also the billing day: a contract starting on the 18th bills
-on the 18th of each month. One starting on the 29th, 30th or 31st bills on
-the last day of shorter months.
+### Billing day
+
+Which day of the month the contract bills on:
+
+- **Start date** (the default): the day it starts. A contract starting on the
+  18th bills on the 18th of each month, so every month is a whole one. One
+  starting on the 29th, 30th or 31st bills on the last day of shorter months.
+- **Invoice day, first month prorated**: the account's invoice day, the 1st
+  unless its payment terms say otherwise, like an account without a contract.
+  The first month runs from the start date to the next invoice day, and
+  recurring fees are charged for just that part. A monthly fee on a contract
+  starting on 15 November is charged for 15 November to 1 December, then for
+  whole months from 1 December. Quarterly fees bill in January, April, July
+  and October, and yearly ones in January, so their first period runs to the
+  next of those. **Renewals** count whole periods after the prorated one.
+
+Like the start date, it can't be changed once the contract is saved.
 
 **Check the date before saving.** Once set, a contract's start date can't be
 moved and the contract can't be removed.

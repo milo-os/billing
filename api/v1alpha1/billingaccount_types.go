@@ -436,8 +436,10 @@ type BillingAccountContract struct {
 	// +kubebuilder:validation:Required
 	StartsAt metav1.Time `json:"startsAt"`
 
-	// BillingDayOfMonth is the day of the month the contract bills on, the
-	// day it starts. Months shorter than it bill on their last day.
+	// BillingDayOfMonth is the day of the month the contract bills on: the
+	// day it starts, or the account's invoice day for a contract whose
+	// billingDay is InvoiceDay. Months shorter than it bill on their last
+	// day.
 	//
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Minimum=1

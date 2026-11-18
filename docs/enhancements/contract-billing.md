@@ -173,6 +173,25 @@ The Offer can be any mix of pricings. A contract that's only a set fee has a
 pricings to the same Offer, the platform's or the customer's own (see
 [Contract Usage Pricing](#contract-usage-pricing)).
 
+**Billing on the invoice day.** `contract.billingDay` chooses the day the
+contract bills on. `StartDate`, the default, is the day it starts, as above, so
+every period is whole. `InvoiceDay` bills on the account's invoice day (its
+payment terms' `invoiceDayOfMonth`, the 1st under the standard terms), as an
+account without a contract does:
+
+- The first period runs from the start to the next invoice day, and the
+  provider prorates its recurring fees. A monthly fee on a contract starting
+  on 15 November is charged for 15 November to 1 December, then monthly from
+  1 December.
+- Quarterly and annual fees bill on the invoice day of January, April, July
+  and October, and of January, since providers count periods from January
+  2025. Their first period runs to the next of those.
+- A fee with `periods` runs for that many whole periods after the prorated
+  one, so it ends on a billing date and nothing is charged after its end.
+- `status.contract.billingDayOfMonth` is the invoice day.
+
+Like `startsAt`, `billingDay` can't be changed once set.
+
 `contract` is a struct so the term and what happens at its end can join it (see
 [End of Term](#end-of-term)).
 
@@ -1055,3 +1074,5 @@ list price.
   from the contract's start, with their end shown in `status.contract`.
 - 2026-11-18: Pricings can set a `sku`, which starts their invoice lines and
   is listed with each fee in `status.contract`.
+- 2026-11-18: Contracts can bill on the account's invoice day with a prorated
+  first period (`contract.billingDay: InvoiceDay`).

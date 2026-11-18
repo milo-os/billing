@@ -16,8 +16,10 @@ type BillingAccountContractApplyConfiguration struct {
 	// StartsAt is when the contract starts, at midnight UTC: its one-time
 	// fees are charged then, and its monthly fees bill from then.
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
-	// BillingDayOfMonth is the day of the month the contract bills on, the
-	// day it starts. Months shorter than it bill on their last day.
+	// BillingDayOfMonth is the day of the month the contract bills on: the
+	// day it starts, or the account's invoice day for a contract whose
+	// billingDay is InvoiceDay. Months shorter than it bill on their last
+	// day.
 	BillingDayOfMonth *int32 `json:"billingDayOfMonth,omitempty"`
 	// Fees are the contract's fixed fees, before discounts: its one-time
 	// fees, such as a setup fee, and its recurring ones, such as a monthly

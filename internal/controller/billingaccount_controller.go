@@ -367,7 +367,7 @@ func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 		return err
 	}
 	account.Status.Discounts = accountDiscounts(offer)
-	account.Status.Contract = accountContract(entitlement, offer)
+	account.Status.Contract = accountContract(entitlement, offer, validation.AccountInvoiceDay(account))
 	return nil
 }
 
@@ -439,16 +439,22 @@ func accountDiscounts(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAcc
 // accountContract summarises the entitlement's contract with the fixed fees
 // in its Offer's snapshot, or nil when the entitlement has no contract or
 // the Offer isn't published. The Offer is the contract's from when the
-// contract is added, so its fees show before it starts.
-func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *billingv1alpha1.Offer) *billingv1alpha1.BillingAccountContract {
+// contract is added, so its fees show before it starts. invoiceDay is the
+// account's, which a contract billed on the invoice day bills on.
+func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *billingv1alpha1.Offer,
+	invoiceDay int32) *billingv1alpha1.BillingAccountContract {
 	if entitlement == nil || entitlement.Spec.Contract == nil || offer == nil {
 		return nil
 	}
 
-	startsAt := entitlement.Spec.Contract.StartsAt
+	terms := entitlement.Spec.Contract
+	startsAt := terms.StartsAt
 	contract := &billingv1alpha1.BillingAccountContract{
 		StartsAt:          startsAt,
 		BillingDayOfMonth: int32(startsAt.UTC().Day()),
+	}
+	if validation.ContractBillsOnInvoiceDay(terms) {
+		contract.BillingDayOfMonth = invoiceDay
 	}
 	for _, sp := range offer.Spec.ServicePricings {
 		switch sp.Spec.ChargeType {
@@ -470,7 +476,7 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 			}
 			if sp.Spec.ChargeType == billingv1alpha1.ChargeTypeRecurring && sp.Periods > 0 {
 				fee.Periods = sp.Periods
-				endsAt := metav1.NewTime(validation.FeeEndsAt(startsAt.Time, sp.Spec.Interval, sp.Periods))
+				endsAt := metav1.NewTime(validation.ContractFeeEndsAt(terms, invoiceDay, sp.Spec.Interval, sp.Periods))
 				fee.EndsAt = &endsAt
 			}
 			contract.Fees = append(contract.Fees, fee)
