@@ -49,6 +49,11 @@ type ServicePricingSpecApplyConfiguration struct {
 	// has its list pricing's SKU, and a new price for the same product
 	// keeps it.
 	SKU *string `json:"sku,omitempty"`
+	// Tax says how this price's charges are taxed. Without it, they're
+	// taxed by the billing profile's default, as every charge was before
+	// prices carried their own. A customer's pricing with basedOn has its
+	// list pricing's tax, as it has its SKU.
+	Tax *PricingTaxApplyConfiguration `json:"tax,omitempty"`
 	// Metric is the meterName of the MeterDefinition a Usage pricing
 	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
 	// Required when chargeType is Usage. The meter must exist and not be
@@ -89,7 +94,7 @@ type ServicePricingSpecApplyConfiguration struct {
 	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
 	// pricing must match it in everything but its amount and displayName:
 	// serviceRef, pricingUnit, trigger and interval. Either kind has its
-	// list pricing's sku.
+	// list pricing's sku and tax.
 	//
 	// Billing doesn't change with basedOn: it records which list price the
 	// customer's price replaces, so portals can show them side by side.
@@ -139,6 +144,14 @@ func (b *ServicePricingSpecApplyConfiguration) WithDisplayName(value string) *Se
 // If called multiple times, the SKU field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithSKU(value string) *ServicePricingSpecApplyConfiguration {
 	b.SKU = &value
+	return b
+}
+
+// WithTax sets the Tax field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Tax field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithTax(value *PricingTaxApplyConfiguration) *ServicePricingSpecApplyConfiguration {
+	b.Tax = value
 	return b
 }
 

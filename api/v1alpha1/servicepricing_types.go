@@ -71,6 +71,14 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`
 	SKU string `json:"sku,omitempty"`
 
+	// Tax says how this price's charges are taxed. Without it, they're
+	// taxed by the billing profile's default, as every charge was before
+	// prices carried their own. A customer's pricing with basedOn has its
+	// list pricing's tax, as it has its SKU.
+	//
+	// +kubebuilder:validation:Optional
+	Tax *PricingTax `json:"tax,omitempty"`
+
 	// Metric is the meterName of the MeterDefinition a Usage pricing
 	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
 	// Required when chargeType is Usage. The meter must exist and not be
@@ -137,7 +145,7 @@ type ServicePricingSpec struct {
 	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
 	// pricing must match it in everything but its amount and displayName:
 	// serviceRef, pricingUnit, trigger and interval. Either kind has its
-	// list pricing's sku.
+	// list pricing's sku and tax.
 	//
 	// Billing doesn't change with basedOn: it records which list price the
 	// customer's price replaces, so portals can show them side by side.
@@ -146,6 +154,36 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
 	BasedOn string `json:"basedOn,omitempty"`
+}
+
+// PricingTax is how a price's charges are taxed. Tax is calculated by the
+// invoicing provider's tax engine, from the customer's address, tax IDs and
+// exemptions; this says what kind of product is being sold.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.taxable) || self.taxable || !has(self.code)",message="code can't be set on a pricing that isn't taxable"
+// +kubebuilder:validation:MinProperties=1
+type PricingTax struct {
+	// Code is the tax engine's code for what this price sells, which sets
+	// the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+	// codes (e.g. "txcd_10103001" for software as a service). Finance
+	// chooses it. Omitted, the billing profile's default code applies.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9_.-]*$`
+	Code string `json:"code,omitempty"`
+
+	// Taxable is false for a charge that's never taxed, wherever the
+	// customer is. Omitted, the charge is taxable.
+	//
+	// +kubebuilder:validation:Optional
+	Taxable *bool `json:"taxable,omitempty"`
+}
+
+// IsTaxable reports whether charges with this tax are taxed. Nil means the
+// billing profile's default, which taxes them.
+func (t *PricingTax) IsTaxable() bool {
+	return t == nil || t.Taxable == nil || *t.Taxable
 }
 
 // UnitConversion converts usage measured in the meter's unit into the

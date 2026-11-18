@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -540,6 +541,7 @@ func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
 			Currency:    "USD",
 			DisplayName: "Cross connect",
 			SKU:         "DC-XC-01",
+			Tax:         &billingv1alpha1.PricingTax{Code: "txcd_10000000"},
 			Amount:      "300.00",
 			Interval:    billingv1alpha1.ChargeIntervalMonthly,
 			PricingUnit: "port",
@@ -606,6 +608,31 @@ func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
 			name:      "missing the list pricing's SKU",
 			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.SKU = "" }),
 			wantField: "spec.sku",
+		},
+		{
+			// Saying taxable outright is the same as leaving it out.
+			name: "taxable outright",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Tax = &billingv1alpha1.PricingTax{Code: "txcd_10000000", Taxable: ptr.To(true)}
+			}),
+		},
+		{
+			// A customer's price doesn't change how the product is taxed.
+			name:      "different tax code",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Tax.Code = "txcd_20030000" }),
+			wantField: "spec.tax",
+		},
+		{
+			name:      "missing the list pricing's tax",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Tax = nil }),
+			wantField: "spec.tax",
+		},
+		{
+			name: "not taxable",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Tax = &billingv1alpha1.PricingTax{Taxable: ptr.To(false)}
+			}),
+			wantField: "spec.tax",
 		},
 		{
 			// An amount per year isn't a price for the same thing as one
