@@ -42,6 +42,13 @@ type ServicePricingSpecApplyConfiguration struct {
 	Currency *string `json:"currency,omitempty"`
 	// DisplayName is a human-readable label for invoices and portals.
 	DisplayName *string `json:"displayName,omitempty"`
+	// SKU is the product code finance knows this price's product by (e.g.
+	// "DC-CAB-01"). Invoices show it before the line's name ("[DC-CAB-01]
+	// Structured cabling"), so it can be read from Stripe and reports. It
+	// names the product, not the price: a customer's pricing with basedOn
+	// has its list pricing's SKU, and a new price for the same product
+	// keeps it.
+	SKU *string `json:"sku,omitempty"`
 	// Metric is the meterName of the MeterDefinition a Usage pricing
 	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
 	// Required when chargeType is Usage. The meter must exist and not be
@@ -81,7 +88,8 @@ type ServicePricingSpecApplyConfiguration struct {
 	// serviceRef, metric, pricingUnit, unitConversion, each rate's match and
 	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
 	// pricing must match it in everything but its amount and displayName:
-	// serviceRef, pricingUnit, trigger and interval.
+	// serviceRef, pricingUnit, trigger and interval. Either kind has its
+	// list pricing's sku.
 	//
 	// Billing doesn't change with basedOn: it records which list price the
 	// customer's price replaces, so portals can show them side by side.
@@ -123,6 +131,14 @@ func (b *ServicePricingSpecApplyConfiguration) WithCurrency(value string) *Servi
 // If called multiple times, the DisplayName field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithDisplayName(value string) *ServicePricingSpecApplyConfiguration {
 	b.DisplayName = &value
+	return b
+}
+
+// WithSKU sets the SKU field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SKU field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithSKU(value string) *ServicePricingSpecApplyConfiguration {
+	b.SKU = &value
 	return b
 }
 

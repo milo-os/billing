@@ -328,6 +328,15 @@ charged. When set, invoices and portals show the quantity in that unit, so a
 fee charged per port reads "Cross connect: 4 port × $300.00" rather than
 "Cross connect × 4". Without it, the quantity is a count of the fee.
 
+**Prices can have a SKU.** Any pricing may set `sku`, the product code finance
+knows it by (e.g. `DC-CAB-01`). Invoice lines start with it in brackets,
+"[DC-CAB-01] Structured cabling", so it can be read from Stripe and reports
+built on them, and `status.contract` lists it with each fee. A SKU names the
+product, not the price: a pricing with `basedOn` must have its list pricing's
+SKU, and a new price for the same product keeps it. Stripe only sees it as
+part of the line's description, since OpenMeter puts nothing else of ours on
+Stripe's lines.
+
 ```yaml
 apiVersion: billing.miloapis.com/v1alpha1
 kind: ServicePricing
@@ -828,8 +837,10 @@ OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
 quantity, and the unit if there is one, to its name. Rate card keys stay per
 pricing, so a fee keeps its key when only its quantity changes. Fees without a
-service leave it out of the rate card's description. Customer usage pricings
-need no change: the provider rates their snapshot like any other.
+service leave it out of the rate card's description. A pricing's `sku`, when
+it has one, starts the rate card's name in brackets, for fees and usage alike.
+Customer usage pricings need no change: the provider rates their snapshot like
+any other.
 
 Rate cards for `OneTime` fees are in advance, as are `Recurring` fees whose
 snapshot says `InAdvance` or leaves `billingTiming` out. Other `Recurring` fees
@@ -1042,3 +1053,5 @@ list price.
   advance as `InArrears`, and charged their period again once it did.
 - 2026-11-12: Recurring fees can run for a set number of `periods`, counted
   from the contract's start, with their end shown in `status.contract`.
+- 2026-11-18: Pricings can set a `sku`, which starts their invoice lines and
+  is listed with each fee in `status.contract`.

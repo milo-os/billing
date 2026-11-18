@@ -19,6 +19,8 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	// DisplayName is the fee's label, as invoices show it (e.g. "Setup
 	// fee").
 	DisplayName *string `json:"displayName,omitempty"`
+	// SKU is the fee's product code, from its pricing. Empty when it has none.
+	SKU *string `json:"sku,omitempty"`
 	// ServiceRef is the service the fee is for. Empty for a fee that isn't
 	// for any one service.
 	ServiceRef *string `json:"serviceRef,omitempty"`
@@ -71,6 +73,14 @@ func (b *BillingAccountContractFeeApplyConfiguration) WithName(value string) *Bi
 // If called multiple times, the DisplayName field is set to the value of the last call.
 func (b *BillingAccountContractFeeApplyConfiguration) WithDisplayName(value string) *BillingAccountContractFeeApplyConfiguration {
 	b.DisplayName = &value
+	return b
+}
+
+// WithSKU sets the SKU field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SKU field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithSKU(value string) *BillingAccountContractFeeApplyConfiguration {
+	b.SKU = &value
 	return b
 }
 
