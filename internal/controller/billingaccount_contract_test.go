@@ -77,6 +77,7 @@ func TestAccountContract(t *testing.T) {
 	crossConnects := fee("cross-connect-300", "Cross connect", billingv1alpha1.ChargeTypeRecurring, "300.00")
 	crossConnects.Spec.ServiceRef = ""
 	crossConnects.Spec.PricingUnit = "port"
+	crossConnects.Spec.SKU = "DC-XC-01"
 	crossConnects.Quantity = 4
 	crossConnects.BillingTiming = billingv1alpha1.BillingTimingInArrears
 
@@ -126,14 +127,14 @@ func TestAccountContract(t *testing.T) {
 		{
 			// Recurring fees published before billingTiming existed were
 			// billed in advance, and still are.
-			name:        "fee without a service, with quantity, unit and timing",
+			name:        "fee without a service, with quantity, unit, SKU and timing",
 			entitlement: contractEntitlement("acme-ports", startsAt),
 			offer:       publishedOffer("acme-ports", billingv1alpha1.OfferLaunchStageGA, crossConnects),
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(startsAt),
 				BillingDayOfMonth: 18,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
-					{Name: "cross-connect-300", DisplayName: "Cross connect", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInArrears},
+					{Name: "cross-connect-300", DisplayName: "Cross connect", SKU: "DC-XC-01", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInArrears},
 				},
 			},
 		},

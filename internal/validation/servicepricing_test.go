@@ -539,6 +539,7 @@ func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
 			ServiceRef:  bareMetal,
 			Currency:    "USD",
 			DisplayName: "Cross connect",
+			SKU:         "DC-XC-01",
 			Amount:      "300.00",
 			Interval:    billingv1alpha1.ChargeIntervalMonthly,
 			PricingUnit: "port",
@@ -594,6 +595,17 @@ func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
 			name:      "different unit",
 			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.PricingUnit = "cable" }),
 			wantField: "spec.pricingUnit",
+		},
+		{
+			// A SKU names the product, which a customer's price doesn't change.
+			name:      "different SKU",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.SKU = "DC-XC-02" }),
+			wantField: "spec.sku",
+		},
+		{
+			name:      "missing the list pricing's SKU",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.SKU = "" }),
+			wantField: "spec.sku",
 		},
 		{
 			// An amount per year isn't a price for the same thing as one

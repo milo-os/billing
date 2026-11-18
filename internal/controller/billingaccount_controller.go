@@ -458,6 +458,7 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 			fee := billingv1alpha1.BillingAccountContractFee{
 				Name:          sp.Name,
 				DisplayName:   sp.Spec.DisplayName,
+				SKU:           sp.Spec.SKU,
 				ServiceRef:    sp.Spec.ServiceRef,
 				ChargeType:    sp.Spec.ChargeType,
 				Amount:        sp.Spec.Amount,

@@ -477,6 +477,12 @@ type BillingAccountContractFee struct {
 	// +kubebuilder:validation:MaxLength=128
 	DisplayName string `json:"displayName,omitempty"`
 
+	// SKU is the fee's product code, from its pricing. Empty when it has none.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	SKU string `json:"sku,omitempty"`
+
 	// ServiceRef is the service the fee is for. Empty for a fee that isn't
 	// for any one service.
 	//

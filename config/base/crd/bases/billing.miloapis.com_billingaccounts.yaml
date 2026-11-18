@@ -431,6 +431,11 @@ spec:
                             for any one service.
                           maxLength: 253
                           type: string
+                        sku:
+                          description: SKU is the fee's product code, from its pricing.
+                            Empty when it has none.
+                          maxLength: 64
+                          type: string
                       required:
                       - amount
                       - chargeType

@@ -101,6 +101,7 @@ func validateBasedOnSpec(spec, list *billingv1alpha1.ServicePricingSpec, fldPath
 	same("serviceRef", spec.ServiceRef, list.ServiceRef)
 	same("pricingUnit", spec.PricingUnit, list.PricingUnit)
 	same("currency", spec.Currency, list.Currency)
+	same("sku", spec.SKU, list.SKU)
 	if spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
 		same("trigger", string(spec.Trigger), string(list.Trigger))
 		same("interval", string(spec.Interval), string(list.Interval))
