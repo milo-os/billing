@@ -1,0 +1,394 @@
+# PaymentMethod: users adding payment methods, and cards attached, failing,
+# expiring and expired, with and without their detail annotations.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: a user adds a payment method with a display name
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: card-1
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/paymentmethods/card-1
+    responseStatus:
+      code: 201
+    requestObject:
+      spec:
+        displayName: Company Visa
+    responseObject:
+      metadata:
+        name: card-1
+        namespace: organization-acme
+      spec: {}
+  exp_rule: create-with-display-name
+  exp_summary: alice@example.com added payment method Company Visa
+- name: a user adds a payment method without a display name
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: card-1
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/paymentmethods/card-1
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject:
+      metadata:
+        name: card-1
+        namespace: organization-acme
+      spec: {}
+  exp_rule: create-fallback
+  exp_summary: alice@example.com added payment method card-1
+- name: attached card links the card and the billing account
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/card-brand: visa
+        event.billing.miloapis.com/card-last4: '4242'
+        event.billing.miloapis.com/card-expiry: '2026-11-01T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodAttached
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: attached-card
+  exp_summary: Visa ending 4242 was added to billing account acme and is ready to use
+  exp_policy: billing.miloapis.com-paymentmethod
+  exp_links:
+  - marker: Visa ending 4242
+    apiGroup: billing.miloapis.com
+    namespace: organization-acme
+    name: card-1
+  - marker: acme
+    apiGroup: billing.miloapis.com
+    namespace: organization-acme
+    name: acme
+- name: attached card of an unlisted brand
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/card-brand: elo
+        event.billing.miloapis.com/card-last4: '4242'
+        event.billing.miloapis.com/card-expiry: '2026-11-01T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodAttached
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: attached-card
+  exp_summary: Card ending 4242 was added to billing account acme and is ready to use
+- name: attached without card detail
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodAttached
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: attached
+  exp_summary: Payment method card-1 was added to billing account acme and is ready to use
+- name: failed with a reason
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/decline-reason: InsufficientFunds
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: failed
+  exp_summary: 'Payment method card-1 could not be added to billing account acme: the card was declined (insufficient funds)'
+- name: failed with an unknown reason
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/decline-reason: generic_decline
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: failed
+  exp_summary: 'Payment method card-1 could not be added to billing account acme: the card was declined'
+- name: failed without a reason
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: failed
+  exp_summary: Payment method card-1 could not be added to billing account acme
+- name: expiring soon
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/card-brand: visa
+        event.billing.miloapis.com/card-last4: '4242'
+        event.billing.miloapis.com/card-expiry: '2026-11-01T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodExpiringSoon
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: expiring-soon
+  exp_summary: Visa ending 4242 on billing account acme expires at the end of November 2026
+- name: expired
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/card-brand: amex
+        event.billing.miloapis.com/card-last4: '0005'
+        event.billing.miloapis.com/card-expiry: '2026-11-01T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodExpired
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: expired
+  exp_summary: American Express ending 0005 on billing account acme has expired
+- name: PaymentMethodAttached without annotations falls back
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodAttached
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Payment method card-1 is ready to use
+- name: PaymentMethodFailed without annotations falls back
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Payment method card-1 could not be added
+- name: PaymentMethodExpiringSoon without annotations falls back
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodExpiringSoon
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Payment method card-1 expires at the end of this month
+- name: PaymentMethodExpired without annotations falls back
+  event:
+    metadata:
+      name: card-1.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: PaymentMethod
+      name: card-1
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentMethodExpired
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Payment method card-1 has expired

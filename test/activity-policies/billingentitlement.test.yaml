@@ -1,0 +1,248 @@
+# BillingEntitlement: an organization's timeline as an account is set up on a
+# contract, its fees change, it switches offer, and it is removed.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: set up a contract on an account without an entitlement
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec:
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: contract-acme-1
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec:
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: contract-acme-1
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+  exp_rule: create-contract
+  exp_summary: alice@example.com set up a contract for billing account acme on offer contract-acme-1, starting 24 November
+    2026
+  exp_change_source: human
+- name: move an account onto a contract
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        offerRef:
+          name: contract-acme-1
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec:
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: contract-acme-1
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+  exp_rule: add-contract
+  exp_summary: alice@example.com set up a contract for billing account acme on offer contract-acme-1, starting 24 November
+    2026
+- name: change a contract's fees
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        offerRef:
+          name: contract-acme-2
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec:
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: contract-acme-2
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+  exp_rule: change-contract-fees
+  exp_summary: 'alice@example.com changed the contract fees for billing account acme: now on offer contract-acme-2'
+- name: switch an account without a contract to another offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        offerRef:
+          name: payg-v6
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec: &id001
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: payg-v6
+  exp_rule: switch-offer
+  exp_summary: alice@example.com switched billing account acme to offer payg-v6
+- name: put an account on an offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec: *id001
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec: *id001
+  exp_rule: create
+  exp_summary: alice@example.com put billing account acme on offer payg-v6
+- name: remove a contract
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec:
+        billingAccountRef:
+          name: acme
+        offerRef:
+          name: contract-acme-1
+        contract:
+          startsAt: '2026-11-24T00:00:00Z'
+  exp_rule: delete-contract
+  exp_summary: alice@example.com removed the contract and offer contract-acme-1 from billing account acme
+- name: remove an offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec: *id001
+  exp_rule: delete
+  exp_summary: alice@example.com removed offer payg-v6 from billing account acme
+- name: create without account or offer
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: acme-contract
+      namespace: organization-acme-corp
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme-corp/billingentitlements/acme-contract
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject:
+      metadata:
+        name: acme-contract
+        namespace: organization-acme-corp
+      spec: {}
+  exp_rule: create-fallback
+  exp_summary: alice@example.com created billing entitlement acme-contract
+- name: a controller seeding the default offer stays off the timeline
+  audit:
+    verb: create
+    user:
+      username: system:serviceaccount:service-catalog-system:service-catalog
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: obj-1
+        namespace: default
+      spec: {}
+      status: {}
+  exp_no_match: true

@@ -1,0 +1,962 @@
+# No rule may error on the request bodies the API server records for a successful
+# write (JSON Patch arrays, DeleteOptions, Status delete responses, and
+# metadata-level events with no bodies): the processor sends an event whose rule
+# errors to the dead-letter queue instead of the timeline.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: 'billing.miloapis.com-billingaccount: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+    requestObject: &id002
+    - op: replace
+      path: /spec/x
+      value: 1
+    responseObject: &id001
+      metadata:
+        name: obj-1
+        namespace: default
+      spec: {}
+      status: {}
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+    requestObject: &id003
+    - op: add
+      path: /metadata/labels/a
+      value: b
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+    requestObject: &id004
+      kind: DeleteOptions
+      apiVersion: v1
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+    responseObject: &id005
+      kind: Status
+      apiVersion: v1
+      status: Success
+      details:
+        name: obj-1
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccount: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingaccount
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccounts/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingaccountbinding: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingaccountbinding
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingaccountbindings/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangement: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingarrangement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementapplication: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingarrangementapplication
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementapplications/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingarrangementdecline: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingarrangementdecline
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementdeclines
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingarrangementdeclines/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: JSON Patch renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: metadata-level patch renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: metadata-level update renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: delete returning Status renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-billingentitlement: metadata-level delete renders without error'
+  policy: billing.miloapis.com-billingentitlement
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingentitlements
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/billingentitlements/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-invoicerequest: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-invoicerequest: delete returning Status renders without error'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-invoicerequest: metadata-level delete renders without error'
+  policy: billing.miloapis.com-invoicerequest
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: invoicerequests
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/invoicerequests/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: JSON Patch renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: metadata-level patch renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: metadata-level update renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: delete returning Status renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-offer: metadata-level delete renders without error'
+  policy: billing.miloapis.com-offer
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: offers
+      name: obj-1
+    requestURI: /apis/billing.miloapis.com/v1alpha1/offers/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: JSON Patch renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id002
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: JSON Patch on metadata renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id003
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: metadata-level patch renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: metadata-level update renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: update
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: delete with DeleteOptions renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+    requestObject: *id004
+    responseObject: *id001
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: delete returning Status renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+    responseObject: *id005
+  exp_summary_regex: '^alice@example\.com '
+- name: 'billing.miloapis.com-paymentmethod: metadata-level delete renders without error'
+  policy: billing.miloapis.com-paymentmethod
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: paymentmethods
+      name: obj-1
+      namespace: default
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/default/paymentmethods/obj-1
+    responseStatus:
+      code: 200
+  exp_summary_regex: '^alice@example\.com '

@@ -1,0 +1,48 @@
+# BillingAccountBinding: binding a project to a billing account.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: bind a project to an account
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: web-acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccountbindings/web-acme
+    responseStatus:
+      code: 201
+    requestObject:
+      spec:
+        projectRef:
+          name: web
+        billingAccountRef:
+          name: acme
+    responseObject: &id001
+      metadata:
+        name: web-acme
+        namespace: organization-acme
+      spec: {}
+  exp_summary: alice@example.com bound project web to billing account acme
+- name: create without both references
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccountbindings
+      name: web-acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccountbindings/web-acme
+    responseStatus:
+      code: 201
+    requestObject:
+      spec:
+        projectRef:
+          name: web
+    responseObject: *id001
+  exp_summary: alice@example.com created billing account binding web-acme

@@ -1,0 +1,514 @@
+# BillingArrangement: payment terms granted, updated, ended and deleted, and the
+# PaymentTermsEnded event. Fields marked "Internal note" must never reach a summary.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: grant open-ended terms
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471'
+- name: grant scheduled terms with an end date
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-11-01T00:00:00Z'
+        reason: Internal note that must never appear
+        endsAt: '2027-09-30T00:00:00Z'
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471, starting
+    1 November 2026, until 30 September 2027'
+- name: grant terms without a credit limit
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com granted invoice terms to billing account acme: net 30, PO PO-4471'
+- name: approve an application without a credit limit
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+        applicationRef: &id001
+          name: acme-apply
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com approved the payment terms application acme-apply with invoice terms for billing account
+    acme: net 30'
+- name: update terms without a credit limit
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        invoice:
+          netDays: 45
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 45
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com updated invoice terms for billing account acme: net 45'
+- name: end terms now
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        endsAt: '2026-10-06T10:00:00Z'
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: alice@example.com ended invoice terms for billing account acme
+- name: set a future end date
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        endsAt: '2027-03-31T00:00:00Z'
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: alice@example.com set invoice terms for billing account acme to end on 31 March 2027
+- name: change the credit limit
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        invoice:
+          creditLimit: '20000'
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 45
+          creditLimit: '20000'
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+        endsAt: '2027-09-30T00:00:00Z'
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com updated invoice terms for billing account acme: net 45, credit limit 20000, until 30 September
+    2027'
+- name: clear the end date
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        endsAt: null
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com updated invoice terms for billing account acme: net 30, credit limit 10000, PO PO-4471'
+- name: JSON Patch edit
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    requestObject:
+    - op: replace
+      path: /spec/endsAt
+      value: '2027-01-01T00:00:00Z'
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com updated invoice terms for billing account acme: net 30, credit limit 10000, PO PO-4471'
+- name: approve an application
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+        applicationRef: *id001
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com approved the payment terms application acme-apply with invoice terms for billing account
+    acme: net 30, credit limit 10000, PO PO-4471'
+- name: delete returning the object
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: alice@example.com deleted the payment terms record acme-terms for billing account acme
+- name: delete terms that approved an application
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        reason: Internal note that must never appear
+        applicationRef: *id001
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: alice@example.com deleted the payment terms record acme-terms for billing account acme, so its application
+    acme-apply is awaiting review again
+- name: delete returning Status
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 200
+    responseObject:
+      kind: Status
+      status: Success
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: alice@example.com deleted the payment terms record acme-terms
+- name: grant terms of another type
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_rule: create-fallback
+  exp_summary: alice@example.com granted payment terms acme-terms
+- name: terms ended event
+  event:
+    metadata:
+      name: acme-terms.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/ends-at: '2027-09-30T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingArrangement
+      name: acme-terms
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingArrangement
+      name: acme-terms
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentTermsEnded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: terms-ended
+  exp_summary: Payment terms for billing account acme ended on 30 September 2027
+  exp_change_source: system
+- name: terms ended event without its detail
+  event:
+    metadata:
+      name: acme-terms.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingArrangement
+      name: acme-terms
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingArrangement
+      name: acme-terms
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: PaymentTermsEnded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: terms-ended-fallback
+  exp_summary: Payment terms acme-terms ended
