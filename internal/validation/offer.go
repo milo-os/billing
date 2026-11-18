@@ -172,6 +172,54 @@ func IntervalMonths(interval billingv1alpha1.ChargeInterval) int {
 	}
 }
 
+// ContractBillsOnInvoiceDay reports whether a contract bills on the
+// account's invoice day, with a prorated first period, rather than on the
+// day it starts.
+func ContractBillsOnInvoiceDay(contract *billingv1alpha1.BillingContract) bool {
+	return contract != nil && contract.BillingDay == billingv1alpha1.ContractBillingDayInvoiceDay
+}
+
+// AccountInvoiceDay is the day of the month an account is invoiced on: its
+// payment terms' invoiceDayOfMonth, or the 1st under the standard terms.
+func AccountInvoiceDay(account *billingv1alpha1.BillingAccount) int32 {
+	if account != nil && account.Spec.PaymentTerms != nil && account.Spec.PaymentTerms.InvoiceDayOfMonth > 0 {
+		return account.Spec.PaymentTerms.InvoiceDayOfMonth
+	}
+	return billingv1alpha1.StandardPaymentTermsInvoiceDayOfMonth
+}
+
+// NextBillingDate returns the first date on or after t on which a fee
+// charged every interval bills, when billing falls on invoiceDay (1 to 28)
+// of every month, of January, April, July and October, or of January.
+// Billing providers count periods from January 2025, so quarters and years
+// start in January.
+func NextBillingDate(t time.Time, invoiceDay int32, interval billingv1alpha1.ChargeInterval) time.Time {
+	t = t.UTC()
+	months := IntervalMonths(interval)
+	date := time.Date(t.Year(), time.January, int(invoiceDay), 0, 0, 0, 0, time.UTC)
+	for date.After(t) {
+		date = date.AddDate(-1, 0, 0)
+	}
+	for date.Before(t) {
+		date = date.AddDate(0, months, 0)
+	}
+	return date
+}
+
+// ContractFeeEndsAt returns when a contract's Recurring fee charged for
+// periods intervals stops: periods intervals after the contract starts,
+// or, for a contract billed on the invoice day, after its first billing
+// date, so the prorated first period isn't counted. Zero for a fee with
+// no end.
+func ContractFeeEndsAt(contract *billingv1alpha1.BillingContract, invoiceDay int32,
+	interval billingv1alpha1.ChargeInterval, periods int32) time.Time {
+	start := contract.StartsAt.Time
+	if ContractBillsOnInvoiceDay(contract) {
+		start = NextBillingDate(start, invoiceDay, interval)
+	}
+	return FeeEndsAt(start, interval, periods)
+}
+
 // FeeEndsAt returns when a Recurring fee charged for periods intervals
 // from startsAt stops: periods intervals after startsAt, on startsAt's day
 // of the month, or the month's last day when it's shorter. It returns the

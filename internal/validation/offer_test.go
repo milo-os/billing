@@ -536,6 +536,52 @@ func TestFeeEndsAt(t *testing.T) {
 	}
 }
 
+func TestNextBillingDate(t *testing.T) {
+	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name       string
+		t          time.Time
+		invoiceDay int32
+		interval   billingv1alpha1.ChargeInterval
+		want       time.Time
+	}{
+		{"monthly, mid-month", day(2026, time.November, 15), 1, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.December, 1)},
+		{"monthly, on the day", day(2026, time.November, 1), 1, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.November, 1)},
+		{"monthly, before a later invoice day", day(2026, time.November, 3), 10, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.November, 10)},
+		{"monthly, across a year", day(2026, time.December, 15), 1, "", day(2027, time.January, 1)},
+		{"quarterly", day(2026, time.November, 15), 1, billingv1alpha1.ChargeIntervalQuarterly, day(2027, time.January, 1)},
+		{"quarterly, on a quarter", day(2026, time.April, 1), 1, billingv1alpha1.ChargeIntervalQuarterly, day(2026, time.April, 1)},
+		{"annual", day(2026, time.February, 15), 5, billingv1alpha1.ChargeIntervalAnnual, day(2027, time.January, 5)},
+		{"annual, before the day in January", day(2026, time.January, 2), 5, billingv1alpha1.ChargeIntervalAnnual, day(2026, time.January, 5)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NextBillingDate(tt.t, tt.invoiceDay, tt.interval); !got.Equal(tt.want) {
+				t.Errorf("NextBillingDate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContractFeeEndsAt(t *testing.T) {
+	startsAt := metav1.NewTime(time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC))
+	onStart := &billingv1alpha1.BillingContract{StartsAt: startsAt}
+	onInvoiceDay := &billingv1alpha1.BillingContract{StartsAt: startsAt, BillingDay: billingv1alpha1.ContractBillingDayInvoiceDay}
+
+	if got, want := ContractFeeEndsAt(onStart, 1, billingv1alpha1.ChargeIntervalMonthly, 12),
+		time.Date(2027, time.November, 15, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("billed on its start: ends %v, want %v", got, want)
+	}
+	// 15 November to 1 December is prorated, then 12 whole months.
+	if got, want := ContractFeeEndsAt(onInvoiceDay, 1, billingv1alpha1.ChargeIntervalMonthly, 12),
+		time.Date(2027, time.December, 1, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("billed on the invoice day: ends %v, want %v", got, want)
+	}
+	if got := ContractFeeEndsAt(onInvoiceDay, 1, billingv1alpha1.ChargeIntervalMonthly, 0); !got.IsZero() {
+		t.Errorf("no periods: ends %v, want no end", got)
+	}
+}
+
 func TestSnapshotQuantity(t *testing.T) {
 	if got := SnapshotQuantity(billingv1alpha1.ServicePricingSnapshot{}); got != 1 {
 		t.Errorf("unset quantity: got %d, want 1", got)

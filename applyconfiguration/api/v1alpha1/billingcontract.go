@@ -5,6 +5,7 @@
 package v1alpha1
 
 import (
+	apiv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -15,13 +16,32 @@ import (
 type BillingContractApplyConfiguration struct {
 	// StartsAt is when the contract starts, at midnight UTC. The Offer's
 	// charges start on this day, so a one-time setup fee is charged then,
-	// and monthly charges bill on this day of each month: a contract
-	// starting on the 18th bills on the 18th, and one starting on the 29th,
-	// 30th or 31st bills on the last day of shorter months. When the
+	// and, unless billingDay is InvoiceDay, monthly charges bill on this day
+	// of each month: a contract starting on the 18th bills on the 18th, and
+	// one starting on the 29th, 30th or 31st bills on the last day of
+	// shorter months. When the
 	// contract is set, it may be today or up to a year ahead, but not in
 	// the past: billing providers can't start charging retroactively.
 	// Immutable.
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
+	// BillingDay is the day of the month the contract bills on.
+	//
+	// StartDate, the default, bills on the day it starts, so every period
+	// is a full one: a contract starting on the 15th bills the 15th to the
+	// 15th.
+	//
+	// InvoiceDay bills on the account's invoice day (its payment terms'
+	// invoiceDayOfMonth, the 1st under the standard terms), like an account
+	// without a contract. The first period runs from the start to the next
+	// invoice day, and its recurring fees are prorated: a monthly fee on a
+	// contract starting on the 15th is charged for the 15th to the 1st,
+	// then for whole months. Quarterly and annual fees bill on the invoice
+	// day of January, April, July and October, and of January, so their
+	// first period runs to the next of those. A fee with periods runs for
+	// that many whole periods after the prorated one.
+	//
+	// Immutable.
+	BillingDay *apiv1alpha1.ContractBillingDay `json:"billingDay,omitempty"`
 }
 
 // BillingContractApplyConfiguration constructs a declarative configuration of the BillingContract type for use with
@@ -35,5 +55,13 @@ func BillingContract() *BillingContractApplyConfiguration {
 // If called multiple times, the StartsAt field is set to the value of the last call.
 func (b *BillingContractApplyConfiguration) WithStartsAt(value v1.Time) *BillingContractApplyConfiguration {
 	b.StartsAt = &value
+	return b
+}
+
+// WithBillingDay sets the BillingDay field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BillingDay field is set to the value of the last call.
+func (b *BillingContractApplyConfiguration) WithBillingDay(value apiv1alpha1.ContractBillingDay) *BillingContractApplyConfiguration {
+	b.BillingDay = &value
 	return b
 }
