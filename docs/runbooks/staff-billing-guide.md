@@ -349,14 +349,17 @@ the hardware is handed over.
 
 ### Billing day
 
-Which day of the month the contract bills on:
+**Bills on** sets which day of the month the contract bills on. The options
+name the actual day, and the line under the field says what each invoice
+covers:
 
-- **Start date, every month a whole one** (the default): the day it starts. A contract starting on the
-  18th bills on the 18th of each month, so every month is a whole one. One
-  starting on the 29th, 30th or 31st bills on the last day of shorter months.
-- **Day 1, first month prorated** (or whichever day the account is invoiced
-  on): the account's invoice day, the 1st unless its payment terms say
-  otherwise, like an account without a contract.
+- **The 18th of each month (the start date)** (the default, here for a
+  contract starting on the 18th): the day it starts, so every month is a
+  whole one, the 18th to the 18th. One starting on the 29th, 30th or 31st
+  bills on the last day of shorter months.
+- **The 1st of each month, with the first month prorated** (or whichever day
+  the account is invoiced on): the account's invoice day, the 1st unless its
+  payment terms say otherwise, like an account without a contract.
   The first month runs from the start date to the next invoice day, and
   recurring fees are charged for just that part. A monthly fee on a contract
   starting on 15 November is charged for 15 November to 1 December, then for
