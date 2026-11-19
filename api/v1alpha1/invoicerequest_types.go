@@ -204,6 +204,22 @@ type InvoiceRequestStatus struct {
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	TotalWithTax string `json:"totalWithTax,omitempty"`
 
+	// StartingBalance is the account's balance the provider carries onto
+	// the invoice, as a decimal string: positive for what the customer
+	// already owes, such as an earlier invoice too small to charge,
+	// negative for credit. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	StartingBalance string `json:"startingBalance,omitempty"`
+
+	// AmountDue is what the customer would be charged: TotalWithTax with
+	// StartingBalance applied. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	AmountDue string `json:"amountDue,omitempty"`
+
 	// Draft links to the draft a Preview with spec.draft left in the
 	// invoicing provider's own system.
 	//
