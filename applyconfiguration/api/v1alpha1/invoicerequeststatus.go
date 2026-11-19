@@ -32,6 +32,14 @@ type InvoiceRequestStatusApplyConfiguration struct {
 	// TotalWithTax is what the customer would pay: Total plus Tax. Unset
 	// with Tax.
 	TotalWithTax *string `json:"totalWithTax,omitempty"`
+	// StartingBalance is the account's balance the provider carries onto
+	// the invoice, as a decimal string: positive for what the customer
+	// already owes, such as an earlier invoice too small to charge,
+	// negative for credit. Unset when the provider didn't say.
+	StartingBalance *string `json:"startingBalance,omitempty"`
+	// AmountDue is what the customer would be charged: TotalWithTax with
+	// StartingBalance applied. Unset when the provider didn't say.
+	AmountDue *string `json:"amountDue,omitempty"`
 	// Draft links to the draft a Preview with spec.draft left in the
 	// invoicing provider's own system.
 	Draft *InvoiceRequestDraftApplyConfiguration `json:"draft,omitempty"`
@@ -104,6 +112,22 @@ func (b *InvoiceRequestStatusApplyConfiguration) WithTax(value string) *InvoiceR
 // If called multiple times, the TotalWithTax field is set to the value of the last call.
 func (b *InvoiceRequestStatusApplyConfiguration) WithTotalWithTax(value string) *InvoiceRequestStatusApplyConfiguration {
 	b.TotalWithTax = &value
+	return b
+}
+
+// WithStartingBalance sets the StartingBalance field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the StartingBalance field is set to the value of the last call.
+func (b *InvoiceRequestStatusApplyConfiguration) WithStartingBalance(value string) *InvoiceRequestStatusApplyConfiguration {
+	b.StartingBalance = &value
+	return b
+}
+
+// WithAmountDue sets the AmountDue field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the AmountDue field is set to the value of the last call.
+func (b *InvoiceRequestStatusApplyConfiguration) WithAmountDue(value string) *InvoiceRequestStatusApplyConfiguration {
+	b.AmountDue = &value
 	return b
 }
 

@@ -645,6 +645,10 @@ fee. Usage isn't covered.
   the invoice as a draft in the provider's own system, for staff to open
   there, and `status.draft` links to it. With Stripe, that's a draft invoice
   in the Stripe dashboard, never finalized or sent, and deleted after a day.
+  The provider may also report the account's `startingBalance`, which it
+  carries onto the invoice (what the customer already owes, such as an
+  earlier invoice too small to charge, or a credit as a negative), and the
+  `amountDue` with it applied.
 - **Issue** asks the provider to invoice the fixed charges now and send them,
   with `status.invoiceRef` naming the resulting `Invoice`. It's only useful
   with a provider that holds fixed charges until the end of the billing cycle.
@@ -1111,3 +1115,5 @@ list price.
 - 2026-11-19: An `InvoiceRequest` Preview can report tax, each line's
   quantity, unit price and discount, and leave a draft in the provider's own
   system (`spec.draft`).
+- 2026-11-19: An `InvoiceRequest` can report the account's starting balance
+  and the amount due.
