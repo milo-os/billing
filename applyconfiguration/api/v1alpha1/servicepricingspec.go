@@ -43,11 +43,10 @@ type ServicePricingSpecApplyConfiguration struct {
 	// DisplayName is a human-readable label for invoices and portals.
 	DisplayName *string `json:"displayName,omitempty"`
 	// SKU is the product code finance knows this price's product by (e.g.
-	// "DC-CAB-01"). Invoices show it before the line's name ("[DC-CAB-01]
-	// Structured cabling"), so it can be read from Stripe and reports. It
-	// names the product, not the price: a customer's pricing with basedOn
-	// has its list pricing's SKU, and a new price for the same product
-	// keeps it.
+	// "DC-CAB-01"). It's internal, for tracking and reporting, and never
+	// printed on an invoice. It names the product, not the price: a
+	// customer's pricing with basedOn has its list pricing's SKU, and a new
+	// price for the same product keeps it.
 	SKU *string `json:"sku,omitempty"`
 	// Tax says how this price's charges are taxed. Without it, they're
 	// taxed by the billing profile's default, as every charge was before

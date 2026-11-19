@@ -348,13 +348,12 @@ fee charged per port reads "Cross connect: 4 port × $300.00" rather than
 "Cross connect × 4". Without it, the quantity is a count of the fee.
 
 **Prices can have a SKU.** Any pricing may set `sku`, the product code finance
-knows it by (e.g. `DC-CAB-01`). Invoice lines start with it in brackets,
-"[DC-CAB-01] Structured cabling", so it can be read from Stripe and reports
-built on them, and `status.contract` lists it with each fee. A SKU names the
-product, not the price: a pricing with `basedOn` must have its list pricing's
-SKU, and a new price for the same product keeps it. Stripe only sees it as
-part of the line's description, since OpenMeter puts nothing else of ours on
-Stripe's lines.
+knows it by (e.g. `DC-CAB-01`). It's internal, for tracking and reporting:
+it's never printed on an invoice. `status.contract` lists it with each fee,
+and stripe-provider keeps a Stripe Product per SKU, with the SKU in its
+metadata, so Stripe's reports can group by it. A SKU names the product, not
+the price: a pricing with `basedOn` must have its list pricing's SKU, and a
+new price for the same product keeps it.
 
 **Prices can say how they're taxed.** A pricing's `tax.code` is the tax
 engine's code for what it sells, chosen by finance: with Stripe Tax, one of
@@ -871,8 +870,8 @@ OpenMeter's flat-price rate cards have no quantity, so openmeter-provider sets
 the rate card's amount to the fee's amount times its quantity and adds the
 quantity, and the unit if there is one, to its name. Rate card keys stay per
 pricing, so a fee keeps its key when only its quantity changes. Fees without a
-service leave it out of the rate card's description. A pricing's `sku`, when
-it has one, starts the rate card's name in brackets, for fees and usage alike.
+service leave it out of the rate card's description. A pricing's `sku` stays
+off the rate card's name, which OpenMeter prints on invoice lines.
 A pricing's `tax` becomes its rate card's tax config, for fees and usage
 alike: its code, or the tax engine's nontaxable code when `taxable` is false.
 OpenMeter's Stripe app puts that code on the Stripe line, so each line is
@@ -1097,3 +1096,5 @@ list price.
   first period (`contract.billingDay: InvoiceDay`).
 - 2026-11-18: Pricings can set `tax`, a tax code or not taxable, which their
   rate cards and invoice lines carry.
+- 2026-11-19: A pricing's SKU is internal and no longer starts its invoice
+  lines. It was only ever on staging's invoices.
