@@ -286,7 +286,7 @@ contract can have up to 20 fees, counting those from the price list.
 | **Billed** | For a recurring fee: **In arrears** (the default) or **In advance**. See [How fees are billed](#how-fees-are-billed) |
 | **Renewals** | For a recurring fee: how many periods it's charged for, counted from the start date. 36 monthly is three years. Leave it blank for a fee with no end |
 | **Per** | Optional unit the amount is per, such as `port` or `kW`. Only a label: the invoice then reads "Cross connect: 2 port × $120.00" instead of "Cross connect × 2" |
-| **SKU** | Optional product code finance knows the fee by, such as `DC-CAB-01`. Invoices show it before the name: "[DC-CAB-01] Structured cabling". A fee picked from the price list keeps the list fee's SKU |
+| **SKU** | Optional product code finance knows the fee by, such as `DC-CAB-01`. It's for our tracking and reporting only: customers never see it, and invoices show only the name. A fee picked from the price list keeps the list fee's SKU |
 | **Service** | Optional. Pick one only if the fee is for a particular service. Setup, support and rack fees usually aren't |
 
 ### How fees are billed
