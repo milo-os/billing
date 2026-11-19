@@ -25,6 +25,16 @@ type InvoiceRequestStatusApplyConfiguration struct {
 	Lines []InvoiceRequestLineApplyConfiguration `json:"lines,omitempty"`
 	// Total is the sum of the lines, before tax, as a decimal string.
 	Total *string `json:"total,omitempty"`
+	// Tax is the invoice's tax, as a decimal string, worked out from the
+	// customer's address, tax IDs and exemptions and each charge's tax
+	// code. Unset when the provider didn't work out tax.
+	Tax *string `json:"tax,omitempty"`
+	// TotalWithTax is what the customer would pay: Total plus Tax. Unset
+	// with Tax.
+	TotalWithTax *string `json:"totalWithTax,omitempty"`
+	// Draft links to the draft a Preview with spec.draft left in the
+	// invoicing provider's own system.
+	Draft *InvoiceRequestDraftApplyConfiguration `json:"draft,omitempty"`
 	// InvoiceRef references the Invoice an Issue request created, once the
 	// provider has recorded it.
 	InvoiceRef *InvoiceRequestInvoiceRefApplyConfiguration `json:"invoiceRef,omitempty"`
@@ -78,6 +88,30 @@ func (b *InvoiceRequestStatusApplyConfiguration) WithLines(values ...*InvoiceReq
 // If called multiple times, the Total field is set to the value of the last call.
 func (b *InvoiceRequestStatusApplyConfiguration) WithTotal(value string) *InvoiceRequestStatusApplyConfiguration {
 	b.Total = &value
+	return b
+}
+
+// WithTax sets the Tax field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Tax field is set to the value of the last call.
+func (b *InvoiceRequestStatusApplyConfiguration) WithTax(value string) *InvoiceRequestStatusApplyConfiguration {
+	b.Tax = &value
+	return b
+}
+
+// WithTotalWithTax sets the TotalWithTax field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the TotalWithTax field is set to the value of the last call.
+func (b *InvoiceRequestStatusApplyConfiguration) WithTotalWithTax(value string) *InvoiceRequestStatusApplyConfiguration {
+	b.TotalWithTax = &value
+	return b
+}
+
+// WithDraft sets the Draft field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Draft field is set to the value of the last call.
+func (b *InvoiceRequestStatusApplyConfiguration) WithDraft(value *InvoiceRequestDraftApplyConfiguration) *InvoiceRequestStatusApplyConfiguration {
+	b.Draft = value
 	return b
 }
 

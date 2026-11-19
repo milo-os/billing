@@ -638,6 +638,13 @@ fee. Usage isn't covered.
   aren't on it; they're invoiced at the end of the month. After it starts, it's
   the next invoice: one waiting to be issued, or the charges for later
   periods.
+- **Tax and a draft.** A provider may also work out tax. Each line then has
+  its `quantity`, `unitAmount`, `discount` and `tax`, and the status has the
+  invoice's `tax` and `totalWithTax`. Without tax, those stay unset and
+  `total` is still before tax. A Preview with `spec.draft: true` also leaves
+  the invoice as a draft in the provider's own system, for staff to open
+  there, and `status.draft` links to it. With Stripe, that's a draft invoice
+  in the Stripe dashboard, never finalized or sent, and deleted after a day.
 - **Issue** asks the provider to invoice the fixed charges now and send them,
   with `status.invoiceRef` naming the resulting `Invoice`. It's only useful
   with a provider that holds fixed charges until the end of the billing cycle.
@@ -791,7 +798,10 @@ An invoicing provider:
   - Lines and total cover the account's fixed charges, after discounts and
     before tax.
   - A Preview creates nothing. Before a contract starts it reports the first
-    invoice the contract will get.
+    invoice the contract will get, worked out by Stripe with tax when the
+    account has a Stripe customer (a stripe-provider `StripeInvoice`), and
+    by the provider's own arithmetic, without tax, otherwise. With
+    `spec.draft` it also leaves a Stripe draft to open in the dashboard.
   - An Issue creates the invoice from the fixed charges waiting, and records
     the projected `Invoice` in `status.invoiceRef`; with nothing waiting it
     fails with `NothingToInvoice` rather than creating an empty invoice.
@@ -1098,3 +1108,6 @@ list price.
   rate cards and invoice lines carry.
 - 2026-11-19: A pricing's SKU is internal and no longer starts its invoice
   lines. It was only ever on staging's invoices.
+- 2026-11-19: An `InvoiceRequest` Preview can report tax, each line's
+  quantity, unit price and discount, and leave a draft in the provider's own
+  system (`spec.draft`).

@@ -19,6 +19,12 @@ type InvoiceRequestSpecApplyConfiguration struct {
 	// Mode is Preview to work out the invoice without creating it, or
 	// Issue to create it and send it to the customer.
 	Mode *apiv1alpha1.InvoiceRequestMode `json:"mode,omitempty"`
+	// Draft, on a Preview, also leaves the invoice as a draft in the
+	// invoicing provider's own system, for staff to open there: with Stripe,
+	// a draft invoice in the Stripe dashboard. The draft is never finalized
+	// or sent, and the provider deletes it after a day. status.draft links
+	// to it. Providers that can't make one complete the Preview without it.
+	Draft *bool `json:"draft,omitempty"`
 }
 
 // InvoiceRequestSpecApplyConfiguration constructs a declarative configuration of the InvoiceRequestSpec type for use with
@@ -40,5 +46,13 @@ func (b *InvoiceRequestSpecApplyConfiguration) WithBillingAccountRef(value *Bill
 // If called multiple times, the Mode field is set to the value of the last call.
 func (b *InvoiceRequestSpecApplyConfiguration) WithMode(value apiv1alpha1.InvoiceRequestMode) *InvoiceRequestSpecApplyConfiguration {
 	b.Mode = &value
+	return b
+}
+
+// WithDraft sets the Draft field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Draft field is set to the value of the last call.
+func (b *InvoiceRequestSpecApplyConfiguration) WithDraft(value bool) *InvoiceRequestSpecApplyConfiguration {
+	b.Draft = &value
 	return b
 }
