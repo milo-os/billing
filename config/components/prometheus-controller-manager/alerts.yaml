@@ -23,6 +23,7 @@ spec:
           labels:
             expected_no_match: "true"
             severity: critical
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
@@ -43,6 +44,7 @@ spec:
           for: 5m
           labels:
             severity: critical
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
@@ -64,6 +66,7 @@ spec:
           for: 10m
           labels:
             severity: warning
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
@@ -85,6 +88,7 @@ spec:
           for: 15m
           labels:
             severity: warning
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
@@ -107,6 +111,7 @@ spec:
           for: 0m
           labels:
             severity: critical
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
@@ -132,6 +137,7 @@ spec:
           for: 0m
           labels:
             severity: critical
+            team: billing
             namespace: billing-system
             service: billing
           annotations:
