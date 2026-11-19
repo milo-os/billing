@@ -85,6 +85,14 @@ spec:
                 required:
                 - name
                 type: object
+              draft:
+                description: |-
+                  Draft, on a Preview, also leaves the invoice as a draft in the
+                  invoicing provider's own system, for staff to open there: with Stripe,
+                  a draft invoice in the Stripe dashboard. The draft is never finalized
+                  or sent, and the provider deletes it after a day. status.draft links
+                  to it. Providers that can't make one complete the Preview without it.
+                type: boolean
               mode:
                 description: |-
                   Mode is Preview to work out the invoice without creating it, or
@@ -100,6 +108,8 @@ spec:
             x-kubernetes-validations:
             - message: spec is immutable
               rule: self == oldSelf
+            - message: draft is only for a Preview
+              rule: '!has(self.draft) || !self.draft || self.mode == ''Preview'''
           status:
             description: |-
               InvoiceRequestStatus defines the observed state of an InvoiceRequest.
@@ -175,6 +185,22 @@ spec:
                 description: CurrencyCode is the ISO 4217 currency of the amounts.
                 pattern: ^[A-Z]{3}$
                 type: string
+              draft:
+                description: |-
+                  Draft links to the draft a Preview with spec.draft left in the
+                  invoicing provider's own system.
+                properties:
+                  expiresAt:
+                    description: ExpiresAt is when the provider deletes the draft.
+                    format: date-time
+                    type: string
+                  url:
+                    description: URL opens the draft in the provider's dashboard.
+                    maxLength: 2048
+                    type: string
+                required:
+                - url
+                type: object
               invoiceRef:
                 description: |-
                   InvoiceRef references the Invoice an Issue request created, once the
@@ -202,6 +228,12 @@ spec:
                         the invoice.
                       maxLength: 512
                       type: string
+                    discount:
+                      description: |-
+                        Discount is what discounts take off the charge, as a decimal string.
+                        Amount is already after it.
+                      pattern: ^-?[0-9]+(\.[0-9]+)?$
+                      type: string
                     period:
                       description: |-
                         Period is the service period the charge covers. Unset for a one-time
@@ -223,6 +255,24 @@ spec:
                       x-kubernetes-validations:
                       - message: period.start must be less than or equal to period.end
                         rule: self.start <= self.end
+                    quantity:
+                      description: |-
+                        Quantity is how many are charged, as a decimal string. Unset when
+                        the provider didn't say.
+                      pattern: ^[0-9]+(\.[0-9]+)?$
+                      type: string
+                    tax:
+                      description: |-
+                        Tax is the tax on the charge, as a decimal string. Unset when the
+                        provider didn't work out tax.
+                      pattern: ^-?[0-9]+(\.[0-9]+)?$
+                      type: string
+                    unitAmount:
+                      description: |-
+                        UnitAmount is the price of one, before discounts, as a decimal
+                        string. Unset when the provider didn't say.
+                      pattern: ^-?[0-9]+(\.[0-9]+)?$
+                      type: string
                   required:
                   - amount
                   - description
@@ -245,9 +295,22 @@ spec:
                 - Succeeded
                 - Failed
                 type: string
+              tax:
+                description: |-
+                  Tax is the invoice's tax, as a decimal string, worked out from the
+                  customer's address, tax IDs and exemptions and each charge's tax
+                  code. Unset when the provider didn't work out tax.
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
               total:
                 description: Total is the sum of the lines, before tax, as a decimal
                   string.
+                pattern: ^-?[0-9]+(\.[0-9]+)?$
+                type: string
+              totalWithTax:
+                description: |-
+                  TotalWithTax is what the customer would pay: Total plus Tax. Unset
+                  with Tax.
                 pattern: ^-?[0-9]+(\.[0-9]+)?$
                 type: string
             type: object

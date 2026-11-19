@@ -64,6 +64,7 @@ const (
 // InvoiceRequestSpec defines the desired state of an InvoiceRequest.
 //
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(self.draft) || !self.draft || self.mode == 'Preview'",message="draft is only for a Preview"
 type InvoiceRequestSpec struct {
 	// BillingAccountRef references the BillingAccount to invoice, in the
 	// same namespace.
@@ -76,6 +77,15 @@ type InvoiceRequestSpec struct {
 	//
 	// +kubebuilder:validation:Required
 	Mode InvoiceRequestMode `json:"mode"`
+
+	// Draft, on a Preview, also leaves the invoice as a draft in the
+	// invoicing provider's own system, for staff to open there: with Stripe,
+	// a draft invoice in the Stripe dashboard. The draft is never finalized
+	// or sent, and the provider deletes it after a day. status.draft links
+	// to it. Providers that can't make one complete the Preview without it.
+	//
+	// +kubebuilder:validation:Optional
+	Draft bool `json:"draft,omitempty"`
 }
 
 // InvoiceRequestLine is one charge on a requested invoice.
@@ -98,6 +108,49 @@ type InvoiceRequestLine struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	Amount string `json:"amount"`
+
+	// Quantity is how many are charged, as a decimal string. Unset when
+	// the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	Quantity string `json:"quantity,omitempty"`
+
+	// UnitAmount is the price of one, before discounts, as a decimal
+	// string. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	UnitAmount string `json:"unitAmount,omitempty"`
+
+	// Discount is what discounts take off the charge, as a decimal string.
+	// Amount is already after it.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Discount string `json:"discount,omitempty"`
+
+	// Tax is the tax on the charge, as a decimal string. Unset when the
+	// provider didn't work out tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Tax string `json:"tax,omitempty"`
+}
+
+// InvoiceRequestDraft is the draft a Preview with draft left in the
+// invoicing provider's own system.
+type InvoiceRequestDraft struct {
+	// URL opens the draft in the provider's dashboard.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=2048
+	URL string `json:"url"`
+
+	// ExpiresAt is when the provider deletes the draft.
+	//
+	// +kubebuilder:validation:Optional
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
 }
 
 // InvoiceRequestInvoiceRef references the Invoice an Issue request created.
@@ -135,6 +188,27 @@ type InvoiceRequestStatus struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	Total string `json:"total,omitempty"`
+
+	// Tax is the invoice's tax, as a decimal string, worked out from the
+	// customer's address, tax IDs and exemptions and each charge's tax
+	// code. Unset when the provider didn't work out tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Tax string `json:"tax,omitempty"`
+
+	// TotalWithTax is what the customer would pay: Total plus Tax. Unset
+	// with Tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	TotalWithTax string `json:"totalWithTax,omitempty"`
+
+	// Draft links to the draft a Preview with spec.draft left in the
+	// invoicing provider's own system.
+	//
+	// +kubebuilder:validation:Optional
+	Draft *InvoiceRequestDraft `json:"draft,omitempty"`
 
 	// InvoiceRef references the Invoice an Issue request created, once the
 	// provider has recorded it.
