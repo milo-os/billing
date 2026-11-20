@@ -99,6 +99,8 @@ func TestEventRulesUseDefinedReasons(t *testing.T) {
 			billingv1alpha1.EventReasonInvoicePartiallyPaid,
 			billingv1alpha1.EventReasonInvoicePastDue,
 			billingv1alpha1.EventReasonInvoiceVoided,
+			billingv1alpha1.EventReasonInvoiceMarkedUncollectible,
+			billingv1alpha1.EventReasonInvoiceDueDateChanged,
 			billingv1alpha1.EventReasonInvoiceCurrencyMismatch,
 		},
 		"paymentmethod-policy.yaml": {
@@ -111,6 +113,7 @@ func TestEventRulesUseDefinedReasons(t *testing.T) {
 			billingv1alpha1.EventReasonDefaultPaymentMethodChanged,
 			billingv1alpha1.EventReasonInvoicingPastDue,
 			billingv1alpha1.EventReasonInvoicingCurrent,
+			billingv1alpha1.EventReasonInvoiceSent,
 		},
 		"billingarrangement-policy.yaml": {
 			billingv1alpha1.EventReasonPaymentTermsEnded,

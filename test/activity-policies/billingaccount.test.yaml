@@ -313,3 +313,126 @@ tests:
       status: {}
   exp_rule: update
   exp_summary: alice@example.com updated billing account acme
+- name: invoice sent with its Invoice
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+        event.billing.miloapis.com/due-date: '2026-12-18T00:00:00Z'
+        event.billing.miloapis.com/invoice: acme-2026-10
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent-linked
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026'
+  exp_policy: billing.miloapis.com-billingaccount
+  exp_change_source: system
+- name: invoice sent before it is projected
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+        event.billing.miloapis.com/due-date: '2026-12-18T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026'
+- name: invoice sent without a due date
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00'
+- name: invoice sent without detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent-fallback
+  exp_summary: An invoice for billing account acme was emailed

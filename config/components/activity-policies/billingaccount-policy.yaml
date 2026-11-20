@@ -6,7 +6,9 @@
 # Audit rules handle CRUD operations captured by the Kubernetes API server audit log.
 # eventRules cover what billing's controller records on the account (see
 # api/v1alpha1/events.go): the account falling past due and becoming current
-# again, and billing making a card the default.
+# again, and billing making a card the default. They also cover InvoiceSent,
+# which the payment processor's provider (stripe-provider) records on the
+# account each time an invoice is emailed.
 #
 # Design principles:
 # - Prefer contactInfo.businessName / contactInfo.name as the display label,
@@ -81,3 +83,18 @@ spec:
       match: "event.reason in ['InvoicingPastDue', 'InvoicingCurrent'] && has(event.regarding.namespace)"
       summary: "Billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} {{ event.reason == 'InvoicingPastDue' ? 'is past due' : 'is no longer past due' }}"
 
+    # A payment processor's provider records each time an invoice is emailed, re-sends
+    # included. The first send comes before the Invoice is projected, so the event is on the
+    # account and names the Invoice only once it exists:
+    # "Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026"
+    - name: invoice-sent-linked
+      match: "event.reason == 'InvoiceSent' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/invoice-number' in event.metadata.annotations && 'event.billing.miloapis.com/currency' in event.metadata.annotations && 'event.billing.miloapis.com/amount' in event.metadata.annotations && 'event.billing.miloapis.com/invoice' in event.metadata.annotations"
+      summary: "Invoice {{ link(event.metadata.annotations['event.billing.miloapis.com/invoice-number'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'invoices', 'namespace': event.regarding.namespace, 'name': event.metadata.annotations['event.billing.miloapis.com/invoice']}) }} for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was emailed{{ ': ' + event.metadata.annotations['event.billing.miloapis.com/currency'] + ' ' + event.metadata.annotations['event.billing.miloapis.com/amount'] }}{{ 'event.billing.miloapis.com/due-date' in event.metadata.annotations ? ', due ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getFullYear()) : '' }}"
+
+    - name: invoice-sent
+      match: "event.reason == 'InvoiceSent' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/invoice-number' in event.metadata.annotations && 'event.billing.miloapis.com/currency' in event.metadata.annotations && 'event.billing.miloapis.com/amount' in event.metadata.annotations"
+      summary: "Invoice {{ event.metadata.annotations['event.billing.miloapis.com/invoice-number'] }} for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was emailed{{ ': ' + event.metadata.annotations['event.billing.miloapis.com/currency'] + ' ' + event.metadata.annotations['event.billing.miloapis.com/amount'] }}{{ 'event.billing.miloapis.com/due-date' in event.metadata.annotations ? ', due ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/due-date'])).getFullYear()) : '' }}"
+
+    - name: invoice-sent-fallback
+      match: "event.reason == 'InvoiceSent' && has(event.regarding.namespace)"
+      summary: "An invoice for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was emailed"

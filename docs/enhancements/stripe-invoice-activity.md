@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implementable
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -132,17 +132,18 @@ New annotations in `events.go`:
 | `invoice-number` | the number printed on the invoice, which the customer quotes |
 | `previous-due-date` | RFC 3339 UTC |
 
-openmeter-provider also adds `invoice-number` to its existing invoice
-events where it knows the number (it's on the `Invoice` as
-`openmeter.miloapis.com/stripeInvoiceNumber`). The policies use it when
-present and fall back to the period ("the October 2026 invoice") when not.
+openmeter-provider adds `invoice-number` to its invoice events where it
+knows the number (it's on the `Invoice` as
+`openmeter.miloapis.com/stripeInvoiceNumber`). The new `Invoice` rules
+append it to the period ("the October 2026 invoice (ACME-0042)") when
+present. The existing rules are unchanged for now.
 
 | Reason | Summary (examples, made-up data) |
 | --- | --- |
-| `InvoiceSent` | Invoice ACME-0042 for billing account acme was emailed: USD 1,250.00, due 18 December 2026 |
-| `InvoiceSent`, with a Milo invoice | Invoice ACME-0042 (linked) for billing account acme was emailed: USD 1,250.00, due 18 December 2026 |
-| `InvoiceDueDateChanged` | The due date of invoice ACME-0042 for billing account acme moved from 18 December 2026 to 8 January 2027 |
-| `InvoiceMarkedUncollectible` | Invoice ACME-0042 for billing account acme was marked uncollectible: USD 1,250.00 unpaid |
+| `InvoiceSent` | Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026 |
+| `InvoiceSent`, with a Milo invoice | Invoice ACME-0042 (linked) for billing account acme was emailed: USD 1250.00, due 18 December 2026 |
+| `InvoiceDueDateChanged` | The due date of the October 2026 invoice (ACME-0042) for billing account acme moved from 18 December 2026 to 8 January 2027 |
+| `InvoiceMarkedUncollectible` | The October 2026 invoice (ACME-0042) for billing account acme was marked uncollectible: USD 1250.00 unpaid |
 
 Each send is its own line, so a re-send reads as a second "was emailed"
 on a later date. We don't try to label "sent again": Stripe's event
