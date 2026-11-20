@@ -161,8 +161,9 @@ stripe-provider handles `invoice.sent`:
    status and metadata.
 2. **Skip** invoices with `datum_purpose: PreviewDraft` (they're never
    meant to be sent; if someone sends one anyway, it isn't a bill).
-3. **Find the account.** A field index on `StripeCustomer`
-   `status.stripeCustomerId` gives the namespace and `billingAccountRef`.
+3. **Find the account.** The `StripeCustomer` (read from the cache) whose
+   `status.stripeCustomerId` is the invoice's customer gives the namespace
+   and `billingAccountRef`.
    No `StripeCustomer` means not one of ours: 200, nothing recorded.
 4. **Find the Milo invoice, if there is one.** The Stripe invoice's
    `milo_invoice` metadata names it. It's absent on the first send:
@@ -200,6 +201,18 @@ Invoice that was Open or PastDue before and after the write, it records
 `InvoiceDueDateChanged` with both dates. That's the same
 before-and-after comparison as the other reasons, so no webhook and no
 extra state.
+
+Two details make that work for OpenMeter's invoices:
+
+- **The due date comes from Stripe.** OpenMeter keeps the due date it
+  issued with, and staff change it in Stripe, so openmeter-provider
+  projects the Stripe invoice's due date when it has one. When Stripe
+  can't be read, it keeps the date Stripe last gave, as it does for the
+  amounts. The portals then show the date printed on the invoice.
+- **Small moves aren't changes.** OpenMeter's and Stripe's due dates are
+  computed seconds apart at issue, so the first sync after this ships
+  moves every open invoice's date slightly. Only a move of 12 hours or
+  more is recorded; people move due dates by days.
 
 Nothing else from `invoice.updated` goes on the timeline. Amount changes
 after finalization come from credit notes, which are already future work
@@ -255,8 +268,8 @@ bills.
    tables. Released first, because the providers import the constants.
 2. **openmeter-provider:** `InvoiceDueDateChanged`, `InvoiceMarkedUncollectible`,
    `invoice-number` on its invoice events. Bump billing.
-3. **stripe-provider:** the `invoice.sent` handler, the `StripeCustomer`
-   index and deterministic Events. Bump billing.
+3. **stripe-provider:** the `invoice.sent` handler and deterministic
+   Events. Bump billing.
 4. **Stripe:** subscribe the staging webhook endpoint to `invoice.sent`,
    check the next send, then production. This is a dashboard change; ask
    before making it.
