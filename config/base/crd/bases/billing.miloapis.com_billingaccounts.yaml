@@ -606,6 +606,184 @@ spec:
                 - Suspended
                 - Archived
                 type: string
+              prices:
+                description: |-
+                  Prices lists every service pricing in the account's Offer, copied from the
+                  Offer's published snapshot so customers can see what they're billed at
+                  without reading the Offer: usage rates and fixed fees, each before its
+                  discount, which is also given. Cleared when the account has no published Offer.
+                items:
+                  description: |-
+                    BillingAccountPrice is one service pricing in the account's Offer, as its
+                    published snapshot bills it: a Usage pricing's rates, or a OneTime or
+                    Recurring fee's amount. Like BillingAccountDiscount, it doesn't name the
+                    Offer, and it leaves out how usage is converted into pricingUnit, how the
+                    pricing is taxed and which list pricing it's based on.
+                  properties:
+                    amount:
+                      description: |-
+                        Amount is a OneTime or Recurring fee's unit amount, before discount,
+                        as a decimal string in currency (e.g. "2400.00"). The fee is charged
+                        quantity times. Empty for a Usage pricing.
+                      pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                      type: string
+                    chargeType:
+                      description: |-
+                        ChargeType is Usage for metered consumption billed at rates, OneTime
+                        for a fee charged once, or Recurring for one charged every interval.
+                      enum:
+                      - Usage
+                      - OneTime
+                      - Recurring
+                      type: string
+                    currency:
+                      description: Currency is the ISO 4217 currency code of rates
+                        and amount.
+                      type: string
+                    discountPercentage:
+                      description: |-
+                        DiscountPercentage is the pricing's resolved discount, a whole number
+                        up to 100, off its rates or amount. Empty when it has none.
+                      format: int32
+                      maximum: 100
+                      minimum: 0
+                      type: integer
+                    displayName:
+                      description: |-
+                        DisplayName is the pricing's human-readable label (e.g. "ALB
+                        Requests").
+                      maxLength: 128
+                      type: string
+                    interval:
+                      description: |-
+                        Interval is how often a Recurring fee is charged (monthly, quarterly
+                        or annual), so amount is per interval. Empty otherwise.
+                      enum:
+                      - monthly
+                      - quarterly
+                      - annual
+                      type: string
+                    metric:
+                      description: |-
+                        Metric is the meterName of the meter a Usage pricing bills (e.g.
+                        "networking.datumapis.com/alb/requests"). Empty for a fee.
+                      maxLength: 253
+                      type: string
+                    name:
+                      description: Name is the metadata.name of the ServicePricing.
+                      maxLength: 253
+                      minLength: 1
+                      type: string
+                    pricingUnit:
+                      description: |-
+                        PricingUnit is what a Usage pricing's rates are per (e.g. "gib"), or
+                        what a fee's amount is per (e.g. "port"). Empty for a fee whose
+                        quantity is a count of the fee.
+                      maxLength: 64
+                      type: string
+                    quantity:
+                      description: |-
+                        Quantity is how many of a fee the Offer charges, so the fee charged
+                        is amount times quantity (e.g. 3 × "1000.00"). Empty for a Usage
+                        pricing.
+                      format: int32
+                      minimum: 1
+                      type: integer
+                    rates:
+                      description: |-
+                        Rates are a Usage pricing's rates per pricingUnit, before discount,
+                        in order: each flat or tiered, optionally for one dimension value,
+                        with the last rate without a match applying to the rest. Empty for a
+                        fee.
+                      items:
+                        description: |-
+                          PricingRate is a single rate entry. Exactly one of Flat or Tiered must
+                          be set. An optional Match filters the rate by dimension value; the last
+                          unmatched entry is the default catch-all.
+                        properties:
+                          flat:
+                            description: |-
+                              Flat is a single decimal USD string multiplied by metered usage.
+                              Mutually exclusive with Tiered.
+                            pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                            type: string
+                          match:
+                            description: Match optionally restricts this rate to a
+                              single dimension value.
+                            properties:
+                              dimension:
+                                description: |-
+                                  Dimension is the label key declared on the monitored resource type
+                                  (e.g. "tier", "region", "model").
+                                maxLength: 63
+                                minLength: 1
+                                type: string
+                              value:
+                                description: Value is the dimension value this rate
+                                  applies to.
+                                maxLength: 253
+                                minLength: 1
+                                type: string
+                            required:
+                            - dimension
+                            - value
+                            type: object
+                          tiered:
+                            description: |-
+                              Tiered is an ordered list of graduated volume bands.
+                              Mutually exclusive with Flat.
+                            items:
+                              description: |-
+                                PricingTierBand is a single graduated volume band. Aggregation for
+                                tier breaks is monthly at billing-account scope. Each band has a rate
+                                and an exclusive upper bound upTo in pricingUnit units. The last band
+                                omits upTo (open-ended).
+                              properties:
+                                rate:
+                                  description: |-
+                                    Rate is the USD decimal string applied to usage within this band.
+                                    Zero ("0") is valid for free allowances.
+                                  pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                                  type: string
+                                upTo:
+                                  description: |-
+                                    UpTo is the exclusive upper bound of this band in pricingUnit units.
+                                    Omit on the last band for an open-ended range.
+                                  pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                                  type: string
+                              required:
+                              - rate
+                              type: object
+                            minItems: 1
+                            type: array
+                            x-kubernetes-list-type: atomic
+                        type: object
+                        x-kubernetes-validations:
+                        - message: exactly one of flat or tiered must be set
+                          rule: has(self.flat) != has(self.tiered)
+                      type: array
+                      x-kubernetes-list-type: atomic
+                    serviceRef:
+                      description: |-
+                        ServiceRef is the service the pricing belongs to (e.g.
+                        "networking.datumapis.com"). Empty for a fee that isn't for any one
+                        service.
+                      maxLength: 253
+                      type: string
+                    sku:
+                      description: SKU is the pricing's product code. Empty when it
+                        has none.
+                      maxLength: 64
+                      type: string
+                  required:
+                  - chargeType
+                  - currency
+                  - name
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - name
+                x-kubernetes-list-type: map
             type: object
         type: object
     served: true

@@ -745,6 +745,43 @@ status:
   cycles, and in the usage tools of Patch and `datumctl billing`.
 - The contract's length isn't shown until [End of Term](#end-of-term) adds it.
 
+The rates the contract bills usage at aren't in `status.contract`. They're in
+`status.prices`, which lists every pricing in the account's published Offer,
+contract or not, as its snapshot bills it, each before its discount:
+
+```yaml
+status:
+  prices:
+    - name: networking-alb-egress-acme
+      serviceRef: networking.datumapis.com
+      displayName: ALB Egress
+      chargeType: Usage
+      currency: USD
+      metric: networking.datumapis.com/alb/egress-bytes
+      pricingUnit: gib
+      rates:
+        - match: {dimension: region, value: us}
+          tiered:
+            - upTo: "100"
+              rate: "0"
+            - rate: "0.05"
+        - flat: "0.08"
+      discountPercentage: 10
+    - name: dedicated-server-1000
+      displayName: Dedicated server
+      chargeType: Recurring
+      currency: USD
+      amount: "1000.00"
+      quantity: 3
+      interval: monthly
+```
+
+- A `Usage` pricing has its `metric` and `rates`, in the snapshot's order; a
+  fee has its `amount`, `quantity` and, if it recurs, `interval`.
+  `discountPercentage` is left out when the pricing has no discount.
+- It doesn't say how usage is converted into `pricingUnit`, how a pricing is
+  taxed, or which list pricing it's `basedOn`.
+
 ## Design Details
 
 ### Validation
@@ -1013,10 +1050,10 @@ month-to-month like the contract, are for this design to settle.
 
 ### Contract Rates for Customers
 
-`status.contract` says whether a contract bills usage, but not at what rates.
-A customer with their own rates will want to see them beside the list price,
-so a later change can add the contract's usage rates, with the list rate from
-`basedOn`, to `status.contract`.
+`status.contract` says whether a contract bills usage, and `status.prices`
+lists the rates it bills at. A customer with their own rates will want to see
+them beside the list price, so a later change can add the list rate from
+`basedOn` to `status.prices`.
 
 ### Minimum Spend Commitments
 
@@ -1127,3 +1164,6 @@ list price.
   and the amount due.
 - 2026-11-20: An `InvoiceRequest` Preview can preview a contract that isn't
   published yet (`spec.contractDraft`).
+- 2026-11-20: Every pricing in an account's Offer, with its usage rates or fee
+  amount and its discount, is published on `BillingAccount.status.prices` for
+  customers.

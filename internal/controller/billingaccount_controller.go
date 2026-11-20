@@ -354,10 +354,10 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
 }
 
-// reconcileEntitlementSummary publishes the discounts of the Offer the
-// account is entitled to on status.discounts, and its entitlement's
-// contract on status.contract. An account without a BillingEntitlement, or
-// whose Offer isn't published yet, has neither.
+// reconcileEntitlementSummary publishes the prices and discounts of the
+// Offer the account is entitled to on status.prices and status.discounts,
+// and its entitlement's contract on status.contract. An account without a
+// BillingEntitlement, or whose Offer isn't published yet, has none of them.
 func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
@@ -368,6 +368,7 @@ func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 	}
 	account.Status.Discounts = accountDiscounts(offer)
 	account.Status.Contract = accountContract(entitlement, offer, validation.AccountInvoiceDay(account))
+	account.Status.Prices = accountPrices(offer)
 	return nil
 }
 
@@ -434,6 +435,48 @@ func accountDiscounts(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAcc
 		return nil
 	}
 	return discounts
+}
+
+// accountPrices lists every pricing in the Offer's snapshot, in order, with
+// what it bills before its discount and the discount itself: a Usage
+// pricing's meter and rates, or a fee's amount, quantity and interval. It is
+// nil when there is no published Offer. As with accountDiscounts, only the
+// snapshot is read.
+func accountPrices(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAccountPrice {
+	if offer == nil || len(offer.Spec.ServicePricings) == 0 {
+		return nil
+	}
+
+	prices := make([]billingv1alpha1.BillingAccountPrice, 0, len(offer.Spec.ServicePricings))
+	for _, sp := range offer.Spec.ServicePricings {
+		price := billingv1alpha1.BillingAccountPrice{
+			Name:        sp.Name,
+			ServiceRef:  sp.Spec.ServiceRef,
+			DisplayName: sp.Spec.DisplayName,
+			SKU:         sp.Spec.SKU,
+			ChargeType:  sp.Spec.ChargeType,
+			Currency:    sp.Spec.Currency,
+			PricingUnit: sp.Spec.PricingUnit,
+		}
+		if sp.Discount != nil {
+			price.DiscountPercentage = sp.Discount.Percentage
+		}
+		switch sp.Spec.ChargeType {
+		case billingv1alpha1.ChargeTypeUsage:
+			price.Metric = sp.Spec.Metric
+			for i := range sp.Spec.Rates {
+				price.Rates = append(price.Rates, *sp.Spec.Rates[i].DeepCopy())
+			}
+		case billingv1alpha1.ChargeTypeOneTime, billingv1alpha1.ChargeTypeRecurring:
+			price.Amount = sp.Spec.Amount
+			price.Quantity = validation.SnapshotQuantity(sp)
+			if sp.Spec.ChargeType == billingv1alpha1.ChargeTypeRecurring {
+				price.Interval = sp.Spec.Interval
+			}
+		}
+		prices = append(prices, price)
+	}
+	return prices
 }
 
 // accountContract summarises the entitlement's contract with the fixed fees
