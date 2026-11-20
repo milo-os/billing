@@ -65,6 +65,7 @@ const (
 //
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(self.draft) || !self.draft || self.mode == 'Preview'",message="draft is only for a Preview"
+// +kubebuilder:validation:XValidation:rule="!has(self.contractDraft) || self.mode == 'Preview'",message="contractDraft is only for a Preview"
 type InvoiceRequestSpec struct {
 	// BillingAccountRef references the BillingAccount to invoice, in the
 	// same namespace.
@@ -86,7 +87,44 @@ type InvoiceRequestSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	Draft bool `json:"draft,omitempty"`
+
+	// ContractDraft, on a Preview, previews the first invoice of a contract
+	// that isn't published yet, instead of what the account is billed
+	// for now. Its Offer must be a contract Offer for this billing account,
+	// labelled with ContractBillingAccountLabel and
+	// ContractOrganizationLabel, usually still at launch stage Draft.
+	//
+	// +kubebuilder:validation:Optional
+	ContractDraft *InvoiceRequestContractDraft `json:"contractDraft,omitempty"`
 }
+
+// InvoiceRequestContractDraft is a contract to preview before it's
+// published: its Offer, and the terms its BillingEntitlement would get.
+type InvoiceRequestContractDraft struct {
+	// OfferRef names the contract's Offer.
+	//
+	// +kubebuilder:validation:Required
+	OfferRef OfferReference `json:"offerRef"`
+
+	// StartsAt is when the contract would start, at midnight UTC, as
+	// BillingContract.StartsAt.
+	//
+	// +kubebuilder:validation:Required
+	StartsAt metav1.Time `json:"startsAt"`
+
+	// BillingDay is the day of the month it would bill on, as
+	// BillingContract.BillingDay. Defaults to StartDate.
+	//
+	// +kubebuilder:validation:Optional
+	BillingDay ContractBillingDay `json:"billingDay,omitempty"`
+}
+
+// Labels on a contract's Offer, which the staff portal sets: the billing
+// account it's for, and that account's organization.
+const (
+	ContractBillingAccountLabel = "billing.miloapis.com/contract-billing-account"
+	ContractOrganizationLabel   = "billing.miloapis.com/contract-organization"
+)
 
 // InvoiceRequestLine is one charge on a requested invoice.
 type InvoiceRequestLine struct {

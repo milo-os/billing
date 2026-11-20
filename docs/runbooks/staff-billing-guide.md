@@ -395,8 +395,25 @@ automatically when the contract starts. What you can do is preview it
 beforehand, and fix the contract if it's wrong.
 
 On the Contract card, click **Preview first invoice**. The billing provider
-works out the invoice from the contract and shows each line and the **Total
-before tax**. Nothing is created and nothing is sent to the customer.
+works out the invoice from the contract and shows each line, with its
+quantity, unit price and any discount. Nothing is sent to the customer.
+
+For a customer billed in USD who has a Stripe customer, Stripe works
+the preview out, tax included: the dialog says "Worked out by Stripe, tax
+included" and shows **Total before tax**, **Tax** and **Total**. If the
+customer owes something from an earlier invoice too small to charge, or has
+credit, the dialog shows it and the **Amount due**. Otherwise it says "Tax
+isn't included" and why, and shows the total before tax.
+
+To see the invoice exactly as Stripe would make it, click **Open as a Stripe
+draft**, then **Open the Stripe draft**. It opens a draft invoice in the
+Stripe dashboard (you need Stripe access). The draft is never finalized or
+sent, and it's deleted after a day. Don't send, charge or finalize it there.
+
+You can preview a contract before publishing it too. Save it as a draft
+with a start date, then click **Preview first invoice** on the **Draft
+contract** card. The invoice is worked out as if the draft were published,
+Stripe draft included. Nothing is published or billed.
 
 The preview covers the contract's fees only: the one-time fees and the
 first period of each fee billed in advance. Fees billed in arrears aren't on

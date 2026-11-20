@@ -4,6 +4,7 @@ package controller
 
 import (
 	"context"
+	"time"
 
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
@@ -14,7 +15,8 @@ import (
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
-// The InvoiceRequest CRD's own rules on drafts, checked by the API server.
+// The InvoiceRequest CRD's own rules on drafts and contract drafts,
+// checked by the API server.
 var _ = Describe("InvoiceRequest draft", func() {
 	ctx := context.Background()
 	ns := "invoicerequest-crd"
@@ -45,5 +47,25 @@ var _ = Describe("InvoiceRequest draft", func() {
 		err := k8sClient.Create(ctx, request("issue-draft", billingv1alpha1.InvoiceRequestModeIssue, true))
 		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "got %v", err)
 		Expect(err.Error()).To(ContainSubstring("draft is only for a Preview"))
+	})
+
+	contractDraft := func(name string, mode billingv1alpha1.InvoiceRequestMode) *billingv1alpha1.InvoiceRequest {
+		ir := request(name, mode, false)
+		ir.Spec.ContractDraft = &billingv1alpha1.InvoiceRequestContractDraft{
+			OfferRef:   billingv1alpha1.OfferReference{Name: "contract-acme-draft"},
+			StartsAt:   metav1.Date(2026, 12, 1, 0, 0, 0, 0, time.UTC),
+			BillingDay: billingv1alpha1.ContractBillingDayInvoiceDay,
+		}
+		return ir
+	}
+
+	It("accepts a contract draft with a Preview", func() {
+		Expect(k8sClient.Create(ctx, contractDraft("preview-contract-draft", billingv1alpha1.InvoiceRequestModePreview))).To(Succeed())
+	})
+
+	It("refuses a contract draft with an Issue", func() {
+		err := k8sClient.Create(ctx, contractDraft("issue-contract-draft", billingv1alpha1.InvoiceRequestModeIssue))
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "got %v", err)
+		Expect(err.Error()).To(ContainSubstring("contractDraft is only for a Preview"))
 	})
 })

@@ -85,6 +85,43 @@ spec:
                 required:
                 - name
                 type: object
+              contractDraft:
+                description: |-
+                  ContractDraft, on a Preview, previews the first invoice of a contract
+                  that isn't published yet, instead of what the account is billed
+                  for now. Its Offer must be a contract Offer for this billing account,
+                  labelled with ContractBillingAccountLabel and
+                  ContractOrganizationLabel, usually still at launch stage Draft.
+                properties:
+                  billingDay:
+                    description: |-
+                      BillingDay is the day of the month it would bill on, as
+                      BillingContract.BillingDay. Defaults to StartDate.
+                    enum:
+                    - StartDate
+                    - InvoiceDay
+                    type: string
+                  offerRef:
+                    description: OfferRef names the contract's Offer.
+                    properties:
+                      name:
+                        description: Name of the Offer.
+                        maxLength: 253
+                        minLength: 1
+                        type: string
+                    required:
+                    - name
+                    type: object
+                  startsAt:
+                    description: |-
+                      StartsAt is when the contract would start, at midnight UTC, as
+                      BillingContract.StartsAt.
+                    format: date-time
+                    type: string
+                required:
+                - offerRef
+                - startsAt
+                type: object
               draft:
                 description: |-
                   Draft, on a Preview, also leaves the invoice as a draft in the
@@ -110,6 +147,8 @@ spec:
               rule: self == oldSelf
             - message: draft is only for a Preview
               rule: '!has(self.draft) || !self.draft || self.mode == ''Preview'''
+            - message: contractDraft is only for a Preview
+              rule: '!has(self.contractDraft) || self.mode == ''Preview'''
           status:
             description: |-
               InvoiceRequestStatus defines the observed state of an InvoiceRequest.

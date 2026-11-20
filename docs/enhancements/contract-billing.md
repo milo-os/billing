@@ -649,6 +649,14 @@ fee. Usage isn't covered.
   carries onto the invoice (what the customer already owes, such as an
   earlier invoice too small to charge, or a credit as a negative), and the
   `amountDue` with it applied.
+- **A contract that isn't published yet.** A Preview with `spec.contractDraft`
+  previews the first invoice of a contract still being written: its Offer
+  (usually at launch stage Draft, so it has no `servicePricings` snapshot
+  yet and the provider reads its `servicePricingRefs`), and the `startsAt`
+  and `billingDay` its entitlement would get. The Offer must carry the
+  `contract-billing-account` and `contract-organization` labels for the
+  request's account, so a request can't preview another account's contract.
+  Nothing is published or billed.
 - **Issue** asks the provider to invoice the fixed charges now and send them,
   with `status.invoiceRef` naming the resulting `Invoice`. It's only useful
   with a provider that holds fixed charges until the end of the billing cycle.
@@ -1117,3 +1125,5 @@ list price.
   system (`spec.draft`).
 - 2026-11-19: An `InvoiceRequest` can report the account's starting balance
   and the amount due.
+- 2026-11-20: An `InvoiceRequest` Preview can preview a contract that isn't
+  published yet (`spec.contractDraft`).

@@ -104,6 +104,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.InvoicePeriodApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequest"):
 		return &apiv1alpha1.InvoiceRequestApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestContractDraft"):
+		return &apiv1alpha1.InvoiceRequestContractDraftApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestDraft"):
 		return &apiv1alpha1.InvoiceRequestDraftApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestInvoiceRef"):

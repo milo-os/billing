@@ -25,6 +25,12 @@ type InvoiceRequestSpecApplyConfiguration struct {
 	// or sent, and the provider deletes it after a day. status.draft links
 	// to it. Providers that can't make one complete the Preview without it.
 	Draft *bool `json:"draft,omitempty"`
+	// ContractDraft, on a Preview, previews the first invoice of a contract
+	// that isn't published yet, instead of what the account is billed
+	// for now. Its Offer must be a contract Offer for this billing account,
+	// labelled with ContractBillingAccountLabel and
+	// ContractOrganizationLabel, usually still at launch stage Draft.
+	ContractDraft *InvoiceRequestContractDraftApplyConfiguration `json:"contractDraft,omitempty"`
 }
 
 // InvoiceRequestSpecApplyConfiguration constructs a declarative configuration of the InvoiceRequestSpec type for use with
@@ -54,5 +60,13 @@ func (b *InvoiceRequestSpecApplyConfiguration) WithMode(value apiv1alpha1.Invoic
 // If called multiple times, the Draft field is set to the value of the last call.
 func (b *InvoiceRequestSpecApplyConfiguration) WithDraft(value bool) *InvoiceRequestSpecApplyConfiguration {
 	b.Draft = &value
+	return b
+}
+
+// WithContractDraft sets the ContractDraft field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ContractDraft field is set to the value of the last call.
+func (b *InvoiceRequestSpecApplyConfiguration) WithContractDraft(value *InvoiceRequestContractDraftApplyConfiguration) *InvoiceRequestSpecApplyConfiguration {
+	b.ContractDraft = value
 	return b
 }
