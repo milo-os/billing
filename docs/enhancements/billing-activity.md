@@ -49,10 +49,11 @@ Tracking issue: [milo-os/billing#207](https://github.com/milo-os/billing/issues/
 
 | Resource | Reasons | Recorded by |
 | --- | --- | --- |
-| `Invoice` | `InvoiceIssued`, `InvoicePaymentSucceeded`, `InvoicePaymentFailed`, `InvoicePaymentActionRequired`, `InvoicePartiallyPaid`, `InvoicePastDue`, `InvoiceVoided`, `InvoiceCurrencyMismatch` | the invoicing provider (openmeter-provider) |
+| `Invoice` | `InvoiceIssued`, `InvoicePaymentSucceeded`, `InvoicePaymentFailed`, `InvoicePaymentActionRequired`, `InvoicePartiallyPaid`, `InvoicePastDue`, `InvoiceVoided`, `InvoiceMarkedUncollectible`, `InvoiceDueDateChanged`, `InvoiceCurrencyMismatch` | the invoicing provider (openmeter-provider) |
 | `PaymentMethod` | `PaymentMethodAttached`, `PaymentMethodFailed` | the payment method provider (stripe-provider) |
 | `PaymentMethod` | `PaymentMethodExpiringSoon`, `PaymentMethodExpired` | billing, from the card expiry on status |
 | `BillingAccount` | `InvoicingPastDue`, `InvoicingCurrent` | billing, when `InvoicingReady` flips |
+| `BillingAccount` | `InvoiceSent` | the payment processor's provider (stripe-provider), from Stripe's `invoice.sent` webhook; see [Stripe Invoice Activity](stripe-invoice-activity.md) |
 | `BillingAccount` | `DefaultPaymentMethodChanged` | billing, when it makes an account's only card the default |
 | `BillingArrangement` | `PaymentTermsEnded` | billing, when terms reach `endsAt` on their own |
 
@@ -78,11 +79,12 @@ annotations). Its detail goes in annotations with the
 | --- | --- |
 | `billing-account` | BillingAccount name |
 | `invoice` | Invoice name |
+| `invoice-number` | the number printed on the invoice |
 | `period-start` | invoice period start, RFC 3339 UTC |
 | `currency` | ISO 4217 code |
 | `amount` | total for issued, paid and voided invoices; the amount attempted for payments |
 | `amount-paid`, `amount-due` | decimal strings, as on Invoice status |
-| `due-date`, `next-attempt` | RFC 3339 UTC |
+| `due-date`, `previous-due-date`, `next-attempt` | RFC 3339 UTC |
 | `decline-reason` | a `DeclineReason` |
 | `payment-method` | PaymentMethod name |
 | `card-brand`, `card-last4` | as on `PaymentMethodCardDetails` |
@@ -111,7 +113,10 @@ the attempt never reached a decision.
 | `InvoicePaymentActionRequired` | the charge needs 3-D Secure / SCA | Payment of USD 482.19 for the October 2026 invoice for billing account acme needs the card holder to confirm it |
 | `InvoicePartiallyPaid` | `amountPaid` > 0 and `amountDue` > 0 | USD 200.00 was received for the October 2026 invoice for billing account acme; USD 282.19 is still due |
 | `InvoicePastDue` | moves to `PastDue` | The October 2026 invoice for billing account acme is past due: USD 482.19 outstanding |
-| `InvoiceVoided` | moves to `Void` | The October 2026 invoice for billing account acme was voided |
+| `InvoiceVoided` | moves to `Void` from a voided invoice | The October 2026 invoice for billing account acme was voided |
+| `InvoiceMarkedUncollectible` | moves to `Void` from an uncollectible invoice | The October 2026 invoice (ACME-0042) for billing account acme was marked uncollectible: USD 482.19 unpaid |
+| `InvoiceDueDateChanged` | the due date changes while `Open` or `PastDue` | The due date of the October 2026 invoice (ACME-0042) for billing account acme moved from 30 November 2026 to 15 December 2026 |
+| `InvoiceSent` | each time an invoice is emailed, re-sends included | Invoice ACME-0042 for billing account acme was emailed: USD 482.19, due 30 November 2026 |
 | `InvoiceCurrencyMismatch` | `Ready=False`, reason `CurrencyMismatch` | (staff only) The October 2026 invoice for billing account acme is in EUR, which does not match the billing account's currency |
 | `PaymentMethodAttached` | the card is confirmed and chargeable | Visa ending 4242 was added to billing account acme and is ready to use |
 | `PaymentMethodFailed` | card setup declined or failed | Payment method card-1 could not be added to billing account acme: the card was declined (insufficient funds) |
