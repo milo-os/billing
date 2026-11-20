@@ -42,6 +42,11 @@ type BillingAccountStatusApplyConfiguration struct {
 	// Cleared when the account has no contract, or its Offer isn't
 	// published.
 	Contract *BillingAccountContractApplyConfiguration `json:"contract,omitempty"`
+	// Prices lists every service pricing in the account's Offer, copied from the
+	// Offer's published snapshot so customers can see what they're billed at
+	// without reading the Offer: usage rates and fixed fees, each before its
+	// discount, which is also given. Cleared when the account has no published Offer.
+	Prices []BillingAccountPriceApplyConfiguration `json:"prices,omitempty"`
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
@@ -115,6 +120,19 @@ func (b *BillingAccountStatusApplyConfiguration) WithDiscounts(values ...*Billin
 // If called multiple times, the Contract field is set to the value of the last call.
 func (b *BillingAccountStatusApplyConfiguration) WithContract(value *BillingAccountContractApplyConfiguration) *BillingAccountStatusApplyConfiguration {
 	b.Contract = value
+	return b
+}
+
+// WithPrices adds the given value to the Prices field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Prices field.
+func (b *BillingAccountStatusApplyConfiguration) WithPrices(values ...*BillingAccountPriceApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithPrices")
+		}
+		b.Prices = append(b.Prices, *values[i])
+	}
 	return b
 }
 

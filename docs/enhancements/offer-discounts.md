@@ -198,6 +198,9 @@ status:
   Offer has no snapshot yet.
 - It doesn't name the Offer or say whether a discount was set for the whole
   Offer or for one service.
+- `status.prices` lists the same pricings with their rates or amounts, each
+  before its discount, and gives a discount above `0` as `discountPercentage`.
+  It's set whenever the account has a published Offer, discounted or not.
 
 ## Design Details
 
