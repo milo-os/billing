@@ -456,6 +456,16 @@ type BillingAccountContract struct {
 	// +kubebuilder:validation:Maximum=31
 	BillingDayOfMonth int32 `json:"billingDayOfMonth"`
 
+	// BillingDay is how the contract chose its billing day, from its
+	// contract.billingDay: StartDate bills on the day it starts, so every
+	// period is whole; InvoiceDay bills on the account's invoice day, so the
+	// first period runs from the start to the next billing date and is
+	// prorated, and quarterly and annual fees bill in January, April, July
+	// and October, and in January.
+	//
+	// +kubebuilder:validation:Optional
+	BillingDay ContractBillingDay `json:"billingDay,omitempty"`
+
 	// Fees are the contract's fixed fees, before discounts: its one-time
 	// fees, such as a setup fee, and its recurring ones, such as a monthly
 	// fee. Discounts on them are listed in status.discounts. A contract
