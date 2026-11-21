@@ -188,7 +188,9 @@ account without a contract does:
   2025. Their first period runs to the next of those.
 - A fee with `periods` runs for that many whole periods after the prorated
   one, so it ends on a billing date and nothing is charged after its end.
-- `status.contract.billingDayOfMonth` is the invoice day.
+- `status.contract.billingDayOfMonth` is the invoice day, and
+  `status.contract.billingDay` is `InvoiceDay`, so the portal can show the
+  prorated first period and when quarterly and annual fees bill.
 
 Like `startsAt`, `billingDay` can't be changed once set.
 
@@ -706,6 +708,7 @@ status:
   contract:
     startsAt: "2026-04-18T00:00:00Z"
     billingDayOfMonth: 18
+    billingDay: StartDate
     fees:
       - name: acme-setup
         displayName: Setup fee
@@ -1167,3 +1170,5 @@ list price.
 - 2026-11-20: Every pricing in an account's Offer, with its usage rates or fee
   amount and its discount, is published on `BillingAccount.status.prices` for
   customers.
+- 2026-11-21: `status.contract.billingDay` says whether the contract bills on
+  its start day or the account's invoice day.

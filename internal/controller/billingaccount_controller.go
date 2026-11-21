@@ -495,9 +495,11 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 	contract := &billingv1alpha1.BillingAccountContract{
 		StartsAt:          startsAt,
 		BillingDayOfMonth: int32(startsAt.UTC().Day()),
+		BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
 	}
 	if validation.ContractBillsOnInvoiceDay(terms) {
 		contract.BillingDayOfMonth = invoiceDay
+		contract.BillingDay = billingv1alpha1.ContractBillingDayInvoiceDay
 	}
 	for _, sp := range offer.Spec.ServicePricings {
 		switch sp.Spec.ChargeType {

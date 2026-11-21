@@ -103,6 +103,7 @@ func TestAccountContract(t *testing.T) {
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(startsAt),
 				BillingDayOfMonth: 18,
+				BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "acme-setup", DisplayName: "Setup fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD"},
 					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "2400.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInAdvance},
@@ -119,6 +120,7 @@ func TestAccountContract(t *testing.T) {
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(time.Date(2026, time.March, 31, 0, 0, 0, 0, time.UTC)),
 				BillingDayOfMonth: 31,
+				BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "acme-monthly", DisplayName: "Monthly fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "900", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInAdvance},
 				},
@@ -133,6 +135,7 @@ func TestAccountContract(t *testing.T) {
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(startsAt),
 				BillingDayOfMonth: 18,
+				BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "cross-connect-300", DisplayName: "Cross connect", SKU: "DC-XC-01", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "300.00", Quantity: 4, PricingUnit: "port", Currency: "USD", Interval: billingv1alpha1.ChargeIntervalMonthly, BillingTiming: billingv1alpha1.BillingTimingInArrears},
 				},
@@ -145,6 +148,7 @@ func TestAccountContract(t *testing.T) {
 			want: &billingv1alpha1.BillingAccountContract{
 				StartsAt:          metav1.NewTime(startsAt),
 				BillingDayOfMonth: 18,
+				BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "acme-setup", DisplayName: "Setup fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD"},
 					{Name: "support-annual", DisplayName: "Premium support", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "1200.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalAnnual, BillingTiming: billingv1alpha1.BillingTimingInAdvance, Periods: 3, EndsAt: &endsAt},
@@ -199,6 +203,9 @@ func TestAccountContract_BilledOnInvoiceDay(t *testing.T) {
 	got := accountContract(be, publishedOffer("acme-term", billingv1alpha1.OfferLaunchStageGA, monthly, annual), 5)
 	if got == nil || got.BillingDayOfMonth != 5 {
 		t.Fatalf("billing day = %+v, want the invoice day, 5", got)
+	}
+	if got.BillingDay != billingv1alpha1.ContractBillingDayInvoiceDay {
+		t.Errorf("billingDay = %q, want InvoiceDay so customers can tell the first period is prorated", got.BillingDay)
 	}
 	for i, want := range []time.Time{
 		time.Date(2027, time.May, 5, 0, 0, 0, 0, time.UTC),     // 18 April to 5 May, then 12 months
