@@ -23,4 +23,5 @@ resources:
   - usagequery.yaml
   - billingaccountbalance.yaml
   - creditgrant.yaml
+  - charge.yaml
 

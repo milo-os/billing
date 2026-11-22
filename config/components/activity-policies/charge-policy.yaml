@@ -1,0 +1,50 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for Charge resources.
+# A Charge is a one-off charge staff add to a billing account's next
+# invoice, or invoice straight away. Adding and removing one are staff
+# decisions we need a record of.
+#
+# Design principles:
+# - Name the billing account (linked), and say what was charged as the
+#   customer will read it: the description, quantity × unit price, any
+#   discount, and the service period's dates.
+# - Never include spec.note. It's for staff, and the timeline can be read
+#   more widely than the charge itself.
+# - Never include the SKU (it isn't on the spec, and it's internal).
+# - The spec is immutable, so there's nothing to say about updates; the
+#   provider's status writes are system actors and never shown. When a
+#   charge is invoiced, the invoice's own activity says so.
+# - Dates render as "15 December 2026". The CEL environment has no string
+#   extensions, so they're built from timestamp getters (UTC).
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-charge
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: Charge
+
+  auditRules:
+    # "Sam added a charge to billing account acme: Cross-connect install, 2 × 300.00, less 10%, for 15 December 2026"
+    # A period of more than one day reads "for 1 December 2026 to 31 December 2026".
+    # Invoice now adds ", invoiced now".
+    - name: create
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.description) && has(audit.responseObject.spec.quantity) && has(audit.responseObject.spec.unitAmount) && has(audit.responseObject.spec.servicePeriod) && has(audit.responseObject.spec.servicePeriod.start) && has(audit.responseObject.spec.servicePeriod.end) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} added a charge to billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}: {{ audit.responseObject.spec.description }}, {{ audit.responseObject.spec.quantity }} × {{ audit.responseObject.spec.unitAmount }}{{ has(audit.responseObject.spec.discountPercent) ? ', less ' + audit.responseObject.spec.discountPercent + '%' : '' }}, for {{ string(timestamp(audit.responseObject.spec.servicePeriod.start + 'T00:00:00Z').getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.servicePeriod.start + 'T00:00:00Z').getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.servicePeriod.start + 'T00:00:00Z').getFullYear()) }}{{ audit.responseObject.spec.servicePeriod.end != audit.responseObject.spec.servicePeriod.start ? ' to ' + string(timestamp(audit.responseObject.spec.servicePeriod.end + 'T00:00:00Z').getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(audit.responseObject.spec.servicePeriod.end + 'T00:00:00Z').getMonth()] + ' ' + string(timestamp(audit.responseObject.spec.servicePeriod.end + 'T00:00:00Z').getFullYear()) : '' }}{{ has(audit.responseObject.spec.invoice) && audit.responseObject.spec.invoice == 'Now' ? ', invoiced now' : '' }}"
+
+    - name: create-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} added a charge ({{ audit.objectRef.name }})"
+
+    # "Sam removed the charge Cross-connect install from billing account acme"
+    - name: delete-charge
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.objectRef.namespace) && has(audit.responseObject.spec) && has(audit.responseObject.spec.billingAccountRef) && has(audit.responseObject.spec.description) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} removed the charge {{ audit.responseObject.spec.description }} from billing account {{ link(audit.responseObject.spec.billingAccountRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': audit.objectRef.namespace, 'name': audit.responseObject.spec.billingAccountRef.name}) }}"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} removed the charge {{ audit.objectRef.name }}"

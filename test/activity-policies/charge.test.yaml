@@ -1,0 +1,130 @@
+# Charge: adding and removing charges staff put on an account's invoice.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: add a catalog charge for one day, with a discount
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: cross-connect-install-7k2p9
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/charges
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: cross-connect-install-7k2p9
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        servicePricingRef:
+          name: cross-connect-install-v1
+        description: Cross-connect install
+        quantity: "2"
+        unitAmount: "300.00"
+        discountPercent: "10"
+        servicePeriod:
+          start: "2026-12-15"
+          end: "2026-12-15"
+        note: Installed for the new cage
+        invoice: NextInvoice
+  exp_summary: "alice@example.com added a charge to billing account acme: Cross-connect install, 2 × 300.00, less 10%, for 15 December 2026"
+- name: add a custom charge for a month, invoiced now
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: remote-hands-x1
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/charges
+    responseStatus:
+      code: 201
+    responseObject:
+      spec:
+        billingAccountRef:
+          name: acme
+        description: Remote hands, December
+        quantity: "3.5"
+        unitAmount: "150.00"
+        servicePeriod:
+          start: "2026-12-01"
+          end: "2026-12-31"
+        invoice: Now
+  exp_summary: "alice@example.com added a charge to billing account acme: Remote hands, December, 3.5 × 150.00, for 1 December 2026 to 31 December 2026, invoiced now"
+- name: add a charge the webhook couldn't default
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: odd-charge
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/charges
+    responseStatus:
+      code: 201
+    responseObject:
+      spec:
+        billingAccountRef:
+          name: acme
+  exp_summary: alice@example.com added a charge (odd-charge)
+- name: remove a charge
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: cross-connect-install-7k2p9
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/charges/cross-connect-install-7k2p9
+    responseStatus:
+      code: 200
+    responseObject:
+      spec:
+        billingAccountRef:
+          name: acme
+        description: Cross-connect install
+  exp_summary: alice@example.com removed the charge Cross-connect install from billing account acme
+- name: remove a charge whose spec isn't in the response
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: cross-connect-install-7k2p9
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/charges/cross-connect-install-7k2p9
+    responseStatus:
+      code: 200
+    responseObject:
+      kind: Status
+      apiVersion: v1
+      status: Success
+  exp_summary: alice@example.com removed the charge cross-connect-install-7k2p9
+- name: the provider's status writes aren't shown
+  audit:
+    verb: patch
+    user:
+      username: system:serviceaccount:openmeter-system:openmeter-provider
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: charges
+      name: cross-connect-install-7k2p9
+      namespace: organization-acme
+      subresource: status
+    responseStatus:
+      code: 200
+  exp_no_match: true

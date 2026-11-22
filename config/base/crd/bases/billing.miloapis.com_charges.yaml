@@ -1,0 +1,329 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: charges.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: Charge
+    listKind: ChargeList
+    plural: charges
+    singular: charge
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.description
+      name: Description
+      type: string
+    - jsonPath: .status.amountDue
+      name: Amount
+      type: string
+    - jsonPath: .spec.servicePeriod.start
+      name: From
+      type: string
+    - jsonPath: .spec.servicePeriod.end
+      name: To
+      type: string
+    - jsonPath: .status.phase
+      name: Phase
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          Charge is a one-off charge staff add to a billing account: a catalog
+          item or a custom one, with a quantity, a service period, an optional
+          discount and a staff note. It goes on the account's next invoice, or on
+          an invoice of its own. Only staff can read charges, because of the note.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ChargeSpec is one charge staff add to a billing account: a catalog item
+              or a custom one, with a quantity, a service period and a note.
+
+              The spec is immutable. To change a charge, remove it and add another.
+            properties:
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef names the BillingAccount, in this namespace, the
+                  charge is billed to.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+              currency:
+                default: USD
+                description: Currency is the ISO 4217 currency of the amounts. USD
+                  only.
+                pattern: ^USD$
+                type: string
+              description:
+                description: |-
+                  Description is what the invoice calls the charge. Defaulted from the
+                  pricing's displayName. It's printed on the invoice, so it never
+                  carries the SKU.
+                maxLength: 256
+                minLength: 1
+                type: string
+              discountPercent:
+                description: |-
+                  DiscountPercent is a percentage off this charge, more than 0 and up
+                  to 100, with up to two decimal places (e.g. "10"). The discount must
+                  come to whole cents.
+                pattern: ^(100(\.0{1,2})?|[1-9]?[0-9](\.[0-9]{1,2})?)$
+                type: string
+              invoice:
+                default: NextInvoice
+                description: |-
+                  Invoice is when the charge is invoiced: NextInvoice, with the rest
+                  of the account's current billing period, or Now, on an invoice of
+                  its own.
+                enum:
+                - NextInvoice
+                - Now
+                type: string
+              note:
+                description: |-
+                  Note is for staff and finance, kept on the invoice line's metadata.
+                  It's never printed on the invoice or shown to the customer.
+                maxLength: 500
+                type: string
+              quantity:
+                description: |-
+                  Quantity is how many are charged: a positive decimal with up to two
+                  decimal places (e.g. "2", "3.5").
+                pattern: ^([1-9][0-9]{0,8}(\.[0-9]{1,2})?|0\.(0[1-9]|[1-9][0-9]?))$
+                type: string
+              servicePeriod:
+                description: |-
+                  ServicePeriod is the dates the charge is for: the invoice line's
+                  service period. Defaulted to the account's current billing period.
+                properties:
+                  end:
+                    description: End is the last day, as YYYY-MM-DD.
+                    pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                    type: string
+                  start:
+                    description: Start is the first day, as YYYY-MM-DD.
+                    pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                    type: string
+                required:
+                - end
+                - start
+                type: object
+                x-kubernetes-validations:
+                - message: the service period can't end before it starts
+                  rule: self.end >= self.start
+              servicePricingRef:
+                description: |-
+                  ServicePricingRef names the catalog item: a OneTime or Recurring
+                  ServicePricing. Its displayName, amount and tax are the defaults for
+                  description, unitAmount and tax, and the invoice line counts as its
+                  product in reports, at whatever price. Omitted, this is a custom
+                  item, which uses the custom charge product.
+                properties:
+                  name:
+                    description: Name of the ServicePricing.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                  namespace:
+                    default: milo-system
+                    description: Namespace of the ServicePricing.
+                    type: string
+                required:
+                - name
+                type: object
+              tax:
+                description: |-
+                  Tax is how the charge is taxed. Defaulted from the pricing's tax.
+                  Omitted on a custom charge, the account's default tax code applies.
+                minProperties: 1
+                properties:
+                  code:
+                    description: |-
+                      Code is the tax engine's code for what this price sells, which sets
+                      the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+                      codes (e.g. "txcd_10103001" for software as a service). Finance
+                      chooses it. Omitted, the billing profile's default code applies.
+                    maxLength: 64
+                    pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]*$
+                    type: string
+                  taxable:
+                    description: |-
+                      Taxable is false for a charge that's never taxed, wherever the
+                      customer is. Omitted, the charge is taxable.
+                    type: boolean
+                type: object
+                x-kubernetes-validations:
+                - message: code can't be set on a pricing that isn't taxable
+                  rule: '!has(self.taxable) || self.taxable || !has(self.code)'
+              unitAmount:
+                description: |-
+                  UnitAmount is the price of one, before any discount: a decimal with
+                  up to two decimal places, zero or more (e.g. "300.00"). Defaulted
+                  from the pricing's amount; staff may change it.
+                pattern: ^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$
+                type: string
+            required:
+            - billingAccountRef
+            - quantity
+            type: object
+            x-kubernetes-validations:
+            - message: a charge can't be changed; remove it and add another
+              rule: self == oldSelf
+            - message: a custom charge (no servicePricingRef) needs a description
+                and a unitAmount
+              rule: has(self.servicePricingRef) || (has(self.description) && has(self.unitAmount))
+            - message: a charge that isn't taxable needs a note saying why
+              rule: '!has(self.tax) || !has(self.tax.taxable) || self.tax.taxable
+                || (has(self.note) && size(self.note) > 0)'
+          status:
+            description: |-
+              ChargeStatus is the observed state of a Charge. Amounts are decimal
+              strings in the currency.
+            properties:
+              amount:
+                description: Amount is quantity × unitAmount, before any discount.
+                type: string
+              amountDue:
+                description: |-
+                  AmountDue is the amount after any discount: what's billed before
+                  tax.
+                type: string
+              conditions:
+                description: |-
+                  Conditions are the latest observations of the charge. See
+                  ChargeConditionReady.
+                items:
+                  description: Condition contains details for one aspect of the current
+                    state of this API Resource.
+                  properties:
+                    lastTransitionTime:
+                      description: |-
+                        lastTransitionTime is the last time the condition transitioned from one status to another.
+                        This should be when the underlying condition changed.  If that is not known, then using the time when the API field changed is acceptable.
+                      format: date-time
+                      type: string
+                    message:
+                      description: |-
+                        message is a human readable message indicating details about the transition.
+                        This may be an empty string.
+                      maxLength: 32768
+                      type: string
+                    observedGeneration:
+                      description: |-
+                        observedGeneration represents the .metadata.generation that the condition was set based upon.
+                        For instance, if .metadata.generation is currently 12, but the .status.conditions[x].observedGeneration is 9, the condition is out of date
+                        with respect to the current state of the instance.
+                      format: int64
+                      minimum: 0
+                      type: integer
+                    reason:
+                      description: |-
+                        reason contains a programmatic identifier indicating the reason for the condition's last transition.
+                        Producers of specific condition types may define expected values and meanings for this field,
+                        and whether the values are considered a guaranteed API.
+                        The value should be a CamelCase string.
+                        This field may not be empty.
+                      maxLength: 1024
+                      minLength: 1
+                      pattern: ^[A-Za-z]([A-Za-z0-9_,:]*[A-Za-z0-9_])?$
+                      type: string
+                    status:
+                      description: status of the condition, one of True, False, Unknown.
+                      enum:
+                      - "True"
+                      - "False"
+                      - Unknown
+                      type: string
+                    type:
+                      description: type of condition in CamelCase or in foo.example.com/CamelCase.
+                      maxLength: 316
+                      pattern: ^([a-z0-9]([-a-z0-9]*[a-z0-9])?(\.[a-z0-9]([-a-z0-9]*[a-z0-9])?)*/)?(([A-Za-z0-9][-A-Za-z0-9_.]*)?[A-Za-z0-9])$
+                      type: string
+                  required:
+                  - lastTransitionTime
+                  - message
+                  - reason
+                  - status
+                  - type
+                  type: object
+                type: array
+                x-kubernetes-list-map-keys:
+                - type
+                x-kubernetes-list-type: map
+              invoiceAt:
+                description: InvoiceAt is when the billing provider invoices the charge.
+                format: date-time
+                type: string
+              invoiceRef:
+                description: |-
+                  InvoiceRef names the Invoice the charge was billed on, once it's
+                  issued.
+                properties:
+                  name:
+                    description: Name of the Invoice, in the charge's namespace.
+                    type: string
+                required:
+                - name
+                type: object
+              listUnitAmount:
+                description: |-
+                  ListUnitAmount is the pricing's own amount, when the charge's
+                  unitAmount differs from it.
+                type: string
+              observedGeneration:
+                description: |-
+                  ObservedGeneration is the generation billing last worked out the
+                  amounts for.
+                format: int64
+                type: integer
+              phase:
+                description: 'Phase is where the charge is: Pending, Scheduled, Invoiced
+                  or Failed.'
+                enum:
+                - Pending
+                - Scheduled
+                - Invoiced
+                - Failed
+                type: string
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources:
+      status: {}
