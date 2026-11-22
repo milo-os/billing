@@ -65,6 +65,14 @@ const BillingAccountConditionPaymentReady = "PaymentReady"
 // the most recently created Invoice regardless of phase.
 const BillingAccountConditionInvoicingReady = "InvoicingReady"
 
+// BillingAccountConditionInvoiceWriterReady is set by the invoicing
+// provider and is True once the account's invoices are written to Stripe
+// by our own invoice writer, line by line, rather than by the provider's
+// built-in Stripe integration. Charges staff add are only accepted on
+// accounts where it's True, so none waits for the writer and then bills
+// late, and none reaches Stripe without its product, quantity and note.
+const BillingAccountConditionInvoiceWriterReady = "InvoiceWriterReady"
+
 // BillingAccountSpec defines the desired state of a BillingAccount.
 type BillingAccountSpec struct {
 	// CurrencyCode is the ISO 4217 currency code for this billing account.

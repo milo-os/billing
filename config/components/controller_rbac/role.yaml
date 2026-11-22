@@ -61,6 +61,7 @@ rules:
   - billingarrangementapplications/status
   - billingarrangements/status
   - billingentitlements/status
+  - charges/status
   - creditgrants/status
   - meterdefinitions/status
   - monitoredresourcetypes/status
@@ -76,6 +77,7 @@ rules:
   - billingarrangementapplications
   - billingarrangementdeclines
   - billingarrangements
+  - charges
   - invoices
   - paymentmethodclasses
   - servicepricings

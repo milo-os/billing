@@ -86,6 +86,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CardBillingAddressApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CatalogStatus"):
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("Charge"):
+		return &apiv1alpha1.ChargeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeInvoiceRef"):
+		return &apiv1alpha1.ChargeInvoiceRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeServicePricingRef"):
+		return &apiv1alpha1.ChargeServicePricingRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeSpec"):
+		return &apiv1alpha1.ChargeSpecApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeStatus"):
+		return &apiv1alpha1.ChargeStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrant"):
 		return &apiv1alpha1.CreditGrantApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrantSpec"):
@@ -186,6 +196,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.PricingTierBandApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ProjectRef"):
 		return &apiv1alpha1.ProjectRefApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ServicePeriod"):
+		return &apiv1alpha1.ServicePeriodApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricing"):
 		return &apiv1alpha1.ServicePricingApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ServicePricingRef"):

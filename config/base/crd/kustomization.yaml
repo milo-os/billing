@@ -17,6 +17,7 @@ resources:
 - bases/billing.miloapis.com_invoicerequests.yaml
 - bases/billing.miloapis.com_servicepricings.yaml
 - bases/billing.miloapis.com_creditgrants.yaml
+- bases/billing.miloapis.com_charges.yaml
 # +kubebuilder:scaffold:crdkustomizeresource
 
 patches:

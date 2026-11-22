@@ -214,6 +214,10 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				setupLog.Info("CreditGrants feature gate disabled; skipping SignupCredit controller")
 			}
 
+			if err = (&controller.ChargeReconciler{}).SetupWithManager(mgr); err != nil {
+				return fmt.Errorf("creating Charge controller: %w", err)
+			}
+
 			if err = controller.AddIndexers(ctx, mgr); err != nil {
 				return fmt.Errorf("adding indexers: %w", err)
 			}
@@ -351,6 +355,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				}
 				if err = billingwebhooks.SetupCreditGrantWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating CreditGrant webhook: %w", err)
+				}
+				if err = billingwebhooks.SetupChargeWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating Charge webhook: %w", err)
 				}
 			}
 
