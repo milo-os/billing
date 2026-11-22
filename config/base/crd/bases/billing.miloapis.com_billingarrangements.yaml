@@ -124,9 +124,10 @@ spec:
                     type: string
                   creditLimit:
                     description: |-
-                      CreditLimit is the maximum spend per billing cycle, as a decimal
-                      string in the billing account's currency (e.g. "10000"). Staff are
-                      alerted as the account nears it; it is not a hard cap.
+                      CreditLimit is the most the account should spend per billing cycle,
+                      as a decimal string in the billing account's currency (e.g. "10000").
+                      It is not a hard cap. Optional: nothing enforces it yet, so staff
+                      only set one when finance wants it recorded.
                     pattern: ^(0|[1-9]\d*)(\.\d+)?$
                     type: string
                   netDays:
@@ -142,8 +143,6 @@ spec:
                     description: PurchaseOrderNumber is printed on invoices.
                     maxLength: 64
                     type: string
-                required:
-                - creditLimit
                 type: object
               reason:
                 description: |-

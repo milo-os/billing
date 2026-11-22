@@ -71,8 +71,8 @@ func reconcileAccountDiscounts(t *testing.T, objs ...client.Object) []billingv1a
 		},
 	}
 	r := &BillingAccountReconciler{client: cl}
-	if err := r.reconcileDiscounts(context.Background(), account); err != nil {
-		t.Fatalf("reconcileDiscounts: %v", err)
+	if err := r.reconcileEntitlementSummary(context.Background(), account); err != nil {
+		t.Fatalf("reconcileEntitlementSummary: %v", err)
 	}
 	return account.Status.Discounts
 }

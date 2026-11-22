@@ -66,6 +66,19 @@ const (
 	// Void. Annotations: billing account, period start.
 	EventReasonInvoiceVoided = "InvoiceVoided"
 
+	// EventReasonInvoiceMarkedUncollectible is recorded on an Invoice when
+	// it moves to Void because it was written off as uncollectible rather
+	// than voided. Both are phase Void; this reason tells them apart.
+	// Annotations: billing account, period start, currency, amount due (the
+	// unpaid balance), and the invoice number when known.
+	EventReasonInvoiceMarkedUncollectible = "InvoiceMarkedUncollectible"
+
+	// EventReasonInvoiceDueDateChanged is recorded on an Invoice when its
+	// due date changes while it is Open or PastDue. Annotations: billing
+	// account, period start, due date, previous due date, and the invoice
+	// number when known.
+	EventReasonInvoiceDueDateChanged = "InvoiceDueDateChanged"
+
 	// EventReasonInvoiceCurrencyMismatch is recorded on an Invoice when the
 	// provider sets Ready=False with reason CurrencyMismatch. It is
 	// operational, so it is recorded without scope annotations and only
@@ -116,6 +129,15 @@ const (
 	// InvoicingReady returns to True after being PastDue.
 	EventReasonInvoicingCurrent = "InvoicingCurrent"
 
+	// EventReasonInvoiceSent is recorded on a BillingAccount by the payment
+	// processor's provider each time one of the account's invoices is
+	// emailed to the customer, re-sends included. It is recorded on the
+	// account rather than the Invoice because the first send happens when
+	// the invoice is finalized, before the invoicing provider has projected
+	// an Invoice for it. Annotations: invoice number, currency, amount (the
+	// total), due date, and the Invoice when it already exists.
+	EventReasonInvoiceSent = "InvoiceSent"
+
 	// EventReasonPaymentTermsEnded is recorded on a BillingArrangement when
 	// its terms end on their own at spec.endsAt. A person ending terms is
 	// recorded from the audit log instead. Annotations: billing account,
@@ -139,6 +161,10 @@ const (
 	// in the event's namespace.
 	EventAnnotationInvoice = EventAnnotationPrefix + "invoice"
 
+	// EventAnnotationInvoiceNumber is the number printed on the invoice,
+	// the one the customer quotes.
+	EventAnnotationInvoiceNumber = EventAnnotationPrefix + "invoice-number"
+
 	// EventAnnotationPeriodStart is the start of the invoice's billing
 	// period. Summaries name the period by its month ("October 2026").
 	EventAnnotationPeriodStart = EventAnnotationPrefix + "period-start"
@@ -159,6 +185,9 @@ const (
 
 	// EventAnnotationDueDate is when the invoice is due.
 	EventAnnotationDueDate = EventAnnotationPrefix + "due-date"
+
+	// EventAnnotationPreviousDueDate is the due date before it changed.
+	EventAnnotationPreviousDueDate = EventAnnotationPrefix + "previous-due-date"
 
 	// EventAnnotationNextAttempt is when the provider will next try to
 	// collect payment.

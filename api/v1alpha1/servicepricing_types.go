@@ -15,12 +15,21 @@ import (
 // fixed amount. Providers read the Offer's snapshot of this shape,
 // distinguished by chargeType.
 //
+// A OneTime or Recurring pricing is a fee, such as a contract's setup or
+// monthly fee. A fee may name a service and a pricingUnit, and an Offer
+// charges it as many times as its reference's quantity.
+//
+// A pricing with basedOn is a customer's own price: a copy of the list
+// pricing basedOn names, with only its rate amounts (Usage) or its amount
+// (OneTime and Recurring) changed.
+//
 // The spec is immutable: a new price is a new ServicePricing.
 //
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || (has(self.metric) && has(self.pricingUnit) && has(self.rates))",message="Usage ServicePricing requires metric, pricingUnit, and rates"
 // +kubebuilder:validation:XValidation:rule="self.chargeType == 'Usage' || !has(self.unitConversion)",message="unitConversion is only allowed for Usage ServicePricing"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'OneTime' || (has(self.amount) && has(self.trigger))",message="OneTime ServicePricing requires amount and trigger"
 // +kubebuilder:validation:XValidation:rule="self.chargeType != 'Recurring' || (has(self.amount) && has(self.interval))",message="Recurring ServicePricing requires amount and interval"
+// +kubebuilder:validation:XValidation:rule="self.chargeType != 'Usage' || has(self.serviceRef)",message="Usage ServicePricing requires serviceRef"
 type ServicePricingSpec struct {
 	// ChargeType distinguishes Usage, OneTime, and Recurring pricing.
 	//
@@ -28,12 +37,15 @@ type ServicePricingSpec struct {
 	ChargeType ChargeType `json:"chargeType"`
 
 	// ServiceRef is the canonical service identifier (e.g.
-	// "compute.datumapis.com").
+	// "compute.datumapis.com"). Required for Usage pricings, where it names
+	// the service that owns the meter. Optional for OneTime and Recurring
+	// fees, which needn't be for any one service, such as a contract's
+	// setup or support fee; when set, it must name a Service.
 	//
-	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=253
-	ServiceRef string `json:"serviceRef"`
+	ServiceRef string `json:"serviceRef,omitempty"`
 
 	// Currency is the ISO 4217 currency code. USD only in v1.
 	//
@@ -47,6 +59,24 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=128
 	DisplayName string `json:"displayName,omitempty"`
+	// SKU is the product code finance knows this price's product by (e.g.
+	// "DC-CAB-01"). It's internal, for tracking and reporting, and never
+	// printed on an invoice. It names the product, not the price: a
+	// customer's pricing with basedOn has its list pricing's SKU, and a new
+	// price for the same product keeps it.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$`
+	SKU string `json:"sku,omitempty"`
+
+	// Tax says how this price's charges are taxed. Without it, they're
+	// taxed by the billing profile's default, as every charge was before
+	// prices carried their own. A customer's pricing with basedOn has its
+	// list pricing's tax, as it has its SKU.
+	//
+	// +kubebuilder:validation:Optional
+	Tax *PricingTax `json:"tax,omitempty"`
 
 	// Metric is the meterName of the MeterDefinition a Usage pricing
 	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
@@ -60,6 +90,11 @@ type ServicePricingSpec struct {
 	// PricingUnit is a human-readable billing unit label (e.g. "vcpu",
 	// "gib"). Required when chargeType is Usage. Does not need to be the
 	// literal UCUM unit string of the meter.
+	//
+	// Optional for OneTime and Recurring fees, where it labels what the
+	// amount is per (e.g. "port", "kW"), so invoices and portals show a
+	// fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+	// charged.
 	//
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=64
@@ -93,10 +128,61 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:Optional
 	Trigger ChargeTrigger `json:"trigger,omitempty"`
 
-	// Interval is the cadence for a Recurring charge.
+	// Interval is the cadence for a Recurring charge: monthly, quarterly
+	// or annual. It's the fee's own, so an Offer billed monthly can charge
+	// an annual fee once a year, on the account's billing day.
 	//
 	// +kubebuilder:validation:Optional
 	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// BasedOn names the list pricing, in the same namespace, that this
+	// pricing gives a customer their own price for. It must have the same
+	// chargeType, and the named pricing can't itself have basedOn.
+	//
+	// A Usage pricing must match it in everything but its rate amounts:
+	// serviceRef, metric, pricingUnit, unitConversion, each rate's match and
+	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
+	// pricing must match it in everything but its amount and displayName:
+	// serviceRef, pricingUnit, trigger and interval. Either kind has its
+	// list pricing's sku and tax.
+	//
+	// Billing doesn't change with basedOn: it records which list price the
+	// customer's price replaces, so portals can show them side by side.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	BasedOn string `json:"basedOn,omitempty"`
+}
+
+// PricingTax is how a price's charges are taxed. Tax is calculated by the
+// invoicing provider's tax engine, from the customer's address, tax IDs and
+// exemptions; this says what kind of product is being sold.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.taxable) || self.taxable || !has(self.code)",message="code can't be set on a pricing that isn't taxable"
+// +kubebuilder:validation:MinProperties=1
+type PricingTax struct {
+	// Code is the tax engine's code for what this price sells, which sets
+	// the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+	// codes (e.g. "txcd_10103001" for software as a service). Finance
+	// chooses it. Omitted, the billing profile's default code applies.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	// +kubebuilder:validation:Pattern=`^[A-Za-z0-9][A-Za-z0-9_.-]*$`
+	Code string `json:"code,omitempty"`
+
+	// Taxable is false for a charge that's never taxed, wherever the
+	// customer is. Omitted, the charge is taxable.
+	//
+	// +kubebuilder:validation:Optional
+	Taxable *bool `json:"taxable,omitempty"`
+}
+
+// IsTaxable reports whether charges with this tax are taxed. Nil means the
+// billing profile's default, which taxes them.
+func (t *PricingTax) IsTaxable() bool {
+	return t == nil || t.Taxable == nil || *t.Taxable
 }
 
 // UnitConversion converts usage measured in the meter's unit into the

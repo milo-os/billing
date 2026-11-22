@@ -32,10 +32,16 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAccountBindingSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountBindingStatus"):
 		return &apiv1alpha1.BillingAccountBindingStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContract"):
+		return &apiv1alpha1.BillingAccountContractApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContractFee"):
+		return &apiv1alpha1.BillingAccountContractFeeApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountDiscount"):
 		return &apiv1alpha1.BillingAccountDiscountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountPaymentArrangement"):
 		return &apiv1alpha1.BillingAccountPaymentArrangementApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountPrice"):
+		return &apiv1alpha1.BillingAccountPriceApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountRef"):
 		return &apiv1alpha1.BillingAccountRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountSpec"):
@@ -100,6 +106,10 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.InvoicePeriodApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequest"):
 		return &apiv1alpha1.InvoiceRequestApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestContractDraft"):
+		return &apiv1alpha1.InvoiceRequestContractDraftApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestDraft"):
+		return &apiv1alpha1.InvoiceRequestDraftApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestInvoiceRef"):
 		return &apiv1alpha1.InvoiceRequestInvoiceRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("InvoiceRequestLine"):
@@ -170,6 +180,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.PaymentTermsApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PricingRate"):
 		return &apiv1alpha1.PricingRateApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("PricingTax"):
+		return &apiv1alpha1.PricingTaxApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("PricingTierBand"):
 		return &apiv1alpha1.PricingTierBandApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ProjectRef"):

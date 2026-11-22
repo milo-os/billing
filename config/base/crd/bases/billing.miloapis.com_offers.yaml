@@ -110,6 +110,20 @@ spec:
                     ServicePricingRef names a ServicePricing resource referenced by an Offer
                     while in Draft. Namespace defaults to milo-system when omitted.
                   properties:
+                    billingTiming:
+                      description: |-
+                        BillingTiming is when a Recurring fee is invoiced: InArrears at the
+                        end of each period with that period's usage, or InAdvance at its
+                        start. Unset, the fee is billed in advance, as every fee was before
+                        this field existed; the staff portal sets InArrears on new contract
+                        fees unless staff choose in advance. Only allowed on a Recurring
+                        pricing: a OneTime fee is always invoiced when it's charged and usage
+                        at the end of the period, and the Offer controller won't publish an
+                        Offer that sets it on either.
+                      enum:
+                      - InAdvance
+                      - InArrears
+                      type: string
                     discount:
                       description: Discount specifies an optional discount override
                         for this service pricing.
@@ -134,6 +148,29 @@ spec:
                         milo-system when empty.
                       maxLength: 63
                       type: string
+                    periods:
+                      description: |-
+                        Periods is how many of its intervals a Recurring fee is charged for,
+                        counted from the contract's start: 36 on a monthly fee is three
+                        years, and 4 on an annual fee is four. The fee stops after its last
+                        period. Unset, it's charged for as long as the account is on the
+                        Offer. Only allowed on a Recurring pricing: the Offer controller
+                        won't publish an Offer that sets it on any other.
+                      format: int32
+                      maximum: 1200
+                      minimum: 1
+                      type: integer
+                    quantity:
+                      description: |-
+                        Quantity is how many of a OneTime or Recurring fee the Offer charges:
+                        the fee's amount times its quantity, such as three servers at the
+                        same monthly price. Defaults to 1. Not allowed on a Usage pricing,
+                        whose quantity is what was used: the Offer controller won't publish
+                        an Offer that sets it there.
+                      format: int32
+                      maximum: 10000
+                      minimum: 1
+                      type: integer
                   required:
                   - name
                   type: object
@@ -151,6 +188,16 @@ spec:
                     ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
                     at Offer publish time, plus the source ServicePricing name.
                   properties:
+                    billingTiming:
+                      description: |-
+                        BillingTiming is when a Recurring fee is invoiced, captured from the
+                        reference when the Offer becomes GA, and only when the reference sets
+                        it. Providers bill a Recurring snapshot without it in advance. Unset
+                        for OneTime and Usage pricings.
+                      enum:
+                      - InAdvance
+                      - InArrears
+                      type: string
                     discount:
                       description: |-
                         Discount is the resolved discount for this service pricing snapshot,
@@ -170,6 +217,26 @@ spec:
                       maxLength: 253
                       minLength: 1
                       type: string
+                    periods:
+                      description: |-
+                        Periods is how many of its intervals a Recurring fee is charged for,
+                        counted from the contract's start, captured from the reference when
+                        the Offer becomes GA. Unset when the fee has no end.
+                      format: int32
+                      maximum: 1200
+                      minimum: 1
+                      type: integer
+                    quantity:
+                      description: |-
+                        Quantity is how many of a OneTime or Recurring fee the Offer charges,
+                        captured from the reference when the Offer becomes GA: 1 unless the
+                        reference set it. Providers charge the fee's amount times its
+                        quantity, and treat an unset quantity (in a snapshot taken before it
+                        existed) as 1. Unset for Usage pricings.
+                      format: int32
+                      maximum: 10000
+                      minimum: 1
+                      type: integer
                     spec:
                       description: Spec is a deep copy of the source ServicePricingSpec
                         at publish time.
@@ -179,6 +246,24 @@ spec:
                             Amount is the fixed USD decimal string for OneTime and Recurring
                             charges.
                           pattern: ^(0|[1-9]\d*)(\.\d+)?$
+                          type: string
+                        basedOn:
+                          description: |-
+                            BasedOn names the list pricing, in the same namespace, that this
+                            pricing gives a customer their own price for. It must have the same
+                            chargeType, and the named pricing can't itself have basedOn.
+
+                            A Usage pricing must match it in everything but its rate amounts:
+                            serviceRef, metric, pricingUnit, unitConversion, each rate's match and
+                            whether it's flat or tiered, and tier bounds. A OneTime or Recurring
+                            pricing must match it in everything but its amount and displayName:
+                            serviceRef, pricingUnit, trigger and interval. Either kind has its
+                            list pricing's sku and tax.
+
+                            Billing doesn't change with basedOn: it records which list price the
+                            customer's price replaces, so portals can show them side by side.
+                          maxLength: 253
+                          minLength: 1
                           type: string
                         chargeType:
                           description: ChargeType distinguishes Usage, OneTime, and
@@ -200,9 +285,14 @@ spec:
                           maxLength: 128
                           type: string
                         interval:
-                          description: Interval is the cadence for a Recurring charge.
+                          description: |-
+                            Interval is the cadence for a Recurring charge: monthly, quarterly
+                            or annual. It's the fee's own, so an Offer billed monthly can charge
+                            an annual fee once a year, on the account's billing day.
                           enum:
                           - monthly
+                          - quarterly
+                          - annual
                           type: string
                         metric:
                           description: |-
@@ -217,6 +307,11 @@ spec:
                             PricingUnit is a human-readable billing unit label (e.g. "vcpu",
                             "gib"). Required when chargeType is Usage. Does not need to be the
                             literal UCUM unit string of the meter.
+
+                            Optional for OneTime and Recurring fees, where it labels what the
+                            amount is per (e.g. "port", "kW"), so invoices and portals show a
+                            fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+                            charged.
                           maxLength: 64
                           type: string
                         rates:
@@ -295,10 +390,49 @@ spec:
                         serviceRef:
                           description: |-
                             ServiceRef is the canonical service identifier (e.g.
-                            "compute.datumapis.com").
+                            "compute.datumapis.com"). Required for Usage pricings, where it names
+                            the service that owns the meter. Optional for OneTime and Recurring
+                            fees, which needn't be for any one service, such as a contract's
+                            setup or support fee; when set, it must name a Service.
                           maxLength: 253
                           minLength: 1
                           type: string
+                        sku:
+                          description: |-
+                            SKU is the product code finance knows this price's product by (e.g.
+                            "DC-CAB-01"). It's internal, for tracking and reporting, and never
+                            printed on an invoice. It names the product, not the price: a
+                            customer's pricing with basedOn has its list pricing's SKU, and a new
+                            price for the same product keeps it.
+                          maxLength: 64
+                          pattern: ^[A-Za-z0-9]([A-Za-z0-9._-]*[A-Za-z0-9])?$
+                          type: string
+                        tax:
+                          description: |-
+                            Tax says how this price's charges are taxed. Without it, they're
+                            taxed by the billing profile's default, as every charge was before
+                            prices carried their own. A customer's pricing with basedOn has its
+                            list pricing's tax, as it has its SKU.
+                          minProperties: 1
+                          properties:
+                            code:
+                              description: |-
+                                Code is the tax engine's code for what this price sells, which sets
+                                the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+                                codes (e.g. "txcd_10103001" for software as a service). Finance
+                                chooses it. Omitted, the billing profile's default code applies.
+                              maxLength: 64
+                              pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]*$
+                              type: string
+                            taxable:
+                              description: |-
+                                Taxable is false for a charge that's never taxed, wherever the
+                                customer is. Omitted, the charge is taxable.
+                              type: boolean
+                          type: object
+                          x-kubernetes-validations:
+                          - message: code can't be set on a pricing that isn't taxable
+                            rule: '!has(self.taxable) || self.taxable || !has(self.code)'
                         trigger:
                           description: Trigger identifies when a OneTime charge fires.
                           enum:
@@ -335,7 +469,6 @@ spec:
                       required:
                       - chargeType
                       - currency
-                      - serviceRef
                       type: object
                       x-kubernetes-validations:
                       - message: Usage ServicePricing requires metric, pricingUnit,
@@ -350,6 +483,8 @@ spec:
                       - message: Recurring ServicePricing requires amount and interval
                         rule: self.chargeType != 'Recurring' || (has(self.amount)
                           && has(self.interval))
+                      - message: Usage ServicePricing requires serviceRef
+                        rule: self.chargeType != 'Usage' || has(self.serviceRef)
                   required:
                   - name
                   - spec

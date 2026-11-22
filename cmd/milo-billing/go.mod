@@ -2,7 +2,7 @@ module go.miloapis.com/billing/cmd/milo-billing
 
 go 1.26.0
 
-toolchain go1.27.3
+toolchain go1.27.4
 
 // The plugin builds against this repo's API types. It is its own module so
 // the datumctl SDK's dependencies don't move the operator's.
@@ -27,7 +27,7 @@ require (
 	github.com/x448/float16 v0.8.4 // indirect
 	go.yaml.in/yaml/v2 v2.4.4 // indirect
 	golang.org/x/net v0.62.0 // indirect
-	golang.org/x/text v0.43.0 // indirect
+	golang.org/x/text v0.44.0 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	k8s.io/klog/v2 v2.140.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20260721132016-d427ff9ee9ad // indirect

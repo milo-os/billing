@@ -20,17 +20,39 @@ import (
 // fixed amount. Providers read the Offer's snapshot of this shape,
 // distinguished by chargeType.
 //
+// A OneTime or Recurring pricing is a fee, such as a contract's setup or
+// monthly fee. A fee may name a service and a pricingUnit, and an Offer
+// charges it as many times as its reference's quantity.
+//
+// A pricing with basedOn is a customer's own price: a copy of the list
+// pricing basedOn names, with only its rate amounts (Usage) or its amount
+// (OneTime and Recurring) changed.
+//
 // The spec is immutable: a new price is a new ServicePricing.
 type ServicePricingSpecApplyConfiguration struct {
 	// ChargeType distinguishes Usage, OneTime, and Recurring pricing.
 	ChargeType *apiv1alpha1.ChargeType `json:"chargeType,omitempty"`
 	// ServiceRef is the canonical service identifier (e.g.
-	// "compute.datumapis.com").
+	// "compute.datumapis.com"). Required for Usage pricings, where it names
+	// the service that owns the meter. Optional for OneTime and Recurring
+	// fees, which needn't be for any one service, such as a contract's
+	// setup or support fee; when set, it must name a Service.
 	ServiceRef *string `json:"serviceRef,omitempty"`
 	// Currency is the ISO 4217 currency code. USD only in v1.
 	Currency *string `json:"currency,omitempty"`
 	// DisplayName is a human-readable label for invoices and portals.
 	DisplayName *string `json:"displayName,omitempty"`
+	// SKU is the product code finance knows this price's product by (e.g.
+	// "DC-CAB-01"). It's internal, for tracking and reporting, and never
+	// printed on an invoice. It names the product, not the price: a
+	// customer's pricing with basedOn has its list pricing's SKU, and a new
+	// price for the same product keeps it.
+	SKU *string `json:"sku,omitempty"`
+	// Tax says how this price's charges are taxed. Without it, they're
+	// taxed by the billing profile's default, as every charge was before
+	// prices carried their own. A customer's pricing with basedOn has its
+	// list pricing's tax, as it has its SKU.
+	Tax *PricingTaxApplyConfiguration `json:"tax,omitempty"`
 	// Metric is the meterName of the MeterDefinition a Usage pricing
 	// selects (e.g. "compute.datumapis.com/instance/cpu-allocated").
 	// Required when chargeType is Usage. The meter must exist and not be
@@ -39,6 +61,11 @@ type ServicePricingSpecApplyConfiguration struct {
 	// PricingUnit is a human-readable billing unit label (e.g. "vcpu",
 	// "gib"). Required when chargeType is Usage. Does not need to be the
 	// literal UCUM unit string of the meter.
+	//
+	// Optional for OneTime and Recurring fees, where it labels what the
+	// amount is per (e.g. "port", "kW"), so invoices and portals show a
+	// fee's quantity in it ("4 port × $300.00"). It doesn't change what's
+	// charged.
 	PricingUnit *string `json:"pricingUnit,omitempty"`
 	// UnitConversion converts the meter's usage into pricingUnit before the
 	// rates apply, for a metric measured in a different unit than it is
@@ -53,8 +80,24 @@ type ServicePricingSpecApplyConfiguration struct {
 	Amount *string `json:"amount,omitempty"`
 	// Trigger identifies when a OneTime charge fires.
 	Trigger *apiv1alpha1.ChargeTrigger `json:"trigger,omitempty"`
-	// Interval is the cadence for a Recurring charge.
+	// Interval is the cadence for a Recurring charge: monthly, quarterly
+	// or annual. It's the fee's own, so an Offer billed monthly can charge
+	// an annual fee once a year, on the account's billing day.
 	Interval *apiv1alpha1.ChargeInterval `json:"interval,omitempty"`
+	// BasedOn names the list pricing, in the same namespace, that this
+	// pricing gives a customer their own price for. It must have the same
+	// chargeType, and the named pricing can't itself have basedOn.
+	//
+	// A Usage pricing must match it in everything but its rate amounts:
+	// serviceRef, metric, pricingUnit, unitConversion, each rate's match and
+	// whether it's flat or tiered, and tier bounds. A OneTime or Recurring
+	// pricing must match it in everything but its amount and displayName:
+	// serviceRef, pricingUnit, trigger and interval. Either kind has its
+	// list pricing's sku and tax.
+	//
+	// Billing doesn't change with basedOn: it records which list price the
+	// customer's price replaces, so portals can show them side by side.
+	BasedOn *string `json:"basedOn,omitempty"`
 }
 
 // ServicePricingSpecApplyConfiguration constructs a declarative configuration of the ServicePricingSpec type for use with
@@ -92,6 +135,22 @@ func (b *ServicePricingSpecApplyConfiguration) WithCurrency(value string) *Servi
 // If called multiple times, the DisplayName field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithDisplayName(value string) *ServicePricingSpecApplyConfiguration {
 	b.DisplayName = &value
+	return b
+}
+
+// WithSKU sets the SKU field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the SKU field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithSKU(value string) *ServicePricingSpecApplyConfiguration {
+	b.SKU = &value
+	return b
+}
+
+// WithTax sets the Tax field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Tax field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithTax(value *PricingTaxApplyConfiguration) *ServicePricingSpecApplyConfiguration {
+	b.Tax = value
 	return b
 }
 
@@ -153,5 +212,13 @@ func (b *ServicePricingSpecApplyConfiguration) WithTrigger(value apiv1alpha1.Cha
 // If called multiple times, the Interval field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithInterval(value apiv1alpha1.ChargeInterval) *ServicePricingSpecApplyConfiguration {
 	b.Interval = &value
+	return b
+}
+
+// WithBasedOn sets the BasedOn field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the BasedOn field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithBasedOn(value string) *ServicePricingSpecApplyConfiguration {
+	b.BasedOn = &value
 	return b
 }

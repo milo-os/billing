@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -56,9 +56,19 @@ platform one consistent, vendor-agnostic place to read a billing account's
 invoice history and payment status.
 
 This document defines that contract, not any one vendor's implementation.
-Amberflo, via `amberflo-provider`, will be the first integration to
-implement it; its configuration and webhook handling belong in
-[amberflo-provider][amberflo-provider], not here.
+[openmeter-provider][openmeter-provider] implements it today; its
+configuration and its handling of OpenMeter and Stripe belong there, not
+here.
+
+> [!NOTE]
+> **Status (November 2026).** Built. `Invoice` and the `InvoicingReady`
+> condition on `BillingAccount` shipped in July 2026. Amberflo was the
+> planned first integration, but it was retired on 23 October 2026 and
+> openmeter-provider is the provider: OpenMeter computes each invoice, its
+> Stripe app sends and charges it in Stripe, and openmeter-provider
+> mirrors it into an `Invoice`, including changes staff make in Stripe.
+> Staff can also preview an account's next invoice with an
+> `InvoiceRequest` (see [Contract Billing](./contract-billing.md)).
 
 ## Motivation
 
@@ -332,11 +342,10 @@ RBAC: **read** `BillingAccount` spec (cluster-wide); **create/update**
 defines in its own API group. The billing service does not import or
 reference provider-owned config types.
 
-**Reference implementation.** Amberflo, via `amberflo-provider`, will be the
-first to implement this contract. Its configuration CRD, webhook contract,
-and annotation keys belong in [amberflo-provider][amberflo-provider] — this
-document defines the contract every provider follows, not any one provider's
-implementation.
+**Reference implementation.** [openmeter-provider][openmeter-provider]
+implements this contract. Its configuration and annotation keys belong
+there — this document defines the contract every provider follows, not any
+one provider's implementation.
 
 ### Cross-Provider Identity Resolution
 
@@ -361,9 +370,13 @@ pattern is a narrow, explicit exception:
   providers, revisit whether a well-known field belongs on `PaymentMethod`
   instead — see [Future Work](#future-work).
 
-Amberflo's specific grant (reading `StripePaymentMethod.status.stripeCustomerId`
-to link its own Stripe integration) will be documented in
-[amberflo-provider][amberflo-provider], not here.
+openmeter-provider's grant is read access to stripe-provider's
+`StripePaymentMethod` (the default card's Stripe customer) and
+`StripeCustomer`. stripe-provider publishes a `StripeCustomer` for every
+account, so an account on invoice terms, which may never add a card, still
+has a Stripe customer to invoice. That's a deliberate exception to the
+`DefaultPaymentMethodReady` rule above: an account paying by invoice is
+invoiced without a ready card.
 
 ### Portal Integration
 
@@ -383,7 +396,8 @@ latest `Invoice` is `PastDue`.
 `InvoicingReady` doesn't affect `BillingAccount` phase — it's a health signal
 downstream consumers gate on, not a lifecycle failure. Whether sustained
 `PastDue` should drive suspension is a policy decision for a separate
-enhancement.
+enhancement: [What Happens When a Customer Doesn't Pay](nonpayment-suspension.md),
+tracked in [#219](https://github.com/milo-os/billing/issues/219).
 
 ### Ownership and Deletion
 
@@ -418,6 +432,21 @@ grant in this design, and it's scoped to a single field.
 ## Implementation History
 
 - 2026-07-17: Enhancement drafted.
+- 2026-07-27: `Invoice` and the `InvoicingReady` condition implemented in
+  billing.
+- 2026-10-12: openmeter-provider creates one `Invoice` per OpenMeter
+  invoice.
+- 2026-10-15: Each `Invoice` links to its Stripe invoice page.
+- 2026-10-23: amberflo-provider retired; openmeter-provider is the only
+  invoicing provider.
+- 2026-10-28: Invoices go to the first invoice email only. Accounts with no
+  card are invoiced through the Stripe customer stripe-provider publishes.
+- 2026-11-02: `InvoiceRequest` added for previewing an account's next
+  invoice (see [Contract Billing](./contract-billing.md)).
+- 2026-11-03: Invoices staff create or change in Stripe are brought into
+  Milo.
+- 2026-11-04: Invoice and payment changes are recorded on the billing
+  account's activity timeline.
 
 ## Future Work
 
@@ -430,7 +459,9 @@ grant in this design, and it's scoped to a single field.
   one-off RBAC grants.
 - **Invoice line-item detail.** A normalized line-item schema, if backend
   services need it, balanced against keeping `Invoice` provider-agnostic.
-- **Suspension policy on sustained `PastDue`** — a dedicated enhancement.
+- **Suspension policy on sustained `PastDue`** — now its own enhancement,
+  [What Happens When a Customer Doesn't Pay](nonpayment-suspension.md),
+  tracked in [#219](https://github.com/milo-os/billing/issues/219).
 - **Reconciliation job for provider/payment divergence.** Compare a
   provider's reported payment status against the underlying payment
   processor's own record, surfacing a condition rather than trusting a
@@ -497,4 +528,4 @@ without a billing service release.
 
 [billing-account]: ../../api/v1alpha1/billingaccount_types.go
 [payment-methods]: ./payment-methods.md
-[amberflo-provider]: https://github.com/milo-os/amberflo-provider
+[openmeter-provider]: https://github.com/milo-os/openmeter-provider

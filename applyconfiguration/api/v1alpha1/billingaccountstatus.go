@@ -35,6 +35,18 @@ type BillingAccountStatusApplyConfiguration struct {
 	// pricing has a discount above 0%; the others are listed at 0%. Cleared
 	// when the account has no discount.
 	Discounts []BillingAccountDiscountApplyConfiguration `json:"discounts,omitempty"`
+	// Contract summarises the contract on the account's BillingEntitlement,
+	// copied with its fees from the contract's published Offer so customers
+	// can see their contract without reading the entitlement or the Offer.
+	// Set from when the contract is added, including before it starts.
+	// Cleared when the account has no contract, or its Offer isn't
+	// published.
+	Contract *BillingAccountContractApplyConfiguration `json:"contract,omitempty"`
+	// Prices lists every service pricing in the account's Offer, copied from the
+	// Offer's published snapshot so customers can see what they're billed at
+	// without reading the Offer: usage rates and fixed fees, each before its
+	// discount, which is also given. Cleared when the account has no published Offer.
+	Prices []BillingAccountPriceApplyConfiguration `json:"prices,omitempty"`
 	// ObservedGeneration is the most recent generation observed by the controller.
 	ObservedGeneration *int64 `json:"observedGeneration,omitempty"`
 }
@@ -99,6 +111,27 @@ func (b *BillingAccountStatusApplyConfiguration) WithDiscounts(values ...*Billin
 			panic("nil value passed to WithDiscounts")
 		}
 		b.Discounts = append(b.Discounts, *values[i])
+	}
+	return b
+}
+
+// WithContract sets the Contract field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Contract field is set to the value of the last call.
+func (b *BillingAccountStatusApplyConfiguration) WithContract(value *BillingAccountContractApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	b.Contract = value
+	return b
+}
+
+// WithPrices adds the given value to the Prices field in the declarative configuration
+// and returns the receiver, so that objects can be build by chaining "With" function invocations.
+// If called multiple times, values provided by each call will be appended to the Prices field.
+func (b *BillingAccountStatusApplyConfiguration) WithPrices(values ...*BillingAccountPriceApplyConfiguration) *BillingAccountStatusApplyConfiguration {
+	for i := range values {
+		if values[i] == nil {
+			panic("nil value passed to WithPrices")
+		}
+		b.Prices = append(b.Prices, *values[i])
 	}
 	return b
 }

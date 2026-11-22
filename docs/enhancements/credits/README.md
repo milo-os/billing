@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implementable
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -29,6 +29,17 @@ latest-milestone: "v0"
 - [Open Questions](#open-questions)
 - [Future Work](#future-work)
 - [Alternatives](#alternatives)
+- [Implementation History](#implementation-history)
+
+> [!NOTE]
+> **Status (November 2026).** billing's part is built: `CreditGrant`,
+> `BillingAccountBalance`, `Invoice.status.creditsApplied` and the signup
+> credit controller. All of it sits behind the `CreditGrants` feature gate,
+> which is off by default: with it off, billing refuses `CreditGrant`s and
+> `signupCredit` on Offers. openmeter-provider's side (grant sync, the
+> balance API and invoice credits) is still a draft,
+> [openmeter-provider#67](https://github.com/milo-os/openmeter-provider/pull/67),
+> so no environment serves credits yet.
 
 ## Summary
 
@@ -39,7 +50,7 @@ how much, why, and until when. Customers and staff read the account's
 running balance with `BillingAccountBalance`
 (`usage.billing.miloapis.com/v1alpha1`), which is served live from the
 billing provider instead of being copied into Milo. Optionally, every new
-organization gets a signup credit configured on the billing service.
+organization gets a signup credit, configured on its Offer.
 
 Billing defines the API and doesn't know how credits are kept. The billing
 provider keeps the balance and applies credits to the invoices it issues: a
@@ -100,9 +111,9 @@ balance that moves as they use the platform.
 Who does what:
 
 - **billing** defines `CreditGrant` and `BillingAccountBalance` and
-  validates grants (immutable, one-way void). It holds no balance.
-- **service-catalog** creates a signup `CreditGrant` once per organization,
-  if the billing ServiceConfiguration sets `signupCredit`.
+  validates grants (immutable, one-way void). It holds no balance. Its
+  signup credit controller creates a signup `CreditGrant` once per
+  organization when the account's Offer sets `signupCredit`.
 - **The billing provider** does the rest, behind Milo's API:
   - its controllers turn each `CreditGrant` into a grant in its ledger, void
     it, report its state, and copy invoice credits into `Invoice.status`;
@@ -337,7 +348,7 @@ them, whoever created them.
 | `CreditGrant` type, webhook (immutability, billing account, amount), RBAC roles | billing |
 | `BillingAccountBalance` type and validation (`api/usage/v1alpha1`), `ProtectedResource`, discovery | billing |
 | `Invoice.status.creditsApplied` | billing |
-| `signupCredit` on ServiceConfiguration, grant creation for new accounts | service-catalog |
+| `signupCredit` on Offer, signup credit controller | billing |
 | Grant sync, void on `voided` or cascade delete, `BillingAccountBalance` serving, invoice credits projection | billing provider |
 | Billing page: balance, credits, invoice credit line | cloud-portal |
 | Grant and void credits for an account | staff-portal |
@@ -371,8 +382,9 @@ credits.
   Organization, granted by the existing usage viewer role, so everyone who
   can view billing can view the balance. Staff read any account through a
   platform binding, as with `UsageQuery`.
-- service-catalog's controller needs `create` and cluster-wide `list` on
-  `creditgrants`, and `get` on `paymentmethods`, for signup credits.
+- billing's signup credit controller has `create` and cluster-wide `list`
+  on `creditgrants`, and reads `billingaccounts`, `billingentitlements`,
+  `offers` and `paymentmethods`.
 
 ### Diagrams
 
@@ -385,16 +397,17 @@ docker run --rm -v "$PWD":/data plantuml/plantuml -tpng '/data/*.puml'
 
 ## Rollout
 
-1. **billing:** `CreditGrant`, `BillingAccountBalance` and
-   `Invoice.status.creditsApplied`.
+1. **billing:** `CreditGrant`, `BillingAccountBalance`,
+   `Invoice.status.creditsApplied` and `signupCredit` on Offer, behind the
+   `CreditGrants` feature gate. Done.
 2. **Billing provider:** grant sync, balance API, invoice projection. Its
    existing invoices must come out unchanged with credits on, and it adds
    end-to-end tests for a grant, the live balance, an invoice partly and
    fully covered by credit, void and expiry. Staging first.
 3. **Portals:** the balance on cloud-portal's billing page, and granting and
    voiding in staff-portal.
-4. **service-catalog:** `signupCredit`, left unset until product decides the
-   amount.
+4. **Signup credit:** `signupCredit` on an Offer, left unset until product
+   decides the amount.
 
 ## Open Questions
 
@@ -428,11 +441,11 @@ docker run --rm -v "$PWD":/data plantuml/plantuml -tpng '/data/*.puml'
   read, like `UsageQuery`.
 - **A `CreditPolicy` (or `CreditProgram`) resource** with selectors and
   amounts, for signup, referral and campaigns. More general, but there is
-  one rule today, and a field next to `defaultOffer` covers it. A policy
+  one rule today, and a field on the Offer covers it. A policy
   resource can come later and create the same `CreditGrant`s.
 - **Signup credits in code,** for example in service-catalog with an amount
   from a flag. No API to review and a deploy for every change; the
-  ServiceConfiguration field is just as simple and can be changed by staff.
+  Offer field is just as simple and can be changed by staff.
 - **Credits as part of an Offer.** An Offer is a price list shared by many
   accounts and immutable once published, while credits are per account and
   change over time. Offer-level "included usage" could be future work, as a
@@ -443,3 +456,16 @@ docker run --rm -v "$PWD":/data plantuml/plantuml -tpng '/data/*.puml'
 - **A ledger in billing.** It would duplicate what the provider must do
   anyway to apply credits to the invoices it issues (balance, expiry,
   deduction), and could disagree with those invoices.
+
+## Implementation History
+
+- 2026-10-20: Enhancement proposed.
+- 2026-10-23: Manual grants by staff are the main way to give credit for
+  the first release; revised the balance and forecast schema.
+- 2026-10-27: Deleting a grant voids it in the provider, including when its
+  billing account is deleted.
+- 2026-10-28: billing implemented `CreditGrant`, `BillingAccountBalance`,
+  `Invoice.status.creditsApplied` and their webhooks, and `signupCredit`
+  moved from service-catalog to the Offer, with billing creating the grant.
+- 2026-11-02: All of it put behind the `CreditGrants` feature gate, off by
+  default, until the provider side is ready.

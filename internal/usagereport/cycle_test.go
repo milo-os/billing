@@ -6,6 +6,8 @@ import (
 	"testing"
 	"time"
 
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
 )
 
@@ -48,6 +50,50 @@ func TestBillingCyclesQuarterly(t *testing.T) {
 	}
 	if !previous.Start.Equal(date(2026, time.July, 1)) {
 		t.Errorf("previous starts %v", previous.Start)
+	}
+}
+
+func TestCycleTermsFollowAStartedContract(t *testing.T) {
+	account := &billingv1alpha1.BillingAccount{
+		Spec: billingv1alpha1.BillingAccountSpec{
+			PaymentTerms: &billingv1alpha1.PaymentTerms{InvoiceFrequency: "Monthly", InvoiceDayOfMonth: 1, NetDays: 30},
+		},
+		Status: billingv1alpha1.BillingAccountStatus{
+			Contract: &billingv1alpha1.BillingAccountContract{
+				StartsAt:          metav1.NewTime(date(2026, time.March, 31)),
+				BillingDayOfMonth: 31,
+			},
+		},
+	}
+
+	// Before the contract starts, the payment terms decide.
+	if got := CycleTerms(account, date(2026, time.March, 30)); got.InvoiceDayOfMonth != 1 {
+		t.Errorf("before the start, day = %d, want 1", got.InvoiceDayOfMonth)
+	}
+
+	// Once it has, the contract's day does, clamped in shorter months.
+	terms := CycleTerms(account, date(2026, time.April, 10))
+	if terms.InvoiceDayOfMonth != 31 || terms.NetDays != 30 {
+		t.Errorf("terms = %+v, want the contract's day and the account's net days", terms)
+	}
+	if account.Spec.PaymentTerms.InvoiceDayOfMonth != 1 {
+		t.Error("CycleTerms changed the account's own terms")
+	}
+	current, previous := BillingCycles(terms, date(2026, time.April, 10))
+	if !current.Start.Equal(date(2026, time.March, 31)) || !current.PeriodEnd.Equal(date(2026, time.April, 30)) {
+		t.Errorf("current = %v - %v, want 31 Mar - 30 Apr", current.Start, current.PeriodEnd)
+	}
+	if !previous.Start.Equal(date(2026, time.February, 28)) {
+		t.Errorf("previous starts %v, want 28 Feb", previous.Start)
+	}
+
+	// A contract account without payment terms still bills monthly on its day.
+	account.Spec.PaymentTerms = nil
+	if got := CycleTerms(account, date(2026, time.April, 10)); got.InvoiceFrequency != "Monthly" || got.InvoiceDayOfMonth != 31 {
+		t.Errorf("without payment terms = %+v", got)
+	}
+	if got := CycleTerms(nil, date(2026, time.April, 10)); got != nil {
+		t.Errorf("no account = %+v, want nil", got)
 	}
 }
 

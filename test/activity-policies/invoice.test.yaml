@@ -1,0 +1,828 @@
+# Invoice events: issued, paid, declined, partially paid, past due, voided,
+# marked uncollectible, due date changed and currency mismatch, with and
+# without their detail annotations.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: issued
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+        event.billing.miloapis.com/due-date: '2026-11-30T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceIssued
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: issued
+  exp_summary: 'The October 2026 invoice for billing account acme was issued: USD 482.19, due 30 November 2026'
+  exp_policy: billing.miloapis.com-invoice
+  exp_change_source: system
+- name: issued without a due date
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceIssued
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: issued
+  exp_summary: 'The October 2026 invoice for billing account acme was issued: USD 482.19'
+- name: paid
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentSucceeded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-succeeded
+  exp_summary: 'The October 2026 invoice for billing account acme was paid: USD 482.19'
+- name: declined with a retry
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+        event.billing.miloapis.com/decline-reason: InsufficientFunds
+        event.billing.miloapis.com/next-attempt: '2026-11-05T09:30:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-failed
+  exp_summary: Payment of USD 482.19 for the October 2026 invoice for billing account acme was declined (insufficient funds).
+    Next attempt on 5 November 2026
+- name: processing error, no retry
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+        event.billing.miloapis.com/decline-reason: ProcessingError
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-failed
+  exp_summary: Payment of USD 482.19 for the October 2026 invoice for billing account acme did not go through (a processing
+    error occurred)
+- name: unknown decline reason
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+        event.billing.miloapis.com/decline-reason: do_not_honor
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-failed
+  exp_summary: Payment of USD 482.19 for the October 2026 invoice for billing account acme was declined
+- name: no decline reason
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-failed
+  exp_summary: Payment of USD 482.19 for the October 2026 invoice for billing account acme was declined
+- name: action required
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '482.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentActionRequired
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: payment-action-required
+  exp_summary: Payment of USD 482.19 for the October 2026 invoice for billing account acme needs the card holder to confirm
+    it
+- name: partially paid
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount-paid: '200.00'
+        event.billing.miloapis.com/amount-due: '282.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePartiallyPaid
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: partially-paid
+  exp_summary: USD 200.00 was received for the October 2026 invoice for billing account acme; USD 282.19 is still due
+- name: past due links the invoice and the billing account
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount-due: '482.19'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePastDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: past-due
+  exp_summary: 'The October 2026 invoice for billing account acme is past due: USD 482.19 outstanding'
+  exp_links:
+  - marker: October 2026 invoice
+    apiGroup: billing.miloapis.com
+    namespace: organization-acme
+    name: acme-2026-10
+  - marker: acme
+    apiGroup: billing.miloapis.com
+    namespace: organization-acme
+    name: acme
+- name: voided
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceVoided
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: voided
+  exp_summary: The October 2026 invoice for billing account acme was voided
+- name: currency mismatch
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: EUR
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceCurrencyMismatch
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: currency-mismatch
+  exp_summary: The October 2026 invoice for billing account acme is in EUR, which does not match the billing account's currency
+- name: paid without an amount
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentSucceeded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was paid
+- name: an event for another reason matches nothing
+  policy: billing.miloapis.com-invoice
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: SomethingElse
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_no_match: true
+- name: InvoiceIssued without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceIssued
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was issued
+- name: InvoicePaymentSucceeded without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentSucceeded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was paid
+- name: InvoicePaymentFailed without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentFailed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 had a payment declined
+- name: InvoicePaymentActionRequired without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePaymentActionRequired
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 has a payment the card holder needs to confirm
+- name: InvoicePartiallyPaid without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePartiallyPaid
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was partly paid
+- name: InvoicePastDue without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicePastDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 is past due
+- name: InvoiceVoided without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceVoided
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was voided
+- name: InvoiceCurrencyMismatch without annotations falls back
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceCurrencyMismatch
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 is in a currency that does not match its billing account
+- name: marked uncollectible
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount-due: '1250.00'
+        event.billing.miloapis.com/invoice-number: ACME-0042
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceMarkedUncollectible
+    type: Warning
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: marked-uncollectible
+  exp_summary: 'The October 2026 invoice (ACME-0042) for billing account acme was marked uncollectible: USD 1250.00 unpaid'
+  exp_policy: billing.miloapis.com-invoice
+  exp_change_source: system
+- name: marked uncollectible without an amount or number
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceMarkedUncollectible
+    type: Warning
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: marked-uncollectible
+  exp_summary: The October 2026 invoice for billing account acme was marked uncollectible
+- name: marked uncollectible without detail
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceMarkedUncollectible
+    type: Warning
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 was marked uncollectible
+- name: due date changed
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/due-date: '2027-01-08T00:00:00Z'
+        event.billing.miloapis.com/previous-due-date: '2026-12-18T00:00:00Z'
+        event.billing.miloapis.com/invoice-number: ACME-0042
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceDueDateChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: due-date-changed
+  exp_summary: The due date of the October 2026 invoice (ACME-0042) for billing account acme moved from 18 December 2026 to 8 January 2027
+- name: due date set without a previous one
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+        event.billing.miloapis.com/period-start: '2026-10-01T00:00:00Z'
+        event.billing.miloapis.com/due-date: '2027-01-08T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceDueDateChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: due-date-changed
+  exp_summary: The due date of the October 2026 invoice for billing account acme is now 8 January 2027
+- name: due date changed without detail
+  event:
+    metadata:
+      name: acme-2026-10.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/billing-account: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: Invoice
+      name: acme-2026-10
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceDueDateChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: openmeter-provider
+  exp_rule: fallback
+  exp_summary: Invoice acme-2026-10 has a new due date

@@ -28,7 +28,7 @@ spec:
     role: Agent
 
     image:
-      tag: "0.55.0-alpine"
+      tag: "0.61.0-alpine"
 
     tolerations:
       - operator: Exists
@@ -36,10 +36,6 @@ spec:
     serviceAccount:
       create: true
       name: billing-usage-collector
-
-    env:
-      - name: BILLING_GATEWAY_URL
-        value: "http://billing-gateway.billing-system.svc.cluster.local:8080"
 
     customConfig:
       data_dir: "/vector-data-dir"
@@ -66,7 +62,11 @@ spec:
           type: http
           inputs:
             - clean_cloudevents
-          uri: "${BILLING_GATEWAY_URL}/v1/usage/events:batchIngest"
+          # Vector 0.57+ no longer expands ${VAR} in config, so the gateway
+          # address is a literal. This default reaches the in-cluster gateway;
+          # deployments that ship elsewhere replace this field with a
+          # JSON6902 patch on the HelmRelease.
+          uri: "http://billing-gateway.billing-system.svc.cluster.local:8080/v1/usage/events:batchIngest"
           method: post
           encoding:
             codec: json

@@ -163,6 +163,10 @@ if err != nil {
    `type`, `Project` → `subject` (`projects/<name>`), `Source` and
    `OccurredAt` to their CloudEvents attributes; `Quantity`, `Dimensions`,
    and `Resource` populate `data`.
+   If you set `IdempotencyKey`, the `id` is derived from it, so recording
+   the same observation again (for example after a reconcile retry) gives
+   the same `id` and is deduplicated downstream instead of billed twice.
+   Without it, every `Record` call gets a new random ULID.
 3. **Durable handoff to Vector.** POSTs the event over localhost HTTP to
    the node's Vector Agent. Retries transient failures with bounded
    exponential backoff. `Record` returns success only after the Agent
@@ -206,9 +210,9 @@ your `Record` call.
 - **Owning the meter catalog format.** `MeterDefinition` /
   `MonitoredResourceType` are platform-owned CRDs. Use them; do not
   fork.
-- **Provider-specific code.** No service imports the Amberflo SDK (or
-  any successor). Vendor swaps are a provider-controller change, not a
-  service-code change.
+- **Provider-specific code.** No service imports a billing vendor's SDK
+  (OpenMeter today, Amberflo before it). Vendor swaps are a
+  provider-controller change, not a service-code change.
 - **Pricing.** Rates, tiers, currencies, and invoice generation live in
   the pricing engine. Meters carry FOCUS `consumedUnit` / `pricingUnit`
   hints; the pricing engine consumes them.

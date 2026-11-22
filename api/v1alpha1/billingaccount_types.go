@@ -347,6 +347,26 @@ type BillingAccountStatus struct {
 	// +listMapKey=name
 	Discounts []BillingAccountDiscount `json:"discounts,omitempty"`
 
+	// Contract summarises the contract on the account's BillingEntitlement,
+	// copied with its fees from the contract's published Offer so customers
+	// can see their contract without reading the entitlement or the Offer.
+	// Set from when the contract is added, including before it starts.
+	// Cleared when the account has no contract, or its Offer isn't
+	// published.
+	//
+	// +kubebuilder:validation:Optional
+	Contract *BillingAccountContract `json:"contract,omitempty"`
+
+	// Prices lists every service pricing in the account's Offer, copied from the
+	// Offer's published snapshot so customers can see what they're billed at
+	// without reading the Offer: usage rates and fixed fees, each before its
+	// discount, which is also given. Cleared when the account has no published Offer.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
+	Prices []BillingAccountPrice `json:"prices,omitempty"`
+
 	// ObservedGeneration is the most recent generation observed by the controller.
 	//
 	// +kubebuilder:validation:Optional
@@ -416,6 +436,240 @@ type BillingAccountDiscount struct {
 	// +kubebuilder:validation:Minimum=0
 	// +kubebuilder:validation:Maximum=100
 	Percentage int32 `json:"percentage"`
+}
+
+// BillingAccountContract is the contract an account is billed under.
+type BillingAccountContract struct {
+	// StartsAt is when the contract starts, at midnight UTC: its one-time
+	// fees are charged then, and its monthly fees bill from then.
+	//
+	// +kubebuilder:validation:Required
+	StartsAt metav1.Time `json:"startsAt"`
+
+	// BillingDayOfMonth is the day of the month the contract bills on: the
+	// day it starts, or the account's invoice day for a contract whose
+	// billingDay is InvoiceDay. Months shorter than it bill on their last
+	// day.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=31
+	BillingDayOfMonth int32 `json:"billingDayOfMonth"`
+
+	// BillingDay is how the contract chose its billing day, from its
+	// contract.billingDay: StartDate bills on the day it starts, so every
+	// period is whole; InvoiceDay bills on the account's invoice day, so the
+	// first period runs from the start to the next billing date and is
+	// prorated, and quarterly and annual fees bill in January, April, July
+	// and October, and in January.
+	//
+	// +kubebuilder:validation:Optional
+	BillingDay ContractBillingDay `json:"billingDay,omitempty"`
+
+	// Fees are the contract's fixed fees, before discounts: its one-time
+	// fees, such as a setup fee, and its recurring ones, such as a monthly
+	// fee. Discounts on them are listed in status.discounts. A contract
+	// amended after it started omits the one-time fees already charged.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=map
+	// +listMapKey=name
+	Fees []BillingAccountContractFee `json:"fees,omitempty"`
+
+	// UsageBilled is true when the contract also bills usage, at the rates
+	// in its Offer, on top of its fees.
+	//
+	// +kubebuilder:validation:Optional
+	UsageBilled bool `json:"usageBilled"`
+}
+
+// BillingAccountContractFee is one of a contract's fixed fees.
+type BillingAccountContractFee struct {
+	// Name is the metadata.name of the fee's ServicePricing.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// DisplayName is the fee's label, as invoices show it (e.g. "Setup
+	// fee").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	DisplayName string `json:"displayName,omitempty"`
+
+	// SKU is the fee's product code, from its pricing. Empty when it has none.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	SKU string `json:"sku,omitempty"`
+
+	// ServiceRef is the service the fee is for. Empty for a fee that isn't
+	// for any one service.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	ServiceRef string `json:"serviceRef,omitempty"`
+
+	// ChargeType is OneTime for a fee charged once, when the contract
+	// starts, or Recurring for one charged every interval.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Enum=OneTime;Recurring
+	ChargeType ChargeType `json:"chargeType"`
+
+	// Amount is the fee's unit amount as a decimal string in currency (e.g.
+	// "2400.00"). The contract charges it quantity times.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)(\.\d+)?$`
+	Amount string `json:"amount"`
+
+	// Quantity is how many of the fee the contract charges, so the fee
+	// charged is amount times quantity (e.g. 3 × "1000.00").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	Quantity int32 `json:"quantity,omitempty"`
+
+	// PricingUnit is what amount is per (e.g. "port"), so the fee reads
+	// "4 port × $300.00". Empty when the quantity is a count of the fee.
+	//
+	// +kubebuilder:validation:Optional
+	PricingUnit string `json:"pricingUnit,omitempty"`
+
+	// Currency is the ISO 4217 currency code of amount.
+	//
+	// +kubebuilder:validation:Required
+	Currency string `json:"currency"`
+
+	// Interval is how often a Recurring fee is charged (monthly, quarterly
+	// or annual), so amount is per interval. Empty for a OneTime fee.
+	//
+	// +kubebuilder:validation:Optional
+	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// BillingTiming is when a Recurring fee is invoiced: InAdvance at the
+	// start of each period, or InArrears at its end, with that period's
+	// usage. Empty for a OneTime fee, which is invoiced when it's charged.
+	//
+	// +kubebuilder:validation:Optional
+	BillingTiming BillingTiming `json:"billingTiming,omitempty"`
+
+	// Periods is how many intervals a Recurring fee is charged for,
+	// counted from startsAt. Empty when the fee has no end.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	Periods int32 `json:"periods,omitempty"`
+
+	// EndsAt is when a Recurring fee with periods stops: the end of its
+	// last period, on the contract's billing day. Empty when the fee has
+	// no end.
+	//
+	// +kubebuilder:validation:Optional
+	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+}
+
+// BillingAccountPrice is one service pricing in the account's Offer, as its
+// published snapshot bills it: a Usage pricing's rates, or a OneTime or
+// Recurring fee's amount. Like BillingAccountDiscount, it doesn't name the
+// Offer, and it leaves out how usage is converted into pricingUnit, how the
+// pricing is taxed and which list pricing it's based on.
+type BillingAccountPrice struct {
+	// Name is the metadata.name of the ServicePricing.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
+
+	// ServiceRef is the service the pricing belongs to (e.g.
+	// "networking.datumapis.com"). Empty for a fee that isn't for any one
+	// service.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	ServiceRef string `json:"serviceRef,omitempty"`
+
+	// DisplayName is the pricing's human-readable label (e.g. "ALB
+	// Requests").
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=128
+	DisplayName string `json:"displayName,omitempty"`
+
+	// SKU is the pricing's product code. Empty when it has none.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	SKU string `json:"sku,omitempty"`
+
+	// ChargeType is Usage for metered consumption billed at rates, OneTime
+	// for a fee charged once, or Recurring for one charged every interval.
+	//
+	// +kubebuilder:validation:Required
+	ChargeType ChargeType `json:"chargeType"`
+
+	// Currency is the ISO 4217 currency code of rates and amount.
+	//
+	// +kubebuilder:validation:Required
+	Currency string `json:"currency"`
+
+	// Metric is the meterName of the meter a Usage pricing bills (e.g.
+	// "networking.datumapis.com/alb/requests"). Empty for a fee.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=253
+	Metric string `json:"metric,omitempty"`
+
+	// PricingUnit is what a Usage pricing's rates are per (e.g. "gib"), or
+	// what a fee's amount is per (e.g. "port"). Empty for a fee whose
+	// quantity is a count of the fee.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	PricingUnit string `json:"pricingUnit,omitempty"`
+
+	// Rates are a Usage pricing's rates per pricingUnit, before discount,
+	// in order: each flat or tiered, optionally for one dimension value,
+	// with the last rate without a match applying to the rest. Empty for a
+	// fee.
+	//
+	// +kubebuilder:validation:Optional
+	// +listType=atomic
+	Rates []PricingRate `json:"rates,omitempty"`
+
+	// Amount is a OneTime or Recurring fee's unit amount, before discount,
+	// as a decimal string in currency (e.g. "2400.00"). The fee is charged
+	// quantity times. Empty for a Usage pricing.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^(0|[1-9]\d*)(\.\d+)?$`
+	Amount string `json:"amount,omitempty"`
+
+	// Quantity is how many of a fee the Offer charges, so the fee charged
+	// is amount times quantity (e.g. 3 × "1000.00"). Empty for a Usage
+	// pricing.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	Quantity int32 `json:"quantity,omitempty"`
+
+	// Interval is how often a Recurring fee is charged (monthly, quarterly
+	// or annual), so amount is per interval. Empty otherwise.
+	//
+	// +kubebuilder:validation:Optional
+	Interval ChargeInterval `json:"interval,omitempty"`
+
+	// DiscountPercentage is the pricing's resolved discount, a whole number
+	// up to 100, off its rates or amount. Empty when it has none.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=0
+	// +kubebuilder:validation:Maximum=100
+	DiscountPercentage int32 `json:"discountPercentage,omitempty"`
 }
 
 // BillingAccount is the Schema for the billingaccounts API. It represents a

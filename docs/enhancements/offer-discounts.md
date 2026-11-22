@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -20,6 +20,7 @@ latest-milestone: "v0"
   - [Validation](#validation)
   - [Provider Requirements](#provider-requirements)
   - [Service Catalog](#service-catalog)
+- [Implementation History](#implementation-history)
 
 Tracked in [#132](https://github.com/milo-os/billing/issues/132).
 
@@ -197,6 +198,9 @@ status:
   Offer has no snapshot yet.
 - It doesn't name the Offer or say whether a discount was set for the whole
   Offer or for one service.
+- `status.prices` lists the same pricings with their rates or amounts, each
+  before its discount, and gives a discount above `0` as `discountPercentage`.
+  It's set whenever the account has a published Offer, discounted or not.
 
 ## Design Details
 
@@ -229,3 +233,14 @@ With Offer-level discounts, **`service-catalog` requires no changes**:
 - `service-catalog` fans out standard `ServicePricing` resources as before.
 - Commercial packaging, customer tiers, and discounting live entirely within
   the billing domain on `Offer` resources.
+
+## Implementation History
+
+- 2026-10-23: Enhancement drafted, first for `ServicePricing` and Offer
+  discounts, then refocused on Offer-level discounts.
+- 2026-10-26: Percentage discounts on Offers implemented in billing, for
+  every charge type, across the whole Offer or for named services.
+- 2026-10-27: openmeter-provider applies the discounts in plan rate cards
+  and in the spend `UsageQuery` returns.
+- 2026-10-29: An account's Offer discounts are published on
+  `BillingAccount` status for the portals to show.

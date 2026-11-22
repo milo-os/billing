@@ -64,6 +64,8 @@ const (
 // InvoiceRequestSpec defines the desired state of an InvoiceRequest.
 //
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
+// +kubebuilder:validation:XValidation:rule="!has(self.draft) || !self.draft || self.mode == 'Preview'",message="draft is only for a Preview"
+// +kubebuilder:validation:XValidation:rule="!has(self.contractDraft) || self.mode == 'Preview'",message="contractDraft is only for a Preview"
 type InvoiceRequestSpec struct {
 	// BillingAccountRef references the BillingAccount to invoice, in the
 	// same namespace.
@@ -76,7 +78,53 @@ type InvoiceRequestSpec struct {
 	//
 	// +kubebuilder:validation:Required
 	Mode InvoiceRequestMode `json:"mode"`
+
+	// Draft, on a Preview, also leaves the invoice as a draft in the
+	// invoicing provider's own system, for staff to open there: with Stripe,
+	// a draft invoice in the Stripe dashboard. The draft is never finalized
+	// or sent, and the provider deletes it after a day. status.draft links
+	// to it. Providers that can't make one complete the Preview without it.
+	//
+	// +kubebuilder:validation:Optional
+	Draft bool `json:"draft,omitempty"`
+
+	// ContractDraft, on a Preview, previews the first invoice of a contract
+	// that isn't published yet, instead of what the account is billed
+	// for now. Its Offer must be a contract Offer for this billing account,
+	// labelled with ContractBillingAccountLabel and
+	// ContractOrganizationLabel, usually still at launch stage Draft.
+	//
+	// +kubebuilder:validation:Optional
+	ContractDraft *InvoiceRequestContractDraft `json:"contractDraft,omitempty"`
 }
+
+// InvoiceRequestContractDraft is a contract to preview before it's
+// published: its Offer, and the terms its BillingEntitlement would get.
+type InvoiceRequestContractDraft struct {
+	// OfferRef names the contract's Offer.
+	//
+	// +kubebuilder:validation:Required
+	OfferRef OfferReference `json:"offerRef"`
+
+	// StartsAt is when the contract would start, at midnight UTC, as
+	// BillingContract.StartsAt.
+	//
+	// +kubebuilder:validation:Required
+	StartsAt metav1.Time `json:"startsAt"`
+
+	// BillingDay is the day of the month it would bill on, as
+	// BillingContract.BillingDay. Defaults to StartDate.
+	//
+	// +kubebuilder:validation:Optional
+	BillingDay ContractBillingDay `json:"billingDay,omitempty"`
+}
+
+// Labels on a contract's Offer, which the staff portal sets: the billing
+// account it's for, and that account's organization.
+const (
+	ContractBillingAccountLabel = "billing.miloapis.com/contract-billing-account"
+	ContractOrganizationLabel   = "billing.miloapis.com/contract-organization"
+)
 
 // InvoiceRequestLine is one charge on a requested invoice.
 type InvoiceRequestLine struct {
@@ -98,6 +146,49 @@ type InvoiceRequestLine struct {
 	// +kubebuilder:validation:Required
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	Amount string `json:"amount"`
+
+	// Quantity is how many are charged, as a decimal string. Unset when
+	// the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^[0-9]+(\.[0-9]+)?$`
+	Quantity string `json:"quantity,omitempty"`
+
+	// UnitAmount is the price of one, before discounts, as a decimal
+	// string. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	UnitAmount string `json:"unitAmount,omitempty"`
+
+	// Discount is what discounts take off the charge, as a decimal string.
+	// Amount is already after it.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Discount string `json:"discount,omitempty"`
+
+	// Tax is the tax on the charge, as a decimal string. Unset when the
+	// provider didn't work out tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Tax string `json:"tax,omitempty"`
+}
+
+// InvoiceRequestDraft is the draft a Preview with draft left in the
+// invoicing provider's own system.
+type InvoiceRequestDraft struct {
+	// URL opens the draft in the provider's dashboard.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=2048
+	URL string `json:"url"`
+
+	// ExpiresAt is when the provider deletes the draft.
+	//
+	// +kubebuilder:validation:Optional
+	ExpiresAt *metav1.Time `json:"expiresAt,omitempty"`
 }
 
 // InvoiceRequestInvoiceRef references the Invoice an Issue request created.
@@ -135,6 +226,43 @@ type InvoiceRequestStatus struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
 	Total string `json:"total,omitempty"`
+
+	// Tax is the invoice's tax, as a decimal string, worked out from the
+	// customer's address, tax IDs and exemptions and each charge's tax
+	// code. Unset when the provider didn't work out tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	Tax string `json:"tax,omitempty"`
+
+	// TotalWithTax is what the customer would pay: Total plus Tax. Unset
+	// with Tax.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	TotalWithTax string `json:"totalWithTax,omitempty"`
+
+	// StartingBalance is the account's balance the provider carries onto
+	// the invoice, as a decimal string: positive for what the customer
+	// already owes, such as an earlier invoice too small to charge,
+	// negative for credit. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	StartingBalance string `json:"startingBalance,omitempty"`
+
+	// AmountDue is what the customer would be charged: TotalWithTax with
+	// StartingBalance applied. Unset when the provider didn't say.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Pattern=`^-?[0-9]+(\.[0-9]+)?$`
+	AmountDue string `json:"amountDue,omitempty"`
+
+	// Draft links to the draft a Preview with spec.draft left in the
+	// invoicing provider's own system.
+	//
+	// +kubebuilder:validation:Optional
+	Draft *InvoiceRequestDraft `json:"draft,omitempty"`
 
 	// InvoiceRef references the Invoice an Issue request created, once the
 	// provider has recorded it.

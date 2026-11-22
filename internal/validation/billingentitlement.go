@@ -5,6 +5,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -40,6 +41,8 @@ func ValidateBillingEntitlementCreate(
 // A contract may be added, which moves an existing account onto one, and
 // is then checked like a new one. It can't be removed or moved: CEL rules
 // on the CRD enforce it, and they're repeated here for defence in depth.
+// Once a contract has started, a change of Offer amends it, and the new
+// Offer can't charge one-time fees (see validateContractAmendment).
 func ValidateBillingEntitlementUpdate(
 	ctx context.Context,
 	c client.Client,
@@ -61,9 +64,41 @@ func ValidateBillingEntitlementUpdate(
 	case !oldContract.StartsAt.Equal(&newContract.StartsAt):
 		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "contract", "startsAt"),
 			"contract.startsAt is immutable"))
+	case oldBE.Spec.OfferRef.Name != newBE.Spec.OfferRef.Name && !newContract.StartsAt.After(now):
+		allErrs = append(allErrs, validateContractAmendment(ctx, c, newBE)...)
 	}
 
 	return allErrs
+}
+
+// validateContractAmendment checks the Offer a started contract is amended
+// to charges no one-time fees. Its one-time fees were charged when it
+// started, and billing providers charge an Offer's one-time fees whenever
+// an account moves onto it (OpenMeter does when the amendment's
+// subscription starts), so the amendment would charge them again. The
+// staff portal leaves them out of an amendment for the same reason. A
+// missing or unreadable Offer is reported by validateBillingEntitlementOfferRef.
+func validateContractAmendment(
+	ctx context.Context,
+	c client.Client,
+	be *billingv1alpha1.BillingEntitlement,
+) field.ErrorList {
+	var offer billingv1alpha1.Offer
+	if err := c.Get(ctx, types.NamespacedName{Name: be.Spec.OfferRef.Name}, &offer); err != nil {
+		return nil
+	}
+	var oneTime []string
+	for _, sp := range offer.Spec.ServicePricings {
+		if sp.Spec.ChargeType == billingv1alpha1.ChargeTypeOneTime {
+			oneTime = append(oneTime, sp.Name)
+		}
+	}
+	if len(oneTime) == 0 {
+		return nil
+	}
+	return field.ErrorList{field.Forbidden(field.NewPath("spec", "offerRef", "name"), fmt.Sprintf(
+		"the contract has started, so offer %q can't charge one-time fees (%s): they'd be charged again when the amendment takes effect",
+		offer.Name, strings.Join(oneTime, ", ")))}
 }
 
 // validateBillingContract checks a new contract starts at midnight UTC,

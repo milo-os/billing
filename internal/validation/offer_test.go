@@ -379,6 +379,216 @@ func TestValidateOfferServicePricingRefs(t *testing.T) {
 			t.Errorf("got %d errors, want 1: %v", len(errs), errs)
 		}
 	})
+
+	t.Run("quantity on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", Quantity: 2},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].quantity" {
+			t.Errorf("want one error on quantity, got %v", errs)
+		}
+	})
+
+	t.Run("billingTiming on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", BillingTiming: billingv1alpha1.BillingTimingInArrears},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].billingTiming" {
+			t.Errorf("want one error on billingTiming, got %v", errs)
+		}
+	})
+	t.Run("periods on a Usage pricing rejected", func(t *testing.T) {
+		offer := newDraftOffer("compute-pro-v1")
+		offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+			{Name: "compute-cpu-allocated-v1", Periods: 12},
+		}
+		errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+		if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].periods" {
+			t.Errorf("want one error on periods, got %v", errs)
+		}
+	})
+}
+
+func TestValidateOfferServicePricingRefs_BillingTimingOnFees(t *testing.T) {
+	monthly := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "rack-space-1000", Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeRecurring,
+			Currency:   "USD",
+			Amount:     "1000.00",
+			Interval:   billingv1alpha1.ChargeIntervalMonthly,
+		},
+	}
+	setup := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-1500", Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(monthly, setup).Build()
+
+	offer := newDraftOffer("contract")
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "rack-space-1000", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+		{Name: "setup-1500", BillingTiming: billingv1alpha1.BillingTimingInAdvance},
+	}
+	errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[1].billingTiming" {
+		t.Errorf("want one error on the one-time fee's billingTiming, got %v", errs)
+	}
+}
+
+func TestValidateOfferUpdate_SnapshotBillingTimingNotRecurring(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, BillingTiming: billingv1alpha1.BillingTimingInAdvance, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].billingTiming" {
+		t.Errorf("want one error on billingTiming, got %v", errs)
+	}
+}
+
+func TestSnapshotBillingTiming(t *testing.T) {
+	recurring := billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeRecurring}
+	tests := []struct {
+		name string
+		snap billingv1alpha1.ServicePricingSnapshot
+		want billingv1alpha1.BillingTiming
+	}{
+		{"recurring from before billingTiming", billingv1alpha1.ServicePricingSnapshot{Spec: recurring}, billingv1alpha1.BillingTimingInAdvance},
+		{"recurring in arrears", billingv1alpha1.ServicePricingSnapshot{Spec: recurring, BillingTiming: billingv1alpha1.BillingTimingInArrears}, billingv1alpha1.BillingTimingInArrears},
+		{"one-time", billingv1alpha1.ServicePricingSnapshot{Spec: billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeOneTime}}, ""},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := SnapshotBillingTiming(tt.snap); got != tt.want {
+				t.Errorf("got %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestValidateOfferUpdate_SnapshotQuantityOnUsage(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, Quantity: 3, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].quantity" {
+		t.Errorf("want one error on quantity, got %v", errs)
+	}
+}
+
+func TestValidateOfferUpdate_SnapshotPeriodsNotRecurring(t *testing.T) {
+	old := newDraftOffer("compute-pro-v1")
+	old.Spec.LaunchStage = billingv1alpha1.OfferLaunchStageGA
+	newOffer := old.DeepCopy()
+	sp := cpuPricing("compute-cpu-allocated-v1", "0.025")
+	newOffer.Spec.ServicePricings = []billingv1alpha1.ServicePricingSnapshot{
+		{Name: sp.Name, Periods: 12, Spec: sp.Spec},
+	}
+
+	errs := ValidateOfferUpdate(old, newOffer, OfferUpdateOptions{AllowSnapshotWrite: true})
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricings[0].periods" {
+		t.Errorf("want one error on periods, got %v", errs)
+	}
+}
+
+func TestFeeEndsAt(t *testing.T) {
+	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name     string
+		startsAt time.Time
+		interval billingv1alpha1.ChargeInterval
+		periods  int32
+		want     time.Time
+	}{
+		{"no end", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalMonthly, 0, time.Time{}},
+		{"36 monthly", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalMonthly, 36, day(2029, time.April, 18)},
+		{"unset interval is monthly", day(2026, time.April, 18), "", 2, day(2026, time.June, 18)},
+		{"4 quarterly", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalQuarterly, 4, day(2027, time.April, 18)},
+		{"3 annual", day(2026, time.April, 18), billingv1alpha1.ChargeIntervalAnnual, 3, day(2029, time.April, 18)},
+		{"31st into a short month", day(2026, time.January, 31), billingv1alpha1.ChargeIntervalMonthly, 1, day(2026, time.February, 28)},
+		{"29 February into a non-leap year", day(2028, time.February, 29), billingv1alpha1.ChargeIntervalAnnual, 1, day(2029, time.February, 28)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := FeeEndsAt(tt.startsAt, tt.interval, tt.periods); !got.Equal(tt.want) {
+				t.Errorf("FeeEndsAt() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNextBillingDate(t *testing.T) {
+	day := func(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
+	tests := []struct {
+		name       string
+		t          time.Time
+		invoiceDay int32
+		interval   billingv1alpha1.ChargeInterval
+		want       time.Time
+	}{
+		{"monthly, mid-month", day(2026, time.November, 15), 1, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.December, 1)},
+		{"monthly, on the day", day(2026, time.November, 1), 1, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.November, 1)},
+		{"monthly, before a later invoice day", day(2026, time.November, 3), 10, billingv1alpha1.ChargeIntervalMonthly, day(2026, time.November, 10)},
+		{"monthly, across a year", day(2026, time.December, 15), 1, "", day(2027, time.January, 1)},
+		{"quarterly", day(2026, time.November, 15), 1, billingv1alpha1.ChargeIntervalQuarterly, day(2027, time.January, 1)},
+		{"quarterly, on a quarter", day(2026, time.April, 1), 1, billingv1alpha1.ChargeIntervalQuarterly, day(2026, time.April, 1)},
+		{"annual", day(2026, time.February, 15), 5, billingv1alpha1.ChargeIntervalAnnual, day(2027, time.January, 5)},
+		{"annual, before the day in January", day(2026, time.January, 2), 5, billingv1alpha1.ChargeIntervalAnnual, day(2026, time.January, 5)},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NextBillingDate(tt.t, tt.invoiceDay, tt.interval); !got.Equal(tt.want) {
+				t.Errorf("NextBillingDate() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestContractFeeEndsAt(t *testing.T) {
+	startsAt := metav1.NewTime(time.Date(2026, time.November, 15, 0, 0, 0, 0, time.UTC))
+	onStart := &billingv1alpha1.BillingContract{StartsAt: startsAt}
+	onInvoiceDay := &billingv1alpha1.BillingContract{StartsAt: startsAt, BillingDay: billingv1alpha1.ContractBillingDayInvoiceDay}
+
+	if got, want := ContractFeeEndsAt(onStart, 1, billingv1alpha1.ChargeIntervalMonthly, 12),
+		time.Date(2027, time.November, 15, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("billed on its start: ends %v, want %v", got, want)
+	}
+	// 15 November to 1 December is prorated, then 12 whole months.
+	if got, want := ContractFeeEndsAt(onInvoiceDay, 1, billingv1alpha1.ChargeIntervalMonthly, 12),
+		time.Date(2027, time.December, 1, 0, 0, 0, 0, time.UTC); !got.Equal(want) {
+		t.Errorf("billed on the invoice day: ends %v, want %v", got, want)
+	}
+	if got := ContractFeeEndsAt(onInvoiceDay, 1, billingv1alpha1.ChargeIntervalMonthly, 0); !got.IsZero() {
+		t.Errorf("no periods: ends %v, want no end", got)
+	}
+}
+
+func TestSnapshotQuantity(t *testing.T) {
+	if got := SnapshotQuantity(billingv1alpha1.ServicePricingSnapshot{}); got != 1 {
+		t.Errorf("unset quantity: got %d, want 1", got)
+	}
+	if got := SnapshotQuantity(billingv1alpha1.ServicePricingSnapshot{Quantity: 4}); got != 4 {
+		t.Errorf("got %d, want 4", got)
+	}
 }
 
 func TestValidateOfferUpdate_SnapshotPricesMeterOnce(t *testing.T) {

@@ -88,7 +88,9 @@ func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
 		name        string
 		old, new    *time.Time
 		changeOffer bool
-		wantErr     bool
+		// oneTime makes the new Offer charge a one-time fee.
+		oneTime bool
+		wantErr bool
 	}{
 		{name: "no contract either side"},
 		{name: "contract unchanged", old: &march18, new: &march18},
@@ -101,6 +103,11 @@ func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
 		{name: "start moved", old: &march18, new: &march19, wantErr: true},
 		// A contract that has started stays valid once its day has passed.
 		{name: "started contract unchanged", old: &march17, new: &march17},
+		// An amendment would charge the one-time fees again.
+		{name: "started contract amended with a one-time fee", old: &march17, new: &march17, changeOffer: true, oneTime: true, wantErr: true},
+		{name: "contract starting today amended with a one-time fee", old: &march18, new: &march18, changeOffer: true, oneTime: true, wantErr: true},
+		{name: "contract not started yet changed to a one-time fee", old: &march19, new: &march19, changeOffer: true, oneTime: true},
+		{name: "contract added with a one-time fee", new: &march19, changeOffer: true, oneTime: true},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -109,9 +116,14 @@ func TestValidateBillingEntitlementUpdate_Contract(t *testing.T) {
 				other := &billingv1alpha1.Offer{
 					ObjectMeta: metav1.ObjectMeta{Name: "bare-metal-acme-v2"},
 					Spec: billingv1alpha1.OfferSpec{
-						LaunchStage:     billingv1alpha1.OfferLaunchStageGA,
-						ServicePricings: []billingv1alpha1.ServicePricingSnapshot{{Name: "monthly-fee"}},
+						LaunchStage: billingv1alpha1.OfferLaunchStageGA,
+						ServicePricings: []billingv1alpha1.ServicePricingSnapshot{{Name: "monthly-fee",
+							Spec: billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeRecurring}}},
 					},
+				}
+				if tt.oneTime {
+					other.Spec.ServicePricings = append(other.Spec.ServicePricings, billingv1alpha1.ServicePricingSnapshot{
+						Name: "setup-fee", Spec: billingv1alpha1.ServicePricingSpec{ChargeType: billingv1alpha1.ChargeTypeOneTime}})
 				}
 				if err := c.Create(context.Background(), other); err != nil {
 					t.Fatal(err)

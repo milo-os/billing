@@ -1,0 +1,438 @@
+# BillingAccount: accounts created, default payment method and invoicing
+# status events, and a user setting the default payment method.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: create with a business name
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 201
+    requestObject:
+      spec:
+        contactInfo:
+          businessName: Acme Corp
+          name: Jane Doe
+    responseObject: &id001
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: create-with-business-name
+  exp_summary: alice@example.com created billing account Acme Corp
+  exp_change_source: human
+- name: create with only a contact name
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 201
+    requestObject:
+      spec:
+        contactInfo:
+          name: Jane Doe
+    responseObject: *id001
+  exp_rule: create-with-contact-name
+  exp_summary: alice@example.com created billing account for Jane Doe
+- name: create without contact info links the account
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 201
+    requestObject:
+      spec: {}
+    responseObject: *id001
+  exp_rule: create-fallback
+  exp_summary: alice@example.com created billing account acme
+  exp_links:
+  - marker: acme
+    apiGroup: billing.miloapis.com
+    kind: BillingAccount
+    namespace: organization-acme
+    name: acme
+- name: billing makes a card the default
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/payment-method: card-1
+        event.billing.miloapis.com/card-brand: mastercard
+        event.billing.miloapis.com/card-last4: '4444'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: DefaultPaymentMethodChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: default-payment-method-card
+  exp_summary: Mastercard ending 4444 is now the default payment method for billing account acme
+- name: billing makes a bank account the default
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/payment-method: bank-1
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: DefaultPaymentMethodChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: default-payment-method
+  exp_summary: Payment method bank-1 is now the default payment method for billing account acme
+- name: DefaultPaymentMethodChanged without annotations falls back
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: DefaultPaymentMethodChanged
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: default-payment-method-fallback
+  exp_summary: Billing account acme has a new default payment method
+- name: past due
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice: acme-2026-10
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicingPastDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: past-due
+  exp_summary: Billing account acme is past due on invoice acme-2026-10
+- name: past due without the invoice
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicingPastDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: invoicing-status
+  exp_summary: Billing account acme is past due
+- name: current again
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoicingCurrent
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: invoicing-status
+  exp_summary: Billing account acme is no longer past due
+- name: a user sets the default payment method
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        defaultPaymentMethodRef:
+          name: card-1
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: set-default-payment-method
+  exp_summary: alice@example.com made payment method card-1 the default for billing account acme
+- name: changing the default with other fields is a plain update
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        defaultPaymentMethodRef:
+          name: card-1
+        currencyCode: USD
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update
+  exp_summary: alice@example.com updated billing account acme
+- name: clearing the default is a plain update
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        defaultPaymentMethodRef: null
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update
+  exp_summary: alice@example.com updated billing account acme
+- name: invoice sent with its Invoice
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+        event.billing.miloapis.com/due-date: '2026-12-18T00:00:00Z'
+        event.billing.miloapis.com/invoice: acme-2026-10
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent-linked
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026'
+  exp_policy: billing.miloapis.com-billingaccount
+  exp_change_source: system
+- name: invoice sent before it is projected
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+        event.billing.miloapis.com/due-date: '2026-12-18T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00, due 18 December 2026'
+- name: invoice sent without a due date
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+        event.billing.miloapis.com/currency: USD
+        event.billing.miloapis.com/amount: '1250.00'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent
+  exp_summary: 'Invoice ACME-0042 for billing account acme was emailed: USD 1250.00'
+- name: invoice sent without detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/invoice-number: ACME-0042
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: InvoiceSent
+    type: Normal
+    message: fallback message
+    source:
+      component: stripe-provider
+  exp_rule: invoice-sent-fallback
+  exp_summary: An invoice for billing account acme was emailed

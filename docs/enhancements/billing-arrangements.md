@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implemented
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -89,7 +89,8 @@ will spend more, pay on terms, and bring colleagues with them.
   reflect the terms they agreed (net days, PO number, accounts payable
   contact).
 - Every non-card account has a limit: a credit limit for invoice terms, an end
-  date for sponsored access.
+  date for sponsored access. Until something alerts on or enforces the credit
+  limit, it's optional and the staff portal doesn't ask for it.
 
 ### Non-Goals
 
@@ -497,7 +498,7 @@ Phase 1 is implemented in this repository:
 
 - **`BillingArrangement`** (namespaced, in the organization's namespace)
   records terms staff granted to a billing account: `type: Invoice`, net
-  days (default 30), a credit limit in the account's currency, an
+  days (default 30), an optional credit limit in the account's currency, an
   accounts payable email, PO number and agreement reference, an optional
   `startsAt`/`endsAt` window, and an internal `reason`. Arrangements for one
   account can't overlap. Staff end terms early, or withdraw scheduled
@@ -739,6 +740,12 @@ Two gaps to close along the way:
   work and the plan for milo's emails and the Help Scout ticket.
 - 2026-11-02: The application emails moved from milo to billing, which owns
   applications and their decisions, so milo no longer depends on billing.
+- 2026-11-05: Recorded where delivery stands. Phases 1 and 2 are built.
+  Phase 3's automated invoicing shipped with openmeter-provider: since
+  2026-10-28 an account on invoice terms is invoiced through the Stripe
+  customer stripe-provider publishes for it, with no card. Credit-limit
+  alerts and phase 4 are not built. Customer applications are behind
+  cloud-portal's `PAYMENT_TERMS_ENABLED` setting.
 
 ## Future Work
 

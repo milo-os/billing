@@ -17,6 +17,18 @@ type InvoiceRequestLineApplyConfiguration struct {
 	// Amount is the charge after discounts and before tax, as a decimal
 	// string (e.g. "1500.00").
 	Amount *string `json:"amount,omitempty"`
+	// Quantity is how many are charged, as a decimal string. Unset when
+	// the provider didn't say.
+	Quantity *string `json:"quantity,omitempty"`
+	// UnitAmount is the price of one, before discounts, as a decimal
+	// string. Unset when the provider didn't say.
+	UnitAmount *string `json:"unitAmount,omitempty"`
+	// Discount is what discounts take off the charge, as a decimal string.
+	// Amount is already after it.
+	Discount *string `json:"discount,omitempty"`
+	// Tax is the tax on the charge, as a decimal string. Unset when the
+	// provider didn't work out tax.
+	Tax *string `json:"tax,omitempty"`
 }
 
 // InvoiceRequestLineApplyConfiguration constructs a declarative configuration of the InvoiceRequestLine type for use with
@@ -46,5 +58,37 @@ func (b *InvoiceRequestLineApplyConfiguration) WithPeriod(value *InvoicePeriodAp
 // If called multiple times, the Amount field is set to the value of the last call.
 func (b *InvoiceRequestLineApplyConfiguration) WithAmount(value string) *InvoiceRequestLineApplyConfiguration {
 	b.Amount = &value
+	return b
+}
+
+// WithQuantity sets the Quantity field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Quantity field is set to the value of the last call.
+func (b *InvoiceRequestLineApplyConfiguration) WithQuantity(value string) *InvoiceRequestLineApplyConfiguration {
+	b.Quantity = &value
+	return b
+}
+
+// WithUnitAmount sets the UnitAmount field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the UnitAmount field is set to the value of the last call.
+func (b *InvoiceRequestLineApplyConfiguration) WithUnitAmount(value string) *InvoiceRequestLineApplyConfiguration {
+	b.UnitAmount = &value
+	return b
+}
+
+// WithDiscount sets the Discount field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Discount field is set to the value of the last call.
+func (b *InvoiceRequestLineApplyConfiguration) WithDiscount(value string) *InvoiceRequestLineApplyConfiguration {
+	b.Discount = &value
+	return b
+}
+
+// WithTax sets the Tax field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Tax field is set to the value of the last call.
+func (b *InvoiceRequestLineApplyConfiguration) WithTax(value string) *InvoiceRequestLineApplyConfiguration {
+	b.Tax = &value
 	return b
 }

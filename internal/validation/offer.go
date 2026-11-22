@@ -5,6 +5,7 @@ package validation
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apiequality "k8s.io/apimachinery/pkg/api/equality"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -77,6 +78,27 @@ func ValidateOfferServicePricingRefs(
 			}
 			return append(allErrs, field.InternalError(fldPath.Index(i), fmt.Errorf("reading ServicePricing: %w", err)))
 		}
+		if ref.Quantity > 0 && sp.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("quantity"),
+				ref.Quantity,
+				quantityOnUsageMessage,
+			))
+		}
+		if ref.BillingTiming != "" && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("billingTiming"),
+				ref.BillingTiming,
+				billingTimingNotRecurringMessage,
+			))
+		}
+		if ref.Periods > 0 && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("periods"),
+				ref.Periods,
+				periodsNotRecurringMessage,
+			))
+		}
 		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
 	}
 
@@ -88,6 +110,155 @@ func ValidateOfferServicePricingRefs(
 		))
 	}
 	return allErrs
+}
+
+const quantityOnUsageMessage = "quantity is only allowed for OneTime and Recurring fees; " +
+	"a Usage pricing is charged for what was used"
+
+const billingTimingNotRecurringMessage = "billingTiming is only allowed for Recurring fees; " +
+	"a OneTime fee is invoiced when it's charged and usage at the end of the period"
+
+// SnapshotBillingTiming returns when a Recurring fee in a snapshot is
+// invoiced: the snapshot's billingTiming, or InAdvance for a snapshot taken
+// before it existed, which providers billed in advance. Empty for OneTime
+// and Usage pricings.
+func SnapshotBillingTiming(sp billingv1alpha1.ServicePricingSnapshot) billingv1alpha1.BillingTiming {
+	if sp.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+		return ""
+	}
+	if sp.BillingTiming != "" {
+		return sp.BillingTiming
+	}
+	return billingv1alpha1.BillingTimingInAdvance
+}
+
+// PricingsWithBillingTimingNotRecurring returns the names of OneTime and
+// Usage pricings that carry a billingTiming, which only Recurring fees may.
+func PricingsWithBillingTimingNotRecurring(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring && p.BillingTiming != "" {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
+
+const periodsNotRecurringMessage = "periods is only allowed for Recurring fees; " +
+	"a OneTime fee is charged once and a Usage pricing for what was used"
+
+// PricingsWithPeriodsNotRecurring returns the names of pricings other than
+// Recurring fees that carry periods, which only Recurring fees may.
+func PricingsWithPeriodsNotRecurring(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring && p.Periods > 0 {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
+
+// IntervalMonths returns how many months a Recurring fee's interval is:
+// 1 for monthly (and an unset interval), 3 for quarterly, 12 for annual.
+func IntervalMonths(interval billingv1alpha1.ChargeInterval) int {
+	switch interval {
+	case billingv1alpha1.ChargeIntervalQuarterly:
+		return 3
+	case billingv1alpha1.ChargeIntervalAnnual:
+		return 12
+	default:
+		return 1
+	}
+}
+
+// ContractBillsOnInvoiceDay reports whether a contract bills on the
+// account's invoice day, with a prorated first period, rather than on the
+// day it starts.
+func ContractBillsOnInvoiceDay(contract *billingv1alpha1.BillingContract) bool {
+	return contract != nil && contract.BillingDay == billingv1alpha1.ContractBillingDayInvoiceDay
+}
+
+// AccountInvoiceDay is the day of the month an account is invoiced on: its
+// payment terms' invoiceDayOfMonth, or the 1st under the standard terms.
+func AccountInvoiceDay(account *billingv1alpha1.BillingAccount) int32 {
+	if account != nil && account.Spec.PaymentTerms != nil && account.Spec.PaymentTerms.InvoiceDayOfMonth > 0 {
+		return account.Spec.PaymentTerms.InvoiceDayOfMonth
+	}
+	return billingv1alpha1.StandardPaymentTermsInvoiceDayOfMonth
+}
+
+// NextBillingDate returns the first date on or after t on which a fee
+// charged every interval bills, when billing falls on invoiceDay (1 to 28)
+// of every month, of January, April, July and October, or of January.
+// Billing providers count periods from January 2025, so quarters and years
+// start in January.
+func NextBillingDate(t time.Time, invoiceDay int32, interval billingv1alpha1.ChargeInterval) time.Time {
+	t = t.UTC()
+	months := IntervalMonths(interval)
+	date := time.Date(t.Year(), time.January, int(invoiceDay), 0, 0, 0, 0, time.UTC)
+	for date.After(t) {
+		date = date.AddDate(-1, 0, 0)
+	}
+	for date.Before(t) {
+		date = date.AddDate(0, months, 0)
+	}
+	return date
+}
+
+// ContractFeeEndsAt returns when a contract's Recurring fee charged for
+// periods intervals stops: periods intervals after the contract starts,
+// or, for a contract billed on the invoice day, after its first billing
+// date, so the prorated first period isn't counted. Zero for a fee with
+// no end.
+func ContractFeeEndsAt(contract *billingv1alpha1.BillingContract, invoiceDay int32,
+	interval billingv1alpha1.ChargeInterval, periods int32) time.Time {
+	start := contract.StartsAt.Time
+	if ContractBillsOnInvoiceDay(contract) {
+		start = NextBillingDate(start, invoiceDay, interval)
+	}
+	return FeeEndsAt(start, interval, periods)
+}
+
+// FeeEndsAt returns when a Recurring fee charged for periods intervals
+// from startsAt stops: periods intervals after startsAt, on startsAt's day
+// of the month, or the month's last day when it's shorter. It returns the
+// zero time when periods is 0, for a fee with no end.
+func FeeEndsAt(startsAt time.Time, interval billingv1alpha1.ChargeInterval, periods int32) time.Time {
+	if periods <= 0 {
+		return time.Time{}
+	}
+	start := startsAt.UTC()
+	months := IntervalMonths(interval) * int(periods)
+	first := time.Date(start.Year(), start.Month()+time.Month(months), 1, 0, 0, 0, 0, time.UTC)
+	day := start.Day()
+	if lastDay := time.Date(first.Year(), first.Month()+1, 0, 0, 0, 0, 0, time.UTC).Day(); day > lastDay {
+		day = lastDay
+	}
+	return time.Date(first.Year(), first.Month(), day,
+		start.Hour(), start.Minute(), start.Second(), start.Nanosecond(), time.UTC)
+}
+
+// SnapshotQuantity returns how many of a fee an Offer charges: the
+// snapshot's quantity, or 1 for a snapshot taken before quantities
+// existed.
+func SnapshotQuantity(sp billingv1alpha1.ServicePricingSnapshot) int32 {
+	if sp.Quantity > 0 {
+		return sp.Quantity
+	}
+	return 1
+}
+
+// UsagePricingsWithQuantity returns the names of Usage pricings that carry
+// a quantity, which only fees may.
+func UsagePricingsWithQuantity(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage && p.Quantity > 0 {
+			names = append(names, p.Name)
+		}
+	}
+	return names
 }
 
 // ServicePricingRefKey returns the key of the ServicePricing a ref names,
@@ -138,6 +309,29 @@ func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.E
 			dup.Pricings,
 			fmt.Sprintf("an Offer may price meter %q only once", dup.Metric),
 		))
+	}
+	for i, snap := range offer.Spec.ServicePricings {
+		if snap.Quantity > 0 && snap.Spec.ChargeType == billingv1alpha1.ChargeTypeUsage {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("quantity"),
+				snap.Quantity,
+				quantityOnUsageMessage,
+			))
+		}
+		if snap.BillingTiming != "" && snap.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("billingTiming"),
+				snap.BillingTiming,
+				billingTimingNotRecurringMessage,
+			))
+		}
+		if snap.Periods > 0 && snap.Spec.ChargeType != billingv1alpha1.ChargeTypeRecurring {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("periods"),
+				snap.Periods,
+				periodsNotRecurringMessage,
+			))
+		}
 	}
 	return allErrs
 }

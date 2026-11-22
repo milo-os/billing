@@ -1,0 +1,73 @@
+# SPDX-License-Identifier: AGPL-3.0-only
+
+# ActivityPolicy for Offer resources.
+# Offers are cluster-scoped, so these entries reach the platform timeline,
+# which only staff read: a draft contract, kept off the customer's timeline
+# until it's published, is recorded here. The account moving onto a
+# contract is recorded by the BillingEntitlement policy, on the
+# organization's timeline.
+#
+# Design principles:
+# - A contract's Offer carries the contract-billing-account and
+#   contract-organization labels the staff portal sets; its entries name the
+#   billing account (linked) and organization, and how many prices it has.
+# - A draft is an Offer at launchStage Draft with its start date, if picked,
+#   in the billing.miloapis.com/contract-starts-at annotation.
+# - The Offer controller's snapshot writes are left out by the system:
+#   prefix.
+# - Every rule guards the fields its summary reads, because a summary that
+#   errors sends the event to the dead-letter queue.
+apiVersion: activity.miloapis.com/v1alpha1
+kind: ActivityPolicy
+metadata:
+  name: billing.miloapis.com-offer
+spec:
+  resource:
+    apiGroup: billing.miloapis.com
+    kind: Offer
+
+  auditRules:
+    # "Jo saved a draft contract for billing account acme in organization acme-corp: 5 prices, starting 24 November 2026"
+    - name: create-contract-draft
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseObject.metadata) && has(audit.responseObject.metadata.labels) && 'billing.miloapis.com/contract-billing-account' in audit.responseObject.metadata.labels && 'billing.miloapis.com/contract-organization' in audit.responseObject.metadata.labels && has(audit.responseObject.spec) && has(audit.responseObject.spec.launchStage) && audit.responseObject.spec.launchStage == 'Draft' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} saved a draft contract for billing account {{ link(audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': 'organization-' + audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'], 'name': audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account']}) }} in organization {{ audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'] }}: {{ (has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) == 1 ? '1 price' : string(has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) + ' prices' }}{{ has(audit.responseObject.metadata.annotations) && 'billing.miloapis.com/contract-starts-at' in audit.responseObject.metadata.annotations ? ', starting ' + string(timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getMonth()] + ' ' + string(timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getFullYear()) : '' }}"
+
+    # A contract's Offer, made when it's set up, its fees change or a draft
+    # is published. The billing entitlement policy records the account moving
+    # onto it.
+    # "Jo created the contract offer contract-acme-1 for billing account acme in organization acme-corp: 5 prices"
+    - name: create-contract
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseObject.metadata) && has(audit.responseObject.metadata.labels) && 'billing.miloapis.com/contract-billing-account' in audit.responseObject.metadata.labels && 'billing.miloapis.com/contract-organization' in audit.responseObject.metadata.labels && has(audit.responseObject.spec) && has(audit.responseObject.spec.launchStage) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} created the contract offer {{ link(audit.objectRef.name, audit.objectRef) }} for billing account {{ link(audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': 'organization-' + audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'], 'name': audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account']}) }} in organization {{ audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'] }}: {{ (has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) == 1 ? '1 price' : string(has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) + ' prices' }}"
+
+    # "Jo updated the draft contract for billing account acme in organization acme-corp: 6 prices"
+    - name: update-contract-draft
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseObject.metadata) && has(audit.responseObject.metadata.labels) && 'billing.miloapis.com/contract-billing-account' in audit.responseObject.metadata.labels && 'billing.miloapis.com/contract-organization' in audit.responseObject.metadata.labels && has(audit.responseObject.spec) && has(audit.responseObject.spec.launchStage) && audit.responseObject.spec.launchStage == 'Draft' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated the draft contract for billing account {{ link(audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': 'organization-' + audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'], 'name': audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account']}) }} in organization {{ audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'] }}: {{ (has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) == 1 ? '1 price' : string(has(audit.responseObject.spec.servicePricingRefs) ? size(audit.responseObject.spec.servicePricingRefs) : 0) + ' prices' }}{{ has(audit.responseObject.metadata.annotations) && 'billing.miloapis.com/contract-starts-at' in audit.responseObject.metadata.annotations ? ', starting ' + string(timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getMonth()] + ' ' + string(timestamp(string(audit.responseObject.metadata.annotations['billing.miloapis.com/contract-starts-at'])).getFullYear()) : '' }}"
+
+    # Discarding a draft, or publishing it, which copies it to a new Offer
+    # first: the copy's create entry comes before this one.
+    - name: delete-contract-draft
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseObject.metadata) && has(audit.responseObject.metadata.labels) && 'billing.miloapis.com/contract-billing-account' in audit.responseObject.metadata.labels && 'billing.miloapis.com/contract-organization' in audit.responseObject.metadata.labels && has(audit.responseObject.spec) && has(audit.responseObject.spec.launchStage) && audit.responseObject.spec.launchStage == 'Draft' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} removed the draft contract for billing account {{ link(audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': 'organization-' + audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'], 'name': audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account']}) }} in organization {{ audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'] }}"
+
+    - name: delete-contract
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseObject.metadata) && has(audit.responseObject.metadata.labels) && 'billing.miloapis.com/contract-billing-account' in audit.responseObject.metadata.labels && 'billing.miloapis.com/contract-organization' in audit.responseObject.metadata.labels && has(audit.responseObject.spec) && has(audit.responseObject.spec.launchStage) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted the contract offer {{ audit.objectRef.name }} for billing account {{ link(audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': 'organization-' + audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'], 'name': audit.responseObject.metadata.labels['billing.miloapis.com/contract-billing-account']}) }} in organization {{ audit.responseObject.metadata.labels['billing.miloapis.com/contract-organization'] }}"
+
+    - name: create
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'create' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} created offer {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    # "Jo published offer payg-v7": setting launchStage to GA.
+    - name: publish
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && has(audit.requestObject.spec.launchStage) && audit.requestObject.spec.launchStage == 'GA' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} published offer {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    - name: update-fallback
+      match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated offer {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    - name: delete
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'delete' && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} deleted offer {{ audit.objectRef.name }}"

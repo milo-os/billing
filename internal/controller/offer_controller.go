@@ -104,6 +104,68 @@ func (r *OfferReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
 			}
 
+			// Only fees have a quantity: a Usage pricing is charged
+			// for what was used.
+			if names := validation.UsagePricingsWithQuantity(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "QuantityOnUsage",
+					Message: "quantity is only allowed for OneTime and Recurring fees; set on Usage pricings: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "QuantityOnUsage",
+					Message:            "Offer sets a quantity on a Usage pricing and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
+
+			// Only Recurring fees have a billing timing: a OneTime fee
+			// is invoiced when it's charged and usage in arrears.
+			if names := validation.PricingsWithBillingTimingNotRecurring(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "BillingTimingNotRecurring",
+					Message: "billingTiming is only allowed for Recurring fees; set on: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "BillingTimingNotRecurring",
+					Message:            "Offer sets a billing timing on a pricing that isn't a Recurring fee and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
+
+			// Only Recurring fees run for a number of periods: a OneTime
+			// fee is charged once, and a Usage pricing for what was used.
+			if names := validation.PricingsWithPeriodsNotRecurring(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "PeriodsNotRecurring",
+					Message: "periods is only allowed for Recurring fees; set on: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "PeriodsNotRecurring",
+					Message:            "Offer sets periods on a pricing that isn't a Recurring fee and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
 			offer.Spec.ServicePricings = snapshots
 			if err := r.client.Update(ctx, &offer); err != nil {
 				return ctrl.Result{}, fmt.Errorf("writing servicePricings snapshot: %w", err)
@@ -189,10 +251,27 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 			discount = offer.Spec.Discount.DeepCopy()
 		}
 
+		// Fees are charged quantity times, 1 unless the ref says. A
+		// quantity on a Usage pricing is kept so publishing can refuse it.
+		quantity := ref.Quantity
+		if quantity == 0 && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeUsage {
+			quantity = 1
+		}
+		// The timing is copied only when the ref sets it: a Recurring fee
+		// without one is billed in advance (validation.SnapshotBillingTiming),
+		// as providers that don't read billingTiming bill every fee, so a
+		// snapshot never says InArrears for a fee already billed in advance.
+		// A timing on any other pricing is kept so publishing can refuse it.
+		timing := ref.BillingTiming
 		snapshots = append(snapshots, billingv1alpha1.ServicePricingSnapshot{
-			Name:     sp.Name,
-			Discount: discount,
-			Spec:     *sp.Spec.DeepCopy(),
+			Name:          sp.Name,
+			Discount:      discount,
+			Quantity:      quantity,
+			BillingTiming: timing,
+			// Kept on any pricing so publishing can refuse it where it
+			// isn't a Recurring fee.
+			Periods: ref.Periods,
+			Spec:    *sp.Spec.DeepCopy(),
 		})
 	}
 	return snapshots, nil

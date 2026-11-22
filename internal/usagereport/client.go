@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	usagev1alpha1 "go.miloapis.com/billing/api/usage/v1alpha1"
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -85,10 +86,11 @@ func (c *Client) ProjectOrganization(ctx context.Context, project string) (strin
 	return out.Spec.OwnerRef.Name, nil
 }
 
-// PaymentTerms returns the billing account's terms for the scope, or nil
-// when they can't be read (callers fall back to calendar months). A project
-// uses its bound account; an organization its first Ready account, or its
-// first account when none are Ready yet.
+// PaymentTerms returns the terms the billing cycles of the scope's billing
+// account follow (see CycleTerms), or nil when they can't be read (callers
+// fall back to calendar months). A project uses its bound account; an
+// organization its first Ready account, or its first account when none are
+// Ready yet.
 func (c *Client) PaymentTerms(ctx context.Context, s Scope) *billingv1alpha1.PaymentTerms {
 	if s.Org == "" {
 		return nil
@@ -135,7 +137,7 @@ func (c *Client) PaymentTerms(ctx context.Context, s Scope) *billingv1alpha1.Pay
 	if chosen == nil {
 		return nil
 	}
-	return chosen.Spec.PaymentTerms
+	return CycleTerms(chosen, time.Now())
 }
 
 // APIError is a non-2xx response, with the server's message when it sent a

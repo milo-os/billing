@@ -19,6 +19,18 @@ spec:
   # manifest. staff-portal owns those fields via merge-patch
   # (fieldManager datum-staff-portal). Including them here would let
   # Flux reclaim ownership and wipe portal edits on reconcile.
+  # Staff-portal plugin (ui/provider, deployed by
+  # config/components/provider-ui-plugin): service-catalog fans this out to a
+  # ProviderPortalPlugin, and staff-portal shows the plugin's fleet billing
+  # overview as this service's Overview (its built-in page moves under
+  # "Service details"). The
+  # URL is in-cluster only; staff-portal fetches the assets server-side and
+  # already trusts datum-control-plane-ca (NODE_EXTRA_CA_CERTS), so no
+  # caBundle.
+  userInterface:
+    provider:
+      assets:
+        baseURL: https://billing-provider-ui-plugin.billing-system.svc.cluster.local
   # Quota-only metric used by the BillingAccount-per-Organization
   # ceiling below. No billing.consumerDestinations entry: we are not
   # charging customers for the count of their BillingAccounts; the

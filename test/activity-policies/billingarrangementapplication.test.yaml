@@ -1,0 +1,180 @@
+# BillingArrangementApplication: applying for, withdrawing, editing and deleting
+# a payment terms application. The applicant's own words never reach a summary.
+policy_files:
+- ../../config/components/activity-policies
+tests:
+- name: apply to pay by invoice
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: Invoice
+        situation: 'Internal note: the applicant''s own words'
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: Invoice
+        situation: 'Internal note: the applicant''s own words'
+  exp_summary: alice@example.com applied for payment terms (pay by invoice) for billing account acme
+- name: apply without choosing
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: NotSure
+        situation: 'Internal note: the applicant''s own words'
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: NotSure
+        situation: 'Internal note: the applicant''s own words'
+  exp_summary: alice@example.com applied for payment terms for billing account acme
+- name: apply without the application's detail
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 201
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+  exp_summary: alice@example.com applied for payment terms acme-apply
+- name: withdraw
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        withdrawn: true
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: Invoice
+        situation: 'Internal note: the applicant''s own words'
+  exp_summary: alice@example.com withdrew the payment terms application for billing account acme
+- name: other edit
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 200
+    requestObject:
+      metadata:
+        labels:
+          a: b
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: Invoice
+        situation: 'Internal note: the applicant''s own words'
+  exp_summary: alice@example.com updated the payment terms application acme-apply
+- name: delete returning the object
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 200
+    responseObject:
+      metadata:
+        name: acme-apply
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        paymentOption: Invoice
+        situation: 'Internal note: the applicant''s own words'
+  exp_summary: alice@example.com deleted the payment terms application acme-apply for billing account acme
+- name: delete returning Status
+  audit:
+    verb: delete
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangementapplications
+      name: acme-apply
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangementapplications/acme-apply
+    responseStatus:
+      code: 200
+    responseObject:
+      kind: Status
+      status: Success
+  exp_summary: alice@example.com deleted the payment terms application acme-apply

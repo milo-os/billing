@@ -17,7 +17,9 @@ spec:
       try:
         - script:
             content: |
-              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply -f -
+              # Parallel tests create milo-system at the same time. Client-side apply reads, then creates,
+              # so it can fail with AlreadyExists; server-side apply creates or updates in one request.
+              kubectl create namespace milo-system --dry-run=client -o yaml | kubectl apply --server-side -f -
 
     - name: create-meter
       description: Create MeterDefinition and wait for Published.

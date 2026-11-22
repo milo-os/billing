@@ -129,9 +129,11 @@ func validateBillingArrangementSpec(arr *billingv1alpha1.BillingArrangement, sta
 
 	if inv := arr.Spec.Invoice; inv != nil {
 		invPath := specPath.Child("invoice")
-		if q, err := resource.ParseQuantity(inv.CreditLimit); err != nil || q.Sign() <= 0 {
-			allErrs = append(allErrs, field.Invalid(
-				invPath.Child("creditLimit"), inv.CreditLimit, "creditLimit must be a positive decimal amount"))
+		if inv.CreditLimit != "" {
+			if q, err := resource.ParseQuantity(inv.CreditLimit); err != nil || q.Sign() <= 0 {
+				allErrs = append(allErrs, field.Invalid(
+					invPath.Child("creditLimit"), inv.CreditLimit, "creditLimit must be a positive decimal amount"))
+			}
 		}
 		if inv.AccountsPayableEmail != "" {
 			allErrs = append(allErrs, validatePlainEmail(inv.AccountsPayableEmail, invPath.Child("accountsPayableEmail"))...)

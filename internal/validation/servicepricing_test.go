@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/util/validation/field"
+	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -363,6 +364,314 @@ func TestValidateServicePricingCreate_Service(t *testing.T) {
 		cl := newPricingClient(testService("compute.datumapis.com"))
 		if errs := ValidateServicePricingCreate(context.Background(), cl, fee); len(errs) != 1 {
 			t.Errorf("got %d errors, want 1: %v", len(errs), errs)
+		}
+	})
+}
+
+func TestValidateServicePricingCreate_FeeWithoutService(t *testing.T) {
+	fee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "cross-connect-300", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeRecurring,
+			Currency:    "USD",
+			DisplayName: "Cross connect",
+			Amount:      "300.00",
+			Interval:    billingv1alpha1.ChargeIntervalMonthly,
+			PricingUnit: "port",
+		},
+	}
+	if errs := ValidateServicePricingCreate(context.Background(), newPricingClient(), fee); len(errs) != 0 {
+		t.Errorf("unexpected errors: %v", errs)
+	}
+
+	for _, interval := range []billingv1alpha1.ChargeInterval{billingv1alpha1.ChargeIntervalQuarterly, billingv1alpha1.ChargeIntervalAnnual} {
+		periodic := fee.DeepCopy()
+		periodic.Name = "support-" + string(interval)
+		periodic.Spec.Interval = interval
+		if errs := ValidateServicePricingCreate(context.Background(), newPricingClient(), periodic); len(errs) != 0 {
+			t.Errorf("%s fee: unexpected errors: %v", interval, errs)
+		}
+	}
+
+	usage := usagePricing("", billingv1alpha1.PricingRate{Flat: "0.03"})
+	cl := newPricingClient(testMeter(billingv1alpha1.PhasePublished, "compute.datumapis.com"))
+	errs := ValidateServicePricingCreate(context.Background(), cl, usage)
+	if len(errs) != 1 || errs[0].Field != "spec.serviceRef" || errs[0].Type != field.ErrorTypeRequired {
+		t.Errorf("want serviceRef required for a Usage pricing, got %v", errs)
+	}
+}
+
+func TestValidateServicePricingCreate_BasedOn(t *testing.T) {
+	const compute = "compute.datumapis.com"
+	tier := func(value, rate string) billingv1alpha1.PricingRate {
+		return billingv1alpha1.PricingRate{
+			Match: &billingv1alpha1.DimensionMatch{Dimension: "tier", Value: value},
+			Flat:  rate,
+		}
+	}
+	tiered := func(upTo, low, high string) billingv1alpha1.PricingRate {
+		return billingv1alpha1.PricingRate{Tiered: []billingv1alpha1.PricingTierBand{
+			{UpTo: upTo, Rate: low}, {Rate: high},
+		}}
+	}
+	list := usagePricing(compute, tier("standard", "0.025"), tiered("100", "0.03", "0.02"))
+	customer := func(mutate func(*billingv1alpha1.ServicePricingSpec)) *billingv1alpha1.ServicePricing {
+		sp := usagePricing(compute, tier("standard", "0.020"), tiered("100", "0.025", "0.015"))
+		sp.Name = "contract-acme-compute-cpu"
+		sp.Spec.BasedOn = list.Name
+		if mutate != nil {
+			mutate(&sp.Spec)
+		}
+		return sp
+	}
+	fee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-fee", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	basedOnCustomer := customer(nil)
+
+	tests := []struct {
+		name      string
+		pricing   *billingv1alpha1.ServicePricing
+		wantField string
+	}{
+		{name: "only rate amounts differ", pricing: customer(nil)},
+		{
+			name:      "list pricing missing",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = "nope" }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "based on a fee",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = fee.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "based on a customer pricing",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = basedOnCustomer.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "different pricing unit",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.PricingUnit = "vcpu-hour" }),
+			wantField: "spec.pricingUnit",
+		},
+		{
+			name: "different unit conversion",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.UnitConversion = &billingv1alpha1.UnitConversion{MeterUnitsPerPricingUnit: "1000", Description: "x"}
+			}),
+			wantField: "spec.unitConversion",
+		},
+		{
+			name: "rates in a different order",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Rates[0].Match.Value = "premium"
+			}),
+			wantField: "spec.rates[0].match",
+		},
+		{
+			name: "fewer rates",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Rates = s.Rates[:1]
+			}),
+			wantField: "spec.rates",
+		},
+		{
+			name: "flat instead of tiered",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Rates[1] = billingv1alpha1.PricingRate{Flat: "0.01"}
+			}),
+			wantField: "spec.rates[1]",
+		},
+		{
+			name: "different tier bound",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Rates[1].Tiered[0].UpTo = "200"
+			}),
+			wantField: "spec.rates[1].tiered[0].upTo",
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// basedOnCustomer is stored as if created earlier, so a
+			// pricing can name it.
+			stored := basedOnCustomer.DeepCopy()
+			stored.Name = "customer-earlier"
+			if tc.pricing.Spec.BasedOn == basedOnCustomer.Name {
+				tc.pricing.Spec.BasedOn = stored.Name
+			}
+			cl := newPricingClient(testMeter(billingv1alpha1.PhasePublished, compute), list, fee, stored)
+			errs := ValidateServicePricingCreate(context.Background(), cl, tc.pricing)
+			if tc.wantField == "" {
+				if len(errs) != 0 {
+					t.Errorf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) != 1 || errs[0].Field != tc.wantField {
+				t.Errorf("want one error on %s, got %v", tc.wantField, errs)
+			}
+		})
+	}
+
+	t.Run("fee based on a Usage pricing", func(t *testing.T) {
+		withBasedOn := fee.DeepCopy()
+		withBasedOn.Spec.BasedOn = list.Name
+		errs := ValidateServicePricingCreate(context.Background(), newPricingClient(list), withBasedOn)
+		if len(errs) != 1 || errs[0].Field != "spec.basedOn" {
+			t.Errorf("want basedOn refused across charge types, got %v", errs)
+		}
+	})
+}
+
+func TestValidateServicePricingCreate_FeeBasedOn(t *testing.T) {
+	const bareMetal = "bare-metal.datumapis.com"
+	listFee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "cross-connect-v1", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeRecurring,
+			ServiceRef:  bareMetal,
+			Currency:    "USD",
+			DisplayName: "Cross connect",
+			SKU:         "DC-XC-01",
+			Tax:         &billingv1alpha1.PricingTax{Code: "txcd_10000000"},
+			Amount:      "300.00",
+			Interval:    billingv1alpha1.ChargeIntervalMonthly,
+			PricingUnit: "port",
+		},
+	}
+	setupFee := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-v1", Namespace: "milo-system"},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	customerFee := listFee.DeepCopy()
+	customerFee.Name = "contract-acme-fee-1"
+	customerFee.Spec.BasedOn = listFee.Name
+	customerFee.Spec.Amount = "250.00"
+	customerFee.Spec.DisplayName = "Cross connect (Acme)"
+	storedCustomer := customerFee.DeepCopy()
+	storedCustomer.Name = "contract-acme-earlier-fee-1"
+
+	customer := func(mutate func(*billingv1alpha1.ServicePricingSpec)) *billingv1alpha1.ServicePricing {
+		sp := customerFee.DeepCopy()
+		if mutate != nil {
+			mutate(&sp.Spec)
+		}
+		return sp
+	}
+
+	tests := []struct {
+		name      string
+		pricing   *billingv1alpha1.ServicePricing
+		wantField string
+	}{
+		{name: "only the amount and name differ", pricing: customer(nil)},
+		{
+			name:      "based on a one-time fee",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = setupFee.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "based on a customer pricing",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.BasedOn = storedCustomer.Name }),
+			wantField: "spec.basedOn",
+		},
+		{
+			name:      "different service",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.ServiceRef = "" }),
+			wantField: "spec.serviceRef",
+		},
+		{
+			name:      "different unit",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.PricingUnit = "cable" }),
+			wantField: "spec.pricingUnit",
+		},
+		{
+			// A SKU names the product, which a customer's price doesn't change.
+			name:      "different SKU",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.SKU = "DC-XC-02" }),
+			wantField: "spec.sku",
+		},
+		{
+			name:      "missing the list pricing's SKU",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.SKU = "" }),
+			wantField: "spec.sku",
+		},
+		{
+			// Saying taxable outright is the same as leaving it out.
+			name: "taxable outright",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Tax = &billingv1alpha1.PricingTax{Code: "txcd_10000000", Taxable: ptr.To(true)}
+			}),
+		},
+		{
+			// A customer's price doesn't change how the product is taxed.
+			name:      "different tax code",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Tax.Code = "txcd_20030000" }),
+			wantField: "spec.tax",
+		},
+		{
+			name:      "missing the list pricing's tax",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Tax = nil }),
+			wantField: "spec.tax",
+		},
+		{
+			name: "not taxable",
+			pricing: customer(func(s *billingv1alpha1.ServicePricingSpec) {
+				s.Tax = &billingv1alpha1.PricingTax{Taxable: ptr.To(false)}
+			}),
+			wantField: "spec.tax",
+		},
+		{
+			// An amount per year isn't a price for the same thing as one
+			// per month, so a customer's own fee keeps the list interval.
+			name:      "different interval",
+			pricing:   customer(func(s *billingv1alpha1.ServicePricingSpec) { s.Interval = billingv1alpha1.ChargeIntervalAnnual }),
+			wantField: "spec.interval",
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			cl := newPricingClient(testService(bareMetal), listFee, setupFee, storedCustomer)
+			errs := ValidateServicePricingCreate(context.Background(), cl, tc.pricing)
+			if tc.wantField == "" {
+				if len(errs) != 0 {
+					t.Errorf("unexpected errors: %v", errs)
+				}
+				return
+			}
+			if len(errs) != 1 || errs[0].Field != tc.wantField {
+				t.Errorf("want one error on %s, got %v", tc.wantField, errs)
+			}
+		})
+	}
+
+	t.Run("different trigger", func(t *testing.T) {
+		// Only one trigger exists today, so compare against a list fee with none.
+		errs := validateBasedOnSpec(
+			&billingv1alpha1.ServicePricingSpec{
+				ChargeType: billingv1alpha1.ChargeTypeOneTime, Currency: "USD", Amount: "1000.00",
+				Trigger: billingv1alpha1.ChargeTriggerBillingAccountActivation, BasedOn: setupFee.Name,
+			},
+			&billingv1alpha1.ServicePricingSpec{
+				ChargeType: billingv1alpha1.ChargeTypeOneTime, Currency: "USD", Amount: "1500.00",
+			},
+			field.NewPath("spec"),
+		)
+		if len(errs) != 1 || errs[0].Field != "spec.trigger" {
+			t.Errorf("want one error on spec.trigger, got %v", errs)
 		}
 	})
 }
