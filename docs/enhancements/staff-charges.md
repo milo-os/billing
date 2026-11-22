@@ -25,7 +25,8 @@ latest-milestone: "v0"
   - [Invoice now](#invoice-now)
   - [Status back to the charge](#status-back-to-the-charge)
   - [Previews](#previews)
-  - [What to confirm on staging first](#what-to-confirm-on-staging-first)
+  - [Invoice periods](#invoice-periods)
+  - [What the spike on staging found](#what-the-spike-on-staging-found)
 - [Reaching Stripe with Its Period](#reaching-stripe-with-its-period)
   - [This depends on the invoice writer](#this-depends-on-the-invoice-writer)
   - [From charge to Stripe line](#from-charge-to-stripe-line)
@@ -155,6 +156,7 @@ spec:
 status:
   phase: Scheduled          # Pending | Scheduled | Invoiced | Failed
   amount: "500.00"          # quantity × unitAmount, before the discount
+  amountDue: "450.00"       # after the discount
   listUnitAmount: "300.00"  # the pricing's own price, when it was changed
   invoiceAt: "2027-01-01T00:00:00Z"
   invoiceRef:
@@ -253,24 +255,31 @@ line.
 - The amount is `quantity × unitAmount`, and it must come to whole cents.
   The webhook refuses a charge where it doesn't ("3.33 × 0.15"), rather than
   round, because Stripe's rounding is never allowed to change an amount (see
-  stripe-provider's "Checking amounts"). `status.amount` records it.
+  stripe-provider's "Checking amounts"). `status.amount` records it, and
+  `status.amountDue` the amount after any discount.
 - Stripe's editor can price "per N units" (a pack price). A charge is
   always per unit: a pack is entered as the pack's price, with the quantity
   in packs.
 - `currency` is `USD`, and must match the account's.
 - `discountPercent` is optional: a percentage off this line, like Stripe's
-  "item coupons". It's set once, on the charge, and each system applies it
-  once, as a discount and never by lowering the amount:
-  - OpenMeter gets it as the rate card's percentage discount, so its line
-    has an amount before the discount and a discount beside it, and its
-    invoice total is after the discount;
-  - Stripe gets it as one of stripe-provider's standing percentage coupons
-    on the line (`datum-pct-10`), so reports show the full price and the
-    discount apart;
-  - the checks compare like with like: each line's amount before the
-    discount (`quantity × unitAmount`, OpenMeter's line amount and Stripe's
-    item amount must all agree), then the invoice's total after discounts
-    (OpenMeter's and Stripe's must agree).
+  "item coupons". It's set once, on the charge, and applied once in each
+  system:
+  - **OpenMeter gets the amount after the discount.** OpenMeter ignores a
+    percentage discount on a manual line's rate card (the
+    [spike](#what-the-spike-on-staging-found) found it dropped silently),
+    so the pending line's flat price is `status.amountDue`: `quantity ×
+    unitAmount`, less the discount. Its invoice total is then right.
+  - **Stripe gets the full price and a coupon.** The line is `quantity ×
+    unitAmount` with one of stripe-provider's standing percentage coupons
+    (`datum-pct-10`), so reports show the full price and the discount
+    apart.
+  - **The checks compare like with like.** Stripe's item amount before its
+    coupon must equal `quantity × unitAmount` from the charge, and Stripe's
+    amount after its coupon must equal OpenMeter's line amount. Invoice
+    totals after discounts must match.
+  - **The discount must come to whole cents**, as the amount must, so
+    Stripe's coupon rounding can never differ from ours. The webhook
+    refuses "10% of $3.35".
 
   Nothing else discounts a charge: an Offer's discount
   belongs to OpenMeter's subscription, and a charge isn't part of it. So
@@ -315,7 +324,7 @@ create; the spec is immutable after that.
 | Without `servicePricingRef`: `description` and `unitAmount` are set | CEL |
 | `discountPercent`: more than 0, up to 100, at most two decimal places | CRD |
 | `description`: 1 to 256 characters | CRD (OpenMeter's line name allows 256) |
-| `quantity × unitAmount` is whole cents | Webhook |
+| `quantity × unitAmount` is whole cents, and so is its discount | Webhook |
 | `tax.code` not set when `tax.taxable` is false; a non-taxable charge has a `note` | CEL |
 | `note`: up to 500 characters | CRD (Stripe's metadata value limit) |
 | The account's currency is USD | Webhook |
@@ -416,10 +425,9 @@ It creates one pending line with `CreatePendingInvoiceLine`
 | `period.from` | `servicePeriod.start` at 00:00 UTC |
 | `period.to` | the day after `servicePeriod.end`, at 00:00 UTC (OpenMeter's period end is exclusive) |
 | `invoiceAt` | `NextInvoice`: the end of the subscription's current billing period, read through the v3 subscription API. Without a subscription, the next billing day from the rule above. `Now`: the current time. |
-| `rateCard.price` | A flat price of `status.amount`, `paymentTerm: in_advance` |
-| `rateCard.discounts.percentage` | `discountPercent`, when set, so OpenMeter's total matches Stripe's |
+| `rateCard.price` | A flat price of `status.amountDue` (the amount after any discount), `paymentTerm: in_advance`. OpenMeter ignores rate card discounts on manual lines. |
 | `rateCard.taxConfig.stripe.code` | `tax.code`, or Stripe's non-taxable code when `taxable` is false |
-| `metadata` | `datum_charge` (namespace/name), `datum_charge_uid`, `datum_quantity`, `datum_unit_amount` |
+| `metadata` | `datum_charge` (namespace/name), `datum_charge_uid`, `datum_quantity`, `datum_unit_amount`, `datum_discount_percent` |
 
 - **One line, flat.** OpenMeter has no quantity on a flat line, so the line
   is the whole amount. The quantity and unit price travel in our metadata,
@@ -429,9 +437,13 @@ It creates one pending line with `CreatePendingInvoiceLine`
   lost response never makes two lines. It records the line's ID in an
   annotation (`openmeter.billing.miloapis.com/line-id`), as it records the
   billing profile's ID today.
-- **Removal.** The finalizer deletes the line from the gathering invoice, or
-  from the draft invoice while OpenMeter holds it for sync. Once the line is
-  on an issued invoice, it leaves it, as above.
+- **Removal.** The finalizer removes the line from the gathering invoice,
+  or from the draft invoice while OpenMeter holds it for sync. beta.236 has
+  no endpoint for one line, so it reads the invoice and replaces it without
+  that line (`UpdateInvoice`). Subscription sync can change the same
+  invoice meanwhile, so the controller checks the invoice's `updatedAt`
+  hasn't moved before it writes, and retries from a fresh read if it has.
+  Once the line is on an issued invoice, it leaves it, as above.
 
 ### Invoice now
 
@@ -441,10 +453,9 @@ one line. That makes a standard invoice with only the charge on it; the
 filter keeps the account's usage so far off it. The invoice then goes
 through the same draft sync to Stripe as every other invoice.
 
-OpenMeter holds a new draft for the billing profile's draft period before
-issuing it. If that's longer than an "invoice now" should wait, the
-controller approves the draft once it's synced. See
-[What to confirm on staging first](#what-to-confirm-on-staging-first).
+Accounts' billing profiles have `draftPeriod: P0D`, so OpenMeter issues the
+invoice as soon as it's synced: the spike's was issued at once. Nothing has
+to approve it.
 
 ### Status back to the charge
 
@@ -456,6 +467,25 @@ controller approves the draft once it's synced. See
 - `Failed` when OpenMeter refuses the line (a 4xx), with OpenMeter's
   message.
 
+### Invoice periods
+
+OpenMeter widens an invoice's period to cover every line's period, so a
+charge for last month or next year would stretch the period the portals
+show for the whole invoice, and the `Invoice` resource's name, which comes
+from its period start. openmeter-provider's projection changes:
+
+- the period is the span of the invoice's subscription lines
+  (`managedBy: subscription`), which is the billing period it's for;
+- an invoice with no subscription lines, such as an invoice-now charge,
+  has the day it was issued as its period, as an invoice created in Stripe
+  already does (`stripeInvoicePeriod`);
+- the lines keep their own periods, which is what Stripe and Revenue
+  Recognition read.
+
+This is needed before the first charge is invoiced, and it's worth doing
+now: a contract's quarterly or annual fees can widen an invoice's period
+the same way.
+
 ### Previews
 
 Nothing to add. The next-invoice preview (`InvoiceRequest` Preview,
@@ -463,32 +493,40 @@ Nothing to add. The next-invoice preview (`InvoiceRequest` Preview,
 invoice's flat lines. A charge is a flat line on one of them, so it's in
 the preview, with its period, as soon as it's `Scheduled`.
 
-### What to confirm on staging first
+### What the spike on staging found
 
-Before building the controller, a short spike on staging's OpenMeter
-(beta.236.1) should confirm:
+Run on 2026-11-22 against staging's OpenMeter (beta.236.1), on a throwaway
+customer with its own billing profile on OpenMeter's Sandbox app, so
+nothing reached Stripe and no billing account was touched. The profile
+copied real accounts' workflow: subscription alignment, a one-hour
+collection interval, `draftPeriod: P0D`, progressive billing. A weekly $10
+plan was anchored so its first period ended 95 minutes after it started.
+Everything was deleted afterwards.
 
-1. A manual flat pending line with `invoiceAt` at the end of the billing
-   period lands on the same invoice as that period's usage and fees, under
-   the billing profile's subscription alignment. It's not collected early.
-2. Its `period` comes back unchanged on the issued invoice's line, including
-   a period that's in the past, in the future, longer than the billing
-   period, or a single day.
-3. OpenMeter doesn't split a flat line whose period crosses billing periods.
-4. A pending line can be deleted from the gathering invoice, and from a
-   draft held for sync, through the API.
-5. `InvoicePendingLinesAction` with `lineIds` invoices only that line, with
-   progressive billing on.
-6. How long the billing profile's draft period holds an invoice-now
-   invoice, and whether approving it early is allowed.
-7. A percentage discount on a manual flat line's rate card is applied, and
-   shows as a discount on the line, not a lower amount.
+| Check | Result |
+|---|---|
+| 1. A line with `invoiceAt` at the period end lands on that period's invoice, not earlier | **Yes.** Four manual lines stayed pending until the period ended, then OpenMeter cut one invoice at the period end with all four and the subscription's fee. |
+| 2. The line's period comes back unchanged | **Yes**, on the pending line and on the invoice: a single day, a month in the past, and a year ahead. |
+| 3. A line whose period crosses billing periods isn't split | **Yes**, the year-long line stayed one line. |
+| 4. A line can be removed from the gathering invoice, and from a draft | **Yes, but only by replacing the whole invoice.** beta.236 has no endpoint to delete one line: the controller reads the invoice and `PUT`s it back without the line (`UpdateInvoice`). The subscription's lines survive the replace. A line removed from a draft is deleted, not returned to pending. |
+| 5. `InvoicePendingLinesAction` with `lineIds` invoices only that line | **Yes**, with progressive billing on. The other pending lines weren't touched. |
+| 6. How long an invoice-now draft is held | **Not at all.** With `draftPeriod: P0D` it's issued at once (Sandbox marked it paid). With Custom Invoicing it's held only until the writer syncs it. |
+| 7. A percentage discount on a manual line's rate card | **No. OpenMeter drops it silently.** The line was stored and invoiced at the full amount, with no discount. See [Amounts, discounts and tax](#amounts-discounts-and-tax) for what that changes. |
 
-If (1) doesn't hold, `NextInvoice` sets `invoiceAt` to the period end and
-the controller invoices the line with the period's invoice through the
-existing early-invoice path. If (3) doesn't hold, a charge whose period
-crosses billing periods is still one line on our side, and the writer
-merges OpenMeter's split lines back into one by `datum_charge`.
+Two more things it showed:
+
+- **An invoice's own period covers all of its lines' periods.** The period
+  invoice read 1 October 2026 to 1 January 2028, because of the past and
+  year-ahead lines, and the invoice-now invoice's period was its one line's
+  service period. openmeter-provider projects an invoice's period onto the
+  `Invoice` resource (`invoicePeriod`), which names it and shows its dates
+  in both portals. So the projection must take the period from the
+  invoice's subscription lines, and use the day it's issued for an invoice
+  with only charges on it. See [Invoice periods](#invoice-periods).
+- **Charges don't wait for the collection interval on their own.** The
+  invoice was cut at the period end, not an hour later: with no usage
+  lines, OpenMeter has no late events to wait for. On a real account the
+  charge rides along with the usage, whenever that's collected.
 
 ## Reaching Stripe with Its Period
 
@@ -535,10 +573,10 @@ the `Charge` and builds:
 | `description` | `spec.description` |
 | `servicePricingRef` | `spec.servicePricingRef`, or the custom charge pricing |
 | `quantity`, `unitAmount` | `spec.quantity`, `spec.unitAmount` |
-| `amount` | OpenMeter's line amount **before** its discount (`totals.amount`, not `totals.total`), which equals `quantity × unitAmount`. The builder refuses the line if it doesn't, and stripe-provider checks Stripe's item amount, before its coupon, against it. |
+| `amount` | `quantity × unitAmount` from the charge, the amount before the discount. stripe-provider checks Stripe's item amount, before its coupon, against it. |
 | `period` | OpenMeter's line period, end made inclusive. The same rule as every other line, and it gives back the charge's dates (below). |
 | `tax` | `spec.tax` |
-| `discountPercent` | `spec.discountPercent`, the same percentage OpenMeter applied. The invoice's total after discounts is then checked against OpenMeter's. |
+| `discountPercent` | `spec.discountPercent`. The builder checks that `amount` less the discount equals OpenMeter's line amount, and refuses the line if not. |
 | `note` | `spec.note`. Stripe metadata `datum_note`, never printed. |
 | `metadata` | `charge` (namespace/name), `chargeUid`, `addedBy`, `servicePricing`, `listUnitAmount` when the price was changed, `pricingUnit`. stripe-provider adds `datum_sku` from the Product. |
 
@@ -747,7 +785,8 @@ cloud portal's contract card show the date next to the fee.
 
 | Step | Repo | Depends on |
 |---|---|---|
-| 0. Spike: the seven checks above | openmeter-provider (staging) | Nothing |
+| 0. Spike: the seven checks | openmeter-provider (staging) | Done 2026-11-22 |
+| 0a. `Invoice` periods from subscription lines | openmeter-provider | Nothing; needed before 4 |
 | 1. `Charge` CRD, webhooks, controller, IAM, activity policies | billing | Nothing. Charges stay `Pending` until a provider acts on them. |
 | 2. Custom charge pricing, per environment | pricing components, finance | Finance's SKU and tax code |
 | 3. Invoice writer (phase 4) | stripe-provider, openmeter-provider | Its own design, in stripe-provider |
