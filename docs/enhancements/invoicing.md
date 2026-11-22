@@ -142,7 +142,7 @@ sequenceDiagram
     BillingSvc->>BillingSvc: Update BillingAccount<br/>LatestInvoiceRef, InvoicingReady condition
 
     Portal->>BillingSvc: Read Invoice
-    BillingSvc-->>Portal: period, total, amountDue, currency, status, documentUri
+    BillingSvc-->>Portal: period, number, total, amountDue, currency, status, documentUri
     Portal->>Portal: Render invoice list/detail
 
     Backend->>Provider: Signal: payment status changed
@@ -289,6 +289,7 @@ status:
                                  # not derived client-side
   dueDate: "2026-07-15T00:00:00Z"
   paidAt: "2026-07-02T09:14:00Z" # set once amountDue reaches zero
+  number: "DATUM-0042"         # the number on the document; none while a draft
   documentUri: "https://provider.example/invoices/..."  # provider-hosted document
   conditions:
     - type: Ready
@@ -447,6 +448,9 @@ grant in this design, and it's scoped to a single field.
   Milo.
 - 2026-11-04: Invoice and payment changes are recorded on the billing
   account's activity timeline.
+- 2026-11-22: `status.number` carries the invoice's number from its
+  document, such as `DATUM-0042`, for portals to show instead of the
+  object's internal name.
 
 ## Future Work
 

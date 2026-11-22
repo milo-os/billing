@@ -121,6 +121,15 @@ type InvoiceStatus struct {
 	// +kubebuilder:validation:Optional
 	PaidAt *metav1.Time `json:"paidAt,omitempty"`
 
+	// Number is the invoice's number as the customer sees it, on the
+	// invoice document and for their accounting, such as "DATUM-0042".
+	// The provider assigns it when the invoice is issued, so a draft has
+	// none. It's not the object's name, which is internal.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=64
+	Number string `json:"number,omitempty"`
+
 	// DocumentUri is a provider-hosted link to the human-readable
 	// invoice document (PDF or HTML).
 	//
@@ -153,6 +162,7 @@ type InvoiceStatus struct {
 // +kubebuilder:object:root=true
 // +kubebuilder:subresource:status
 // +kubebuilder:printcolumn:name="Account",type=string,JSONPath=`.spec.billingAccountRef.name`
+// +kubebuilder:printcolumn:name="Number",type=string,JSONPath=`.status.number`
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Total",type=string,JSONPath=`.status.total`
 // +kubebuilder:printcolumn:name="Amount Due",type=string,JSONPath=`.status.amountDue`
