@@ -52,6 +52,8 @@ apiVersion: resourcemanager.miloapis.com/v1alpha1
 kind: Project
 metadata:
   name: p-e2e-usage-pipeline
+  annotations:
+    billing.miloapis.com/auto-bind: "false"
 spec:
   ownerRef:
     kind: Organization

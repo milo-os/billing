@@ -23,6 +23,8 @@ apiVersion: resourcemanager.miloapis.com/v1alpha1
 kind: Project
 metadata:
   name: test-project-alpha
+  annotations:
+    billing.miloapis.com/auto-bind: "false"
 spec:
   ownerRef:
     kind: Organization
