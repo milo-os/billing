@@ -259,9 +259,20 @@ line.
   in packs.
 - `currency` is `USD`, and must match the account's.
 - `discountPercent` is optional: a percentage off this line, like Stripe's
-  "item coupons". It becomes one of stripe-provider's standing percentage
-  coupons on the line (`datum-pct-10`), so reports show the full price and
-  the discount apart. Nothing else discounts a charge: an Offer's discount
+  "item coupons". It's set once, on the charge, and each system applies it
+  once, as a discount and never by lowering the amount:
+  - OpenMeter gets it as the rate card's percentage discount, so its line
+    has an amount before the discount and a discount beside it, and its
+    invoice total is after the discount;
+  - Stripe gets it as one of stripe-provider's standing percentage coupons
+    on the line (`datum-pct-10`), so reports show the full price and the
+    discount apart;
+  - the checks compare like with like: each line's amount before the
+    discount (`quantity × unitAmount`, OpenMeter's line amount and Stripe's
+    item amount must all agree), then the invoice's total after discounts
+    (OpenMeter's and Stripe's must agree).
+
+  Nothing else discounts a charge: an Offer's discount
   belongs to OpenMeter's subscription, and a charge isn't part of it. So
   Stripe's "Discountable" switch, which is about invoice-wide coupons, has
   nothing to do here, since we don't use invoice-wide coupons.
@@ -299,7 +310,7 @@ create; the spec is immutable after that.
 | `servicePeriod.end >= servicePeriod.start` | CEL |
 | Period within the bounds above | Webhook |
 | Spec is immutable | CEL (`self == oldSelf`) |
-| `billingAccountRef` names an account in the same namespace that isn't being deleted | Webhook |
+| `billingAccountRef` names an account in the same namespace that isn't being deleted, and whose `InvoiceWriterReady` condition is True | Webhook |
 | With `servicePricingRef`: the pricing exists, is `OneTime` or `Recurring`, and is in USD; a customer price belongs to this account's contract | Webhook |
 | Without `servicePricingRef`: `description` and `unitAmount` are set | CEL |
 | `discountPercent`: more than 0, up to 100, at most two decimal places | CRD |
@@ -317,7 +328,7 @@ if a pricing has since been deleted.
 
 | Phase | Meaning | Who sets it |
 |---|---|---|
-| `Pending` | Accepted, not yet on an invoice in the provider. Reasons include `WaitingForCustomer` and `WaitingForInvoiceWriter`. | billing, on create; the provider while it waits |
+| `Pending` | Accepted, not yet on an invoice in the provider. Reasons include `WaitingForCustomer`, and `WaitingForInvoiceWriter` for an account moved back off the writer. | billing, on create; the provider while it waits |
 | `Scheduled` | On the account's gathering invoice (or a draft, for invoice now). `status.invoiceAt` says when it's invoiced. | Provider |
 | `Invoiced` | On an issued invoice. `status.invoiceRef` names the `Invoice`. | Provider |
 | `Failed` | The provider refused it, with the reason in `Ready`. Staff remove it and add a corrected one. | Provider |
@@ -333,15 +344,28 @@ Staff remove a charge by deleting it.
   finalizer removes the line from OpenMeter, then lets the charge go.
 - **Once it's invoiced**: the webhook refuses the delete. The charge is the
   record of what was billed. A mistake on an issued invoice is corrected
-  with a Stripe credit note, as today.
+  with a Stripe credit note, as today. The exception is when its billing
+  account is being deleted, or its namespace is terminating: then the
+  delete is let through, so an account or organization can always be
+  removed. The `Invoice` resources and Stripe keep the record.
 - If the invoice is issued between the webhook's check and the finalizer,
   the line can't be removed. The provider lets the charge go anyway, and
   records a warning event and an activity line saying it was already
   invoiced, so staff know to credit it.
 
-Deleting a billing account invoices its pending lines first
-(`PrepareInvoicesForCustomerDeletion`), so a scheduled charge is billed, not
-lost, when an account closes.
+When the billing account itself is deleted:
+
+- **Scheduled charges are billed.** The account's finalizer invoices its
+  pending lines before it deletes the OpenMeter customer
+  (`PrepareInvoicesForCustomerDeletion`). So the `Charge` finalizer doesn't
+  remove the line when the account is deleting: it leaves it for the
+  account's final invoice and lets the charge go.
+- **Pending charges aren't billed.** They never reached OpenMeter, so
+  there's nothing to invoice. The provider lets them go with a warning
+  event and an activity line ("not billed: the account was deleted").
+  The staff portal's delete-account confirmation lists any pending or
+  scheduled charges, so staff can invoice them now first.
+- **Invoiced charges** are deleted with the namespace, as above.
 
 ### RBAC
 
@@ -483,12 +507,21 @@ Neither exists yet: `StripeInvoice` only accepts `Preview` and
 `PreviewDraft`, and openmeter-provider has no Custom Invoicing. So charges
 are phase 5, after it.
 
-Until an account's billing profile is on Custom Invoicing, the `Charge`
-controller leaves its charges `Pending` with reason
-`WaitingForInvoiceWriter`. A charge never reaches Stripe through any other
-path, so it never reaches Stripe without its product, quantity, note and
-period. Charges can still be created and previewed in the portal on such
-an account; they're scheduled when the account moves to the writer.
+A charge never reaches Stripe through any other path, so it never reaches
+Stripe without its product, quantity, note and period. And charges
+shouldn't pile up while an account waits for the writer: they'd all bill
+on its first invoice afterwards, with periods well in the past. So:
+
+- openmeter-provider sets a condition on the `BillingAccount`,
+  `InvoiceWriterReady`, True once the account's billing profile is on
+  Custom Invoicing.
+- The validating webhook refuses a new charge on an account without it,
+  with a message saying charges aren't available for the account yet.
+- The staff portal hides Add charge on such an account, and says why on
+  the Charges card.
+- `Pending` with reason `WaitingForInvoiceWriter` remains only for an
+  account moved back off the writer after charges were added. The Charges
+  card shows those charges as waiting, with the reason.
 
 ### From charge to Stripe line
 
@@ -502,10 +535,10 @@ the `Charge` and builds:
 | `description` | `spec.description` |
 | `servicePricingRef` | `spec.servicePricingRef`, or the custom charge pricing |
 | `quantity`, `unitAmount` | `spec.quantity`, `spec.unitAmount` |
-| `amount` | OpenMeter's line amount, which equals `quantity × unitAmount` by construction. stripe-provider checks it. |
+| `amount` | OpenMeter's line amount **before** its discount (`totals.amount`, not `totals.total`), which equals `quantity × unitAmount`. The builder refuses the line if it doesn't, and stripe-provider checks Stripe's item amount, before its coupon, against it. |
 | `period` | OpenMeter's line period, end made inclusive. The same rule as every other line, and it gives back the charge's dates (below). |
 | `tax` | `spec.tax` |
-| `discountPercent` | `spec.discountPercent` |
+| `discountPercent` | `spec.discountPercent`, the same percentage OpenMeter applied. The invoice's total after discounts is then checked against OpenMeter's. |
 | `note` | `spec.note`. Stripe metadata `datum_note`, never printed. |
 | `metadata` | `charge` (namespace/name), `chargeUid`, `addedBy`, `servicePricing`, `listUnitAmount` when the price was changed, `pricingUnit`. stripe-provider adds `datum_sku` from the Product. |
 
@@ -628,9 +661,17 @@ On the invoice   Cross-connect install, cage 12
 - **Not offered:** "Include tax in price" (tax is always added on top) and
   "Discountable" (there are no invoice-wide coupons). See
   [Amounts, discounts and tax](#amounts-discounts-and-tax).
-- **When**: "On the next invoice" with its date, or "Invoice now", which
-  says the customer is invoiced straight away, and charged at once if they
-  pay by card.
+- **When**: "On the next invoice" with its date, or "Invoice now".
+- **Invoice now asks for confirmation.** Saving opens a second step that
+  shows the total before tax and says what happens next, by how the account
+  pays: "Acme's card ending 4242 is charged US$ 450.00 plus tax straight
+  away", or "Acme is sent an invoice for US$ 450.00 plus tax, due in 30
+  days". Staff confirm or go back. This stays until the approval question
+  ([open question 3](#open-questions)) is settled.
+- **Old periods are flagged.** A supply date that ends before the current
+  billing period starts gets a warning under the dates ("These dates are
+  before the current billing period"), so a typo in the year or month is
+  caught. It's a warning, not an error: catch-up charges are allowed.
 - **On the invoice**: the line as the customer will read it, without the
   SKU, the list price or the note.
 
@@ -710,16 +751,17 @@ cloud portal's contract card show the date next to the fee.
 | 1. `Charge` CRD, webhooks, controller, IAM, activity policies | billing | Nothing. Charges stay `Pending` until a provider acts on them. |
 | 2. Custom charge pricing, per environment | pricing components, finance | Finance's SKU and tax code |
 | 3. Invoice writer (phase 4) | stripe-provider, openmeter-provider | Its own design, in stripe-provider |
-| 4. `Charge` controller: pending lines, invoice now, removal, status | openmeter-provider | 0, 1; schedules charges only on accounts on Custom Invoicing (3) |
+| 4. `Charge` controller (pending lines, invoice now, removal, status), and the `InvoiceWriterReady` condition | openmeter-provider | 0, 1, 3 |
 | 5. Line builder reads charges | openmeter-provider | 3, 4 |
-| 6. Charges card and Add charge | staff-portal | 1. Useful from 4 on staging. |
+| 6. Charges card and Add charge, shown only on accounts with `InvoiceWriterReady` | staff-portal | 1, and the condition from 3 |
 | 7. `servicePeriod` on one-time contract fees, and the contract editor's supply date | billing, staff-portal | Nothing |
 | 8. Line builder uses one-time fee periods | openmeter-provider | 3, 7 |
 
-Steps 1, 2, 6 and 7 can go ahead before the writer. On staging, staff can then
-add, preview and remove charges, and they're invoiced once staging's
-accounts move to the writer. Production follows the writer's account by
-account rollout: an account's charges are scheduled when it moves.
+Steps 1, 2, 6 and 7 can be built and merged before the writer, but Add
+charge stays hidden, and the webhook refuses charges, on every account
+until it's on the writer (`InvoiceWriterReady`). So nothing waits weeks to
+bill. Staging accounts get charges as they move to the writer, and
+production follows the writer's account-by-account rollout.
 
 Rough size: billing a week and a half (charges and fee periods), the
 openmeter-provider controller and line builder changes a week and a half
