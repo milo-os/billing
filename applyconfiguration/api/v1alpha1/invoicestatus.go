@@ -37,6 +37,11 @@ type InvoiceStatusApplyConfiguration struct {
 	DueDate *v1.Time `json:"dueDate,omitempty"`
 	// PaidAt is set once amountDue reaches zero.
 	PaidAt *v1.Time `json:"paidAt,omitempty"`
+	// Number is the invoice's number as the customer sees it, on the
+	// invoice document and for their accounting, such as "DATUM-0042".
+	// The provider assigns it when the invoice is issued, so a draft has
+	// none. It's not the object's name, which is internal.
+	Number *string `json:"number,omitempty"`
 	// DocumentUri is a provider-hosted link to the human-readable
 	// invoice document (PDF or HTML).
 	DocumentURI *string `json:"documentUri,omitempty"`
@@ -115,6 +120,14 @@ func (b *InvoiceStatusApplyConfiguration) WithDueDate(value v1.Time) *InvoiceSta
 // If called multiple times, the PaidAt field is set to the value of the last call.
 func (b *InvoiceStatusApplyConfiguration) WithPaidAt(value v1.Time) *InvoiceStatusApplyConfiguration {
 	b.PaidAt = &value
+	return b
+}
+
+// WithNumber sets the Number field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Number field is set to the value of the last call.
+func (b *InvoiceStatusApplyConfiguration) WithNumber(value string) *InvoiceStatusApplyConfiguration {
+	b.Number = &value
 	return b
 }
 

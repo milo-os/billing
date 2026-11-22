@@ -170,7 +170,10 @@ type BankSummary struct {
 
 // InvoiceSummary is one invoice.
 type InvoiceSummary struct {
-	Name        string `json:"name"`
+	Name string `json:"name"`
+	// Number is the invoice's number on the document, such as
+	// "DATUM-0042", once it's issued. Name is internal.
+	Number      string `json:"number,omitempty"`
 	PeriodStart string `json:"periodStart"`
 	PeriodEnd   string `json:"periodEnd"`
 	// Status is Open, Paid, PastDue or Void.
@@ -285,6 +288,7 @@ func SummarizeInvoices(invoices []billingv1alpha1.Invoice, status string, limit 
 		st := inv.Status
 		s := InvoiceSummary{
 			Name:        inv.Name,
+			Number:      st.Number,
 			PeriodStart: dateOf(&inv.Spec.Period.Start),
 			PeriodEnd:   dateOf(&inv.Spec.Period.End),
 			Status:      string(st.Phase),
