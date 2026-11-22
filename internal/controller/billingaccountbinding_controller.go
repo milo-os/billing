@@ -20,12 +20,15 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/validation"
 	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
 const (
 	// ConditionTypeBound is the condition type for binding status.
 	ConditionTypeBound = "Bound"
+
+	ReasonProjectNotFound = "ProjectNotFound"
 )
 
 // BillingAccountBindingReconciler reconciles a BillingAccountBinding object.
@@ -90,6 +93,10 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req rec
 		return ctrl.Result{}, nil
 	}
 
+	if !validation.ProjectOwnedByNamespace(&project, binding.Namespace) {
+		return ctrl.Result{}, r.markProjectNotFound(ctx, &binding)
+	}
+
 	// Set billing responsibility if not already set
 	if binding.Status.BillingResponsibility == nil {
 		binding.Status.BillingResponsibility = &billingv1alpha1.BillingResponsibility{}
@@ -128,6 +135,33 @@ func (r *BillingAccountBindingReconciler) Reconcile(ctx context.Context, req rec
 	)
 
 	return ctrl.Result{}, nil
+}
+
+func (r *BillingAccountBindingReconciler) markProjectNotFound(ctx context.Context, binding *billingv1alpha1.BillingAccountBinding) error {
+	cond := apimeta.FindStatusCondition(binding.Status.Conditions, ConditionTypeBound)
+	if binding.Status.Phase == "" && cond != nil && cond.Reason == ReasonProjectNotFound &&
+		cond.ObservedGeneration == binding.Generation {
+		return nil
+	}
+
+	binding.Status.Phase = ""
+	binding.Status.ObservedGeneration = binding.Generation
+	apimeta.SetStatusCondition(&binding.Status.Conditions, metav1.Condition{
+		Type:               ConditionTypeBound,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: binding.Generation,
+		Reason:             ReasonProjectNotFound,
+		Message:            "Project not found.",
+	})
+	if err := r.client.Status().Update(ctx, binding); err != nil {
+		return fmt.Errorf("failed to update binding status: %w", err)
+	}
+
+	log.FromContext(ctx).Info("binding references a project outside its organization",
+		"project", binding.Spec.ProjectRef.Name,
+		"account", binding.Spec.BillingAccountRef.Name,
+	)
+	return nil
 }
 
 // supersedeOlderBindings finds other active bindings for the same project

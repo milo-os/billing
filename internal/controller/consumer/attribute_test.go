@@ -12,7 +12,7 @@ import (
 )
 
 func newTestBindingCache(bindings ...billingv1alpha1.BillingAccountBinding) *BillingAccountBindingCache {
-	bc := &BillingAccountBindingCache{activeByProject: make(map[string]*billingv1alpha1.BillingAccountBinding)}
+	bc := newBillingAccountBindingCache()
 	for i := range bindings {
 		bc.upsert(&bindings[i])
 	}

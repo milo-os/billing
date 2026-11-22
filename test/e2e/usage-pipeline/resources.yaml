@@ -1,7 +1,7 @@
 apiVersion: v1
 kind: Namespace
 metadata:
-  name: usage-pipeline-test
+  name: organization-e2e-usage-pipeline
 ---
 apiVersion: billing.miloapis.com/v1alpha1
 kind: MonitoredResourceType
@@ -44,7 +44,7 @@ apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccount
 metadata:
   name: e2e-account
-  namespace: usage-pipeline-test
+  namespace: organization-e2e-usage-pipeline
 spec:
   currencyCode: USD
 ---
@@ -55,13 +55,13 @@ metadata:
 spec:
   ownerRef:
     kind: Organization
-    name: test-org
+    name: e2e-usage-pipeline
 ---
 apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccountBinding
 metadata:
   name: e2e-binding
-  namespace: usage-pipeline-test
+  namespace: organization-e2e-usage-pipeline
 spec:
   billingAccountRef:
     name: e2e-account

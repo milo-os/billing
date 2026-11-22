@@ -2,7 +2,7 @@ apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccountBinding
 metadata:
   name: binding-test-first
-  namespace: default
+  namespace: organization-e2e-binding
 spec:
   billingAccountRef:
     name: binding-test-account-a

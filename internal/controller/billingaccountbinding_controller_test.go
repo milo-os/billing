@@ -17,6 +17,8 @@ import (
 	. "github.com/onsi/gomega"
 )
 
+const testOrgNamespace = organizationNamespacePrefix + "test-org"
+
 // newTestProject returns a minimal valid Project for a binding's ProjectRef
 // to resolve against.
 func newTestProject(name string) *resourcemanagerv1alpha1.Project {
@@ -45,7 +47,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-active",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -78,7 +80,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding1 := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-supersede-old",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "account-a"},
@@ -126,7 +128,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-orphaned",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -150,7 +152,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-project-terminating",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -194,7 +196,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-superseded-orphan",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},

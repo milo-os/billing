@@ -208,7 +208,7 @@ var _ = Describe("BillingAccount Controller", func() {
 			account := &billingv1alpha1.BillingAccount{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-count-acct",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountSpec{
 					CurrencyCode: "USD",
@@ -231,7 +231,7 @@ var _ = Describe("BillingAccount Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-count-binding",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "test-count-acct"},
