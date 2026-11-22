@@ -10,6 +10,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/event"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -82,5 +83,19 @@ func TestBindingReconcile_ForeignBindingDoesNotSupersedeOwner(t *testing.T) {
 	must(t, c.Get(context.Background(), client.ObjectKeyFromObject(foreign), &got))
 	if got.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseActive {
 		t.Fatalf("binding in another organization's namespace must not become Active")
+	}
+}
+
+func TestProjectWatch_OwnerChangeEnqueuesBindings(t *testing.T) {
+	before := binderProject("acme-web")
+	after := before.DeepCopy()
+	after.Spec.OwnerRef.Name = "globex"
+	if !projectTerminatingDeletedOrTransferred.Update(event.UpdateEvent{ObjectOld: before, ObjectNew: after}) {
+		t.Fatalf("an owner change must re-check the project's bindings")
+	}
+	relabelled := before.DeepCopy()
+	relabelled.Labels = map[string]string{"unrelated": "change"}
+	if projectTerminatingDeletedOrTransferred.Update(event.UpdateEvent{ObjectOld: before, ObjectNew: relabelled}) {
+		t.Fatalf("an unrelated update must not re-check the project's bindings")
 	}
 }

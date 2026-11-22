@@ -237,15 +237,21 @@ func (r *BillingAccountBindingReconciler) supersedeOlderBindings(
 	return nil
 }
 
-// projectTerminatingOrDeleted matches a Project Update where deletion just
-// started, or a Delete. Anything else (e.g. a status condition flipping) has
-// no bearing on whether a binding should be cleaned up, so there's no reason
-// to reconcile every binding on that project on every such event.
-var projectTerminatingOrDeleted = predicate.Funcs{
+// projectTerminatingDeletedOrTransferred matches a Project Update where
+// deletion just started or the owner changed, or a Delete. Anything else (e.g.
+// a status condition flipping) has no bearing on whether a binding should be
+// cleaned up, so there's no reason to reconcile every binding on that project
+// on every such event.
+var projectTerminatingDeletedOrTransferred = predicate.Funcs{
 	CreateFunc: func(event.CreateEvent) bool { return false },
 	DeleteFunc: func(event.DeleteEvent) bool { return true },
 	UpdateFunc: func(e event.UpdateEvent) bool {
-		return !e.ObjectNew.GetDeletionTimestamp().IsZero()
+		if !e.ObjectNew.GetDeletionTimestamp().IsZero() {
+			return true
+		}
+		oldProject, okOld := e.ObjectOld.(*resourcemanagerv1alpha1.Project)
+		newProject, okNew := e.ObjectNew.(*resourcemanagerv1alpha1.Project)
+		return okOld && okNew && oldProject.Spec.OwnerRef != newProject.Spec.OwnerRef
 	},
 	GenericFunc: func(event.GenericEvent) bool { return false },
 }
@@ -261,7 +267,7 @@ func (r *BillingAccountBindingReconciler) SetupWithManager(mgr ctrl.Manager) err
 		Watches(
 			&resourcemanagerv1alpha1.Project{},
 			handler.EnqueueRequestsFromMapFunc(r.bindingRequestsForProject),
-			builder.WithPredicates(projectTerminatingOrDeleted),
+			builder.WithPredicates(projectTerminatingDeletedOrTransferred),
 		).
 		Complete(r)
 }

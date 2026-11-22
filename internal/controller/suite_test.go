@@ -205,7 +205,7 @@ var _ = BeforeSuite(func() {
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		Watches(&resourcemanagerv1alpha1.Project{},
 			handler.EnqueueRequestsFromMapFunc(bindingReconciler.requestsForProject),
-			builder.WithPredicates(projectTerminatingOrDeleted),
+			builder.WithPredicates(projectTerminatingDeletedOrTransferred),
 		).
 		Complete(bindingReconciler)
 	Expect(err).NotTo(HaveOccurred())
