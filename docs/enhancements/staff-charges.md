@@ -11,9 +11,9 @@ latest-milestone: "v0"
 - [What We Have Today](#what-we-have-today)
 - [Goals and Non-Goals](#goals-and-non-goals)
 - [The Charge Resource](#the-charge-resource)
-  - [Catalog and custom charges](#catalog-and-custom-charges)
+  - [The item: catalog or custom](#the-item-catalog-or-custom)
   - [Service period](#service-period)
-  - [Amounts and tax](#amounts-and-tax)
+  - [Amounts, discounts and tax](#amounts-discounts-and-tax)
   - [When it's invoiced](#when-its-invoiced)
   - [Validation](#validation)
   - [Status and lifecycle](#status-and-lifecycle)
@@ -50,11 +50,18 @@ it by hand in the Stripe dashboard. Those charges have no service period,
 no product and no audit trail in the platform, and they don't show in the
 account's invoice preview.
 
-This enhancement adds a `Charge` resource to billing. Staff create one on a
-billing account, either from the catalog (a `ServicePricing` gives the
-price, unit, SKU and tax code) or as a custom charge (description, amount
-and tax code). Each has a quantity, a **service period**, an optional note
-for staff, and a choice to put it on the next invoice or invoice it now.
+This enhancement adds a `Charge` resource to billing. Staff add one to a
+billing account the way they'd add a line in Stripe's invoice editor: pick
+a catalog item (a `ServicePricing` fills in the description, price, unit,
+SKU and tax code, any of which staff can change) or type a custom item,
+then set a quantity, a **service period** (Stripe's "supply date"), a tax
+code, a discount and a note for staff, and choose to put it on the next
+invoice or invoice it now.
+
+It also lets a contract's one-time fees, such as a setup fee, carry a
+service period of their own, such as the installation date. Charges cover
+what's added after a contract starts or to accounts without one; contract
+fees cover what's known when the contract is written.
 
 openmeter-provider puts the charge on OpenMeter's gathering invoice as a
 pending line that keeps its period, so it lands on the same invoice as the
@@ -88,8 +95,13 @@ Checked on 2026-11-22, against `main` in each repo.
 Goals:
 
 - Staff add a charge to any billing account, contract or not, from the
-  catalog or custom, with a quantity, a service period, a staff note and
-  tax settings.
+  catalog or custom, with a quantity, a service period, a staff note, a
+  discount and tax settings. The form works like a line in Stripe's invoice
+  editor, so it's familiar to whoever does this in Stripe today.
+- A catalog item's price, description and tax code are defaults, not
+  locks: staff can change them for one charge, and the line still counts
+  as that product in Stripe's reports.
+- A contract's one-time fees can have a service period too.
 - The charge's service period reaches the Stripe line as `period.start` and
   `period.end`, unchanged.
 - The charge is on the account's next invoice with everything else, or on
@@ -125,25 +137,25 @@ metadata:
 spec:
   billingAccountRef:
     name: acme
-  kind: Catalog
-  # Price, unit, SKU, tax and description come from the pricing.
+  # The item. Optional: without it, this is a custom item.
   servicePricingRef:
     name: cross-connect-install-v1
+  description: Cross-connect install, cage 12   # defaulted from the pricing
   quantity: "2"
-  servicePeriod:
-    start: "2026-12-15"     # dates, inclusive, in UTC
-    end: "2026-12-15"       # a single day is allowed
-  note: Installed for the new cage; ticket OPS-1234
-  invoice: NextInvoice      # NextInvoice | Now
-  # Filled in by the defaulting webhook for a catalog charge:
-  description: Cross-connect install
-  unitAmount: "300.00"
+  unitAmount: "250.00"      # defaulted from the pricing; here, a lower price
   currency: USD
   tax:
-    code: txcd_20030000
+    code: txcd_20030000     # defaulted from the pricing
+  discountPercent: "10"     # optional
+  servicePeriod:            # Stripe's "supply date"
+    start: "2026-12-15"     # dates, inclusive, in UTC
+    end: "2026-12-15"       # a single day is allowed
+  note: Installed for the new cage; agreed price, ticket OPS-1234
+  invoice: NextInvoice      # NextInvoice | Now
 status:
   phase: Scheduled          # Pending | Scheduled | Invoiced | Failed
-  amount: "600.00"
+  amount: "500.00"          # quantity × unitAmount, before the discount
+  listUnitAmount: "300.00"  # the pricing's own price, when it was changed
   invoiceAt: "2027-01-01T00:00:00Z"
   invoiceRef:
     name: ""                # the Invoice once it's issued
@@ -154,50 +166,53 @@ status:
   observedGeneration: 1
 ```
 
-A custom charge has no `servicePricingRef`, or one used only for its
-product (see below), and states its own description, amount and tax:
+A custom item has no `servicePricingRef` and states its own description,
+price and tax:
 
 ```yaml
 spec:
   billingAccountRef: {name: acme}
-  kind: Custom
   description: Remote hands, December
-  unitAmount: "150.00"
   quantity: "3.5"
-  servicePeriod: {start: "2026-12-01", end: "2026-12-31"}
+  unitAmount: "150.00"
   tax:
     code: txcd_20060000
+  servicePeriod: {start: "2026-12-01", end: "2026-12-31"}
   note: Three and a half hours on 4 and 11 December
   invoice: NextInvoice
 ```
 
-### Catalog and custom charges
+### The item: catalog or custom
 
-`spec.kind` is `Catalog` (the default when `servicePricingRef` is set) or
-`Custom`.
+There's one kind of charge, as there's one kind of line in Stripe's
+invoice editor. The item is either a catalog item or a custom one, and a
+catalog item only supplies defaults.
 
-| | Catalog | Custom |
+| Field | With `servicePricingRef` (catalog item) | Without (custom item) |
 |---|---|---|
-| `servicePricingRef` | Required. A `OneTime` or `Recurring` pricing; not `Usage`. | Optional. Names the catalog item whose Product (and SKU) the line joins, for reporting. Without it, the line uses the [custom charge product](#the-custom-charge-product). |
-| `description` | Defaulted from the pricing's `displayName`. Staff may change it, for example to add a cabinet number. | Required. |
-| `unitAmount` | Defaulted from the pricing's `amount`, and must equal it. A different price is a custom charge. | Required. |
-| Unit | The pricing's `pricingUnit`, shown in the portal. | None. |
-| SKU | The pricing's SKU, carried in metadata only. Never in the description. | The named pricing's SKU, if any. |
-| `tax` | Defaulted from the pricing's `tax`. Staff may change the code or mark it not taxable. | Optional. Omitted, the account's default tax code applies. |
+| `servicePricingRef` | A `OneTime` or `Recurring` pricing; not `Usage`. A list price, or the account's own customer price (`basedOn`). | Not set. |
+| `description` | Defaulted from the pricing's `displayName`. Staff can change it, for example to add a cage number. | Required. |
+| `unitAmount` | Defaulted from the pricing's `amount`. Staff can change it. | Required. |
+| Unit | The pricing's `pricingUnit`, shown in the portal and on the line's metadata. | None. |
+| Product and SKU | The pricing's: the line counts as that product in Stripe's reports, at whatever price. The SKU is in metadata only, never in the description. | The [custom charge product](#the-custom-charge-product). |
+| `tax` | Defaulted from the pricing's `tax`. Staff can change the code or mark it not taxable. | Optional. Omitted, the account's default tax code applies. |
 
-A catalog charge may name a customer's own price (a pricing with `basedOn`)
-as well as a list price. The portal only offers the account's own customer
-prices, next to the list.
+This is the enhancement's [price override][overrides] rule: the Product says
+what was sold, the line says what it cost. When staff change a catalog
+item's price, `status.listUnitAmount` keeps the pricing's own, and it goes
+on the Stripe line's metadata, so finance can report it against list.
 
-The defaulting webhook copies the catalog values onto the spec at creation,
-so the stored spec states the line in full. `ServicePricing`s are
-immutable, so the copy can't drift from the pricing, and the provider never
-needs to look the pricing up to know what to bill.
+The defaulting webhook copies the pricing's values onto the spec at
+creation, for any field staff left empty, so the stored spec states the
+line in full. `ServicePricing`s are immutable, so the defaults can't drift,
+and the provider never looks the pricing up to know what to bill.
 
 ### Service period
 
-`spec.servicePeriod` is the dates the charge is for. It's what Stripe prints
-on the line and what Revenue Recognition spreads the revenue over.
+`spec.servicePeriod` is the dates the charge is for: Stripe's "supply
+date". It's what Stripe prints on the line and what Revenue Recognition
+spreads the revenue over. Its type, `ServicePeriod`, is shared with
+[one-time contract fees](#service-periods-on-one-time-contract-fees).
 
 - **Dates, not times.** `start` and `end` are `YYYY-MM-DD`, both included,
   and read as UTC days, the way the portals already show billing periods
@@ -210,9 +225,10 @@ on the line and what Revenue Recognition spreads the revenue over.
   more than two years ago or end more than five years ahead. That catches
   typos like 2062, and nothing real needs more. See
   [Open Questions](#open-questions).
-- **Defaults to the account's current billing period.** When staff leave it
-  out, the defaulting webhook fills it from the account's billing day on
-  the day the charge is created:
+- **Defaults to the account's current billing period.** Stripe's lines can
+  go without a supply date; ours can't, because Revenue Recognition needs
+  one on every line. So when staff leave it out, the defaulting webhook
+  fills it from the account's billing day on the day the charge is created:
   - the billing day is `status.contract.billingDayOfMonth` when the account
     has a contract that has started, and otherwise its payment terms'
     invoice day (the 1st under the standard terms);
@@ -220,15 +236,15 @@ on the line and what Revenue Recognition spreads the revenue over.
     the day before the next one. Months shorter than the billing day use
     their last day, as billing does elsewhere.
 
-  The portal pre-fills its date pickers with the same period, so what staff
-  see is what's stored.
+  The portal shows this default when "Supply date" is unticked, so what
+  staff see is what's stored.
 
 The service period says what the charge is *for*. It doesn't decide *when*
 it's invoiced: that's `spec.invoice`. A charge for next quarter added today
 is on the next invoice, paid in advance, with next quarter's dates on its
 line.
 
-### Amounts and tax
+### Amounts, discounts and tax
 
 - `quantity` is a positive decimal string with up to two decimal places
   ("2", "3.5"). `unitAmount` is a decimal string with up to two decimal
@@ -238,13 +254,25 @@ line.
   The webhook refuses a charge where it doesn't ("3.33 × 0.15"), rather than
   round, because Stripe's rounding is never allowed to change an amount (see
   stripe-provider's "Checking amounts"). `status.amount` records it.
+- Stripe's editor can price "per N units" (a pack price). A charge is
+  always per unit: a pack is entered as the pack's price, with the quantity
+  in packs.
 - `currency` is `USD`, and must match the account's.
-- No discount applies. An Offer's discount is OpenMeter's subscription
-  discount, and a charge isn't part of the subscription. The amount staff
-  enter is what's billed.
+- `discountPercent` is optional: a percentage off this line, like Stripe's
+  "item coupons". It becomes one of stripe-provider's standing percentage
+  coupons on the line (`datum-pct-10`), so reports show the full price and
+  the discount apart. Nothing else discounts a charge: an Offer's discount
+  belongs to OpenMeter's subscription, and a charge isn't part of it. So
+  Stripe's "Discountable" switch, which is about invoice-wide coupons, has
+  nothing to do here, since we don't use invoice-wide coupons.
 - `tax` has the same shape and rule as `ServicePricing.spec.tax`: a `code`
   (one of Stripe's tax codes) and `taxable`. A charge that isn't taxable
   can't have a code, and needs a note saying why.
+- Tax is always added on top of the price (Stripe's tax behavior
+  `exclusive`), as on every other line: stripe-provider writes every line
+  that way, because Stripe Tax won't calculate a line without it. So the
+  form has no "Include tax in price" choice. See
+  [Open Questions](#open-questions).
 
 ### When it's invoiced
 
@@ -272,9 +300,9 @@ create; the spec is immutable after that.
 | Period within the bounds above | Webhook |
 | Spec is immutable | CEL (`self == oldSelf`) |
 | `billingAccountRef` names an account in the same namespace that isn't being deleted | Webhook |
-| Catalog: the pricing exists, is `OneTime` or `Recurring`, and is in USD | Webhook |
-| Catalog: `unitAmount` equals the pricing's `amount` | Webhook |
-| Custom: `description` and `unitAmount` are set | CEL |
+| With `servicePricingRef`: the pricing exists, is `OneTime` or `Recurring`, and is in USD; a customer price belongs to this account's contract | Webhook |
+| Without `servicePricingRef`: `description` and `unitAmount` are set | CEL |
+| `discountPercent`: more than 0, up to 100, at most two decimal places | CRD |
 | `description`: 1 to 256 characters | CRD (OpenMeter's line name allows 256) |
 | `quantity × unitAmount` is whole cents | Webhook |
 | `tax.code` not set when `tax.taxable` is false; a non-taxable charge has a `note` | CEL |
@@ -365,6 +393,7 @@ It creates one pending line with `CreatePendingInvoiceLine`
 | `period.to` | the day after `servicePeriod.end`, at 00:00 UTC (OpenMeter's period end is exclusive) |
 | `invoiceAt` | `NextInvoice`: the end of the subscription's current billing period, read through the v3 subscription API. Without a subscription, the next billing day from the rule above. `Now`: the current time. |
 | `rateCard.price` | A flat price of `status.amount`, `paymentTerm: in_advance` |
+| `rateCard.discounts.percentage` | `discountPercent`, when set, so OpenMeter's total matches Stripe's |
 | `rateCard.taxConfig.stripe.code` | `tax.code`, or Stripe's non-taxable code when `taxable` is false |
 | `metadata` | `datum_charge` (namespace/name), `datum_charge_uid`, `datum_quantity`, `datum_unit_amount` |
 
@@ -428,6 +457,8 @@ Before building the controller, a short spike on staging's OpenMeter
    progressive billing on.
 6. How long the billing profile's draft period holds an invoice-now
    invoice, and whether approving it early is allowed.
+7. A percentage discount on a manual flat line's rate card is applied, and
+   shows as a discount on the line, not a lower amount.
 
 If (1) doesn't hold, `NextInvoice` sets `invoiceAt` to the period end and
 the controller invoices the line with the period's invoice through the
@@ -474,8 +505,9 @@ the `Charge` and builds:
 | `amount` | OpenMeter's line amount, which equals `quantity × unitAmount` by construction. stripe-provider checks it. |
 | `period` | OpenMeter's line period, end made inclusive. The same rule as every other line, and it gives back the charge's dates (below). |
 | `tax` | `spec.tax` |
+| `discountPercent` | `spec.discountPercent` |
 | `note` | `spec.note`. Stripe metadata `datum_note`, never printed. |
-| `metadata` | `charge` (namespace/name), `chargeUid`, `chargeKind`, `addedBy`, `servicePricing`. stripe-provider adds `datum_sku` from the Product. |
+| `metadata` | `charge` (namespace/name), `chargeUid`, `addedBy`, `servicePricing`, `listUnitAmount` when the price was changed, `pricingUnit`. stripe-provider adds `datum_sku` from the Product. |
 
 stripe-provider needs nothing new for charges. It writes `period.start` and
 `period.end` on every line already, and refuses a line without one.
@@ -543,41 +575,64 @@ A new "Charges" card on the account dashboard, beside Invoices:
 
 ### Add charge
 
-A dialog with two tabs, **From catalog** and **Custom**.
+A dialog laid out like a line in Stripe's invoice editor, so it's familiar
+to whoever adds charges in Stripe today. One form for catalog and custom
+items:
 
-From catalog:
+```text
+Item                                         Qty
+[ Search the catalog, or type a name   x ]   [ 2        ]
 
-- A searchable picker of `OneTime` and `Recurring` pricings, reusing the
-  contract editor's SKU-aware fee picker (staff-portal#853). Each row shows
-  the display name, price per unit, SKU and tax code. The account's own
-  customer prices are listed first. The custom charge pricing is hidden.
-- Description, pre-filled from the pricing and editable.
-- Quantity, unit price (read-only) and the line amount.
+Price
+[ US$ 250.00 ]  per unit                     List price US$ 300.00 · Reset
 
-Custom:
+Item options ^
+  Tax code       [ Installation services (txcd_20030000)  edit ]
+                 [ ] Not taxable
+  Discount       [ 10 ] %
+  Supply date    [x] [ 15 Dec 2026 ] -> [ 15 Dec 2026 ]
+                     This billing period · Next billing period · Today
+  Note for staff [ Installed for the new cage; agreed price      ]
+                 Never shown to the customer.
 
-- Description, unit price, quantity and the line amount.
-- "Product for reporting", optional: a catalog item whose product the
-  charge joins. Without it, "Custom charge".
+When             (o) On the next invoice, 1 Jan 2027   ( ) Invoice now
 
-Both:
+On the invoice   Cross-connect install, cage 12
+                 2 × US$ 250.00, less 10%           US$ 450.00
+                 15 Dec 2026 · tax worked out by Stripe
+```
 
-- **Service period**: start and end date pickers, using the contract
-  editor's single-date `DatePicker`, in UTC days. Pre-filled with the
-  account's current billing period, with shortcuts for "This billing
-  period", "Next billing period" and "One day". The end picker can't go
-  before the start. The dialog shows the period as the invoice will:
-  "15 Dec 2026 – 14 Jan 2027".
-- **Tax**: the pricing's tax code (or the account default for a custom
-  charge), with "Change tax code" and "Not taxable". Not taxable makes the
-  note required.
-- **Note for staff**: "Never shown to the customer", up to 500 characters.
-- **When**: "On the next invoice (1 Jan 2027)" or "Invoice now". Invoice
-  now says the customer is invoiced straight away, and charged at once if
-  they pay by card.
-- A summary of the line as the customer will read it: description,
-  quantity × unit price, amount and dates, with "Tax is worked out by Stripe
-  on the invoice".
+- **Item.** One search box over `OneTime` and `Recurring` pricings, reusing
+  the contract editor's SKU-aware fee picker (staff-portal#853). Each result
+  shows the display name, price per unit, SKU and tax code, with the
+  account's own customer prices first. The custom charge pricing is hidden.
+  Typing a name that isn't in the catalog offers "Add *name* as a custom
+  item". The item's name becomes the description, editable either way.
+- **Qty.** Decimal, up to two places.
+- **Price.** Filled from a catalog item and editable. When it differs from
+  the pricing's, the form shows the list price next to it, with "Reset".
+  Required for a custom item. The unit is the pricing's `pricingUnit`, or
+  "unit" for a custom item.
+- **Item options**, collapsed by default as in Stripe, opened automatically
+  when a catalog item brings a tax code:
+  - **Tax code**: the item's, or the account default for a custom item. The
+    edit control searches Stripe's tax codes by name, as Stripe's does.
+    "Not taxable" makes the note required.
+  - **Discount**: an optional percentage, Stripe's "item coupons".
+  - **Supply date**: start and end pickers, using the contract editor's
+    single-date `DatePicker`, in UTC days. Ticked, staff choose the dates,
+    with shortcuts. Unticked, the form says "Current billing period, 1 Dec
+    to 31 Dec 2026", which is what's stored. The end can't be before the
+    start.
+  - **Note for staff**: up to 500 characters.
+- **Not offered:** "Include tax in price" (tax is always added on top) and
+  "Discountable" (there are no invoice-wide coupons). See
+  [Amounts, discounts and tax](#amounts-discounts-and-tax).
+- **When**: "On the next invoice" with its date, or "Invoice now", which
+  says the customer is invoiced straight away, and charged at once if they
+  pay by card.
+- **On the invoice**: the line as the customer will read it, without the
+  SKU, the list price or the note.
 
 Errors from the webhook (a bad period, cents that don't divide) show on
 their fields, the way the contract editor shows its rows' errors since
@@ -600,46 +655,75 @@ which covers the same need.
 The enhancement says a setup fee's period is the day it's charged, unless
 staff give one, such as the installation date. Contract fees
 (`Offer.spec.servicePricingRefs[]`) have no such field today; a one-time
-fee's line has whatever period OpenMeter gives it.
+fee's line has whatever period OpenMeter gives it. Both are in scope:
+charges for what comes up after a contract starts, and fee periods for
+what's known when it's written.
 
-Recommendation:
+**API.** `servicePricingRefs[]` gains an optional `servicePeriod`, the same
+`ServicePeriod` type as a charge's, and the Offer's snapshot
+(`ServicePricingSnapshot`) carries it, as it does `quantity`,
+`billingTiming` and `periods`:
 
-- **Default to the day it's charged**, not the contract's first period.
-  That answers the enhancement's open question, and it's how Revenue
-  Recognition treats a one-off service already. The line builder sets it
-  for one-time fees, whatever OpenMeter's line says.
-- **Add an optional `servicePeriod` to one-time contract fees**, with the
-  same type and rules as the charge's. Only allowed on `OneTime` pricings,
-  set in the contract editor next to the fee's quantity, and immutable once
-  the contract has started, as one-time fees already are. The line builder
-  uses it for that fee's line; OpenMeter's subscription doesn't need to
-  know.
-- **Do it after charges.** Most installation dates aren't known when the
-  contract is written, and a one-time fee can't be amended once the
-  contract has started. A charge added when the install is done covers that
-  case without touching the contract. The field is for the cases where the
-  date is known up front.
+```yaml
+spec:
+  servicePricingRefs:
+    - name: contract-acme-20261201-fee-1     # OneTime: cage setup
+      quantity: 1
+      servicePeriod: {start: "2027-01-10", end: "2027-01-10"}   # install date
+```
+
+- Only allowed on `OneTime` pricings. A recurring fee's period is the
+  period it pays for, worked out per invoice.
+- The same rules as a charge's: end on or after start, the same bounds.
+- Unset, the period is **the day the fee is charged**, not the contract's
+  first period. That answers the enhancement's open question; it's how
+  Revenue Recognition treats a one-off service.
+- It can change while the contract is a draft or hasn't started. Once the
+  contract has started, its one-time fees can't change at all (billing
+  refuses that amendment, because OpenMeter would charge them again), so
+  neither can their periods. An install date that's only known later is a
+  charge.
+
+**Billing.** The fee's period doesn't change when the fee is charged or how
+much. OpenMeter's subscription doesn't need to know about it, so the
+Offer controller passes nothing new to the provider's plan.
+
+**openmeter-provider.** The line builder (phase 4) already maps each
+OpenMeter line back to its contract fee, for its pricing, quantity and
+note. For a one-time fee, it sets the `StripeInvoiceLine`'s period from the
+snapshot's `servicePeriod`, or to the day the line is invoiced, whatever
+period OpenMeter's line has. The contract preview builds its lines the same
+way, so it shows the install date before the contract is saved.
+
+**Staff portal.** In the contract editor, a one-time fee row gets the same
+"Item options" as Add charge, with only **Supply date** in it, unticked
+meaning "the day it's charged". Tax code and discount aren't offered per
+fee: a contract fee is taxed by its pricing, so a product is always taxed
+the same way, and discounts are the contract's. The contract card and the
+cloud portal's contract card show the date next to the fee.
 
 ## Rollout
 
 | Step | Repo | Depends on |
 |---|---|---|
-| 0. Spike: the six checks above | openmeter-provider (staging) | Nothing |
+| 0. Spike: the seven checks above | openmeter-provider (staging) | Nothing |
 | 1. `Charge` CRD, webhooks, controller, IAM, activity policies | billing | Nothing. Charges stay `Pending` until a provider acts on them. |
 | 2. Custom charge pricing, per environment | pricing components, finance | Finance's SKU and tax code |
 | 3. Invoice writer (phase 4) | stripe-provider, openmeter-provider | Its own design, in stripe-provider |
 | 4. `Charge` controller: pending lines, invoice now, removal, status | openmeter-provider | 0, 1; schedules charges only on accounts on Custom Invoicing (3) |
 | 5. Line builder reads charges | openmeter-provider | 3, 4 |
 | 6. Charges card and Add charge | staff-portal | 1. Useful from 4 on staging. |
-| 7. One-time fee service periods | billing, openmeter-provider, staff-portal | 5 |
+| 7. `servicePeriod` on one-time contract fees, and the contract editor's supply date | billing, staff-portal | Nothing |
+| 8. Line builder uses one-time fee periods | openmeter-provider | 3, 7 |
 
-Steps 1, 2 and 6 can go ahead before the writer. On staging, staff can then
+Steps 1, 2, 6 and 7 can go ahead before the writer. On staging, staff can then
 add, preview and remove charges, and they're invoiced once staging's
 accounts move to the writer. Production follows the writer's account by
 account rollout: an account's charges are scheduled when it moves.
 
-Rough size: billing a week, the openmeter-provider controller and line
-builder changes a week and a half after the writer, the staff portal a week.
+Rough size: billing a week and a half (charges and fee periods), the
+openmeter-provider controller and line builder changes a week and a half
+after the writer, the staff portal a week and a half.
 
 ## Testing
 
@@ -653,10 +737,13 @@ builder changes a week and a half after the writer, the staff portal a week.
 - **stripe-provider:** nothing new; line periods are covered.
 - **staff-portal:** form tests for the defaults, the UTC dates and the
   errors; a browser check on staging.
-- **End to end on staging:** a catalog charge and a custom charge with a
+- **End to end on staging:** a catalog charge at its list price, one at a
+  changed price, and a custom charge, each with a
   past period, a future period and a single day, on next invoice and
   invoice now, compared line by line in Stripe test mode: description,
-  quantity, unit price, period, tax code and metadata.
+  quantity, unit price, discount, period, tax code and metadata. A
+  contract with a setup fee that has an install date, and one without, in
+  the contract preview and on its first invoice.
 
 ## Alternatives
 
@@ -674,9 +761,15 @@ builder changes a week and a half after the writer, the staff portal a week.
   into Stripe for the same kind of charge, though, and next-invoice charges
   still need OpenMeter. Worth it only if invoice now is wanted well before
   the writer.
-- **Charges as contract one-time fees.** Works only for accounts with a
-  contract, can't be added once the contract has started, and makes every
-  install a contract amendment.
+- **A service period on `ServicePricing` instead of a new resource.** A
+  pricing is a price, mostly a list price shared by every account, and its
+  spec is immutable, so a period on it would mean a new pricing per charge.
+  It still wouldn't say which account pays, how many, the note or when to
+  invoice; today only the account's Offer bills a pricing.
+- **Charges as contract one-time fees only.** Works only for accounts with
+  a contract, and a one-time fee can't be added once the contract has
+  started. Contract fees get their own period (above) for what's known up
+  front; charges cover the rest.
 - **Lines on an `InvoiceRequest` Issue.** Not a durable record, and Issue
   invoices everything waiting, not just the charge.
 
@@ -703,8 +796,12 @@ builder changes a week and a half after the writer, the staff portal a week.
 6. **Period bounds.** Five years long, two years back and five ahead. Does
    finance want tighter limits?
 7. **Decimal quantities.** Two decimal places, for hours. Enough?
-8. **One-time contract fees.** Go ahead with an optional `servicePeriod`
-   after charges, defaulting to the day charged?
+8. **Tax included in the price.** Stripe's editor can include tax in a
+   line's price. Every line we write adds tax on top, as the enhancement
+   says. Does finance ever need tax-inclusive charges?
+9. **Changing a catalog item's price.** This design lets any Charge Admin
+   change it, recording the list price. Should a lower price need a note,
+   or a second approval past some discount?
 
 ## References
 
@@ -727,3 +824,4 @@ builder changes a week and a half after the writer, the staff portal a week.
 
 [enhancement]: https://github.com/datum-cloud/enhancements/blob/main/enhancements/platform/billing/stripe-invoicing/README.md
 [arch]: https://github.com/milo-os/stripe-provider/blob/main/docs/architecture/invoicing.md
+[overrides]: https://github.com/datum-cloud/enhancements/blob/main/enhancements/platform/billing/stripe-invoicing/README.md#price-overrides
