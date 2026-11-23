@@ -766,6 +766,13 @@ spec:
   neither can their periods. An install date that's only known later is a
   charge.
 
+**Validation.** billing's webhook and the Offer controller check what CEL
+can't: a supply date only on a `OneTime` fee, with real dates, the end on
+or after the start, and at most a charge's longest period. Unlike a
+charge's, it isn't checked against today, since an Offer is validated again
+on later updates, long after its fees' dates. `status.contract` lists each
+one-time fee's supply date.
+
 **Billing.** The fee's period doesn't change when the fee is charged or how
 much. OpenMeter's subscription doesn't need to know about it, so the
 Offer controller passes nothing new to the provider's plan.

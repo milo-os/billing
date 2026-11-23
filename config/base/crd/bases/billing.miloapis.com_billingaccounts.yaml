@@ -393,6 +393,10 @@ spec:
                         currency:
                           description: Currency is the ISO 4217 currency code of amount.
                           type: string
+                        description:
+                          description: Description is the pricing's description of
+                            what the fee is for.
+                          type: string
                         displayName:
                           description: |-
                             DisplayName is the fee's label, as invoices show it (e.g. "Setup
@@ -439,6 +443,28 @@ spec:
                           format: int32
                           minimum: 1
                           type: integer
+                        servicePeriod:
+                          description: |-
+                            ServicePeriod is a OneTime fee's supply date, from the contract.
+                            Empty when the fee's period is the day it's charged.
+                          properties:
+                            end:
+                              description: End is the last day, as YYYY-MM-DD.
+                              maxLength: 10
+                              pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                              type: string
+                            start:
+                              description: Start is the first day, as YYYY-MM-DD.
+                              maxLength: 10
+                              pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                              type: string
+                          required:
+                          - end
+                          - start
+                          type: object
+                          x-kubernetes-validations:
+                          - message: the service period can't end before it starts
+                            rule: self.end >= self.start
                         serviceRef:
                           description: |-
                             ServiceRef is the service the fee is for. Empty for a fee that isn't

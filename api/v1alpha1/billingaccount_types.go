@@ -578,6 +578,17 @@ type BillingAccountContractFee struct {
 	//
 	// +kubebuilder:validation:Optional
 	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+
+	// Description is the pricing's description of what the fee is for.
+	//
+	// +kubebuilder:validation:Optional
+	Description string `json:"description,omitempty"`
+
+	// ServicePeriod is a OneTime fee's supply date, from the contract.
+	// Empty when the fee's period is the day it's charged.
+	//
+	// +kubebuilder:validation:Optional
+	ServicePeriod *ServicePeriod `json:"servicePeriod,omitempty"`
 }
 
 // BillingAccountPrice is one service pricing in the account's Offer, as its

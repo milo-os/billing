@@ -565,3 +565,71 @@ func TestOfferReconciler_MissingServicePricing_SetsCondition(t *testing.T) {
 		t.Errorf("ServicePricingResolveFailed condition not found: %v", updated.Status.Conditions)
 	}
 }
+
+func setupFeePricing(name, amount string) *billingv1alpha1.ServicePricing {
+	return &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType:  billingv1alpha1.ChargeTypeOneTime,
+			Currency:    "USD",
+			DisplayName: "Cage setup",
+			Description: "Building and cabling a cage",
+			Notes:       "Agreed with the customer's facilities team",
+			Amount:      amount,
+			Trigger:     billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+}
+
+func TestOfferReconcile_SnapshotsSupplyDatesWithoutNotes(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeOneTime}
+	install := &billingv1alpha1.ServicePeriod{Start: "2027-01-10", End: "2027-01-10"}
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "cage-setup", ServicePeriod: install},
+		{Name: "cross-connect-install"},
+	}
+	got := reconcileOffer(t, offer,
+		setupFeePricing("cage-setup", "5000.00"),
+		setupFeePricing("cross-connect-install", "250.00"),
+	)
+
+	if len(got.Spec.ServicePricings) != 2 {
+		t.Fatalf("snapshot = %+v, want 2 pricings", got.Spec.ServicePricings)
+	}
+	for _, snap := range got.Spec.ServicePricings {
+		if snap.Spec.Notes != "" {
+			t.Errorf("%s snapshot kept the pricing's notes, which are for staff only", snap.Name)
+		}
+		if snap.Spec.Description != "Building and cabling a cage" {
+			t.Errorf("%s snapshot description = %q", snap.Name, snap.Spec.Description)
+		}
+		switch snap.Name {
+		case "cage-setup":
+			if snap.ServicePeriod == nil || *snap.ServicePeriod != *install {
+				t.Errorf("cage-setup supply date = %+v, want %+v", snap.ServicePeriod, install)
+			}
+		default:
+			if snap.ServicePeriod != nil {
+				t.Errorf("%s supply date = %+v, want none", snap.Name, snap.ServicePeriod)
+			}
+		}
+	}
+}
+
+func TestOfferReconcile_RefusesSupplyDateNotOneTime(t *testing.T) {
+	offer := gaOffer()
+	offer.Spec.ChargeTypes = []billingv1alpha1.ChargeType{billingv1alpha1.ChargeTypeRecurring}
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{
+		{Name: "cross-connect-300", ServicePeriod: &billingv1alpha1.ServicePeriod{Start: "2027-01-01", End: "2027-01-31"}},
+	}
+	got := reconcileOffer(t, offer, monthlyFeePricing("cross-connect-300", "300.00"))
+
+	if len(got.Spec.ServicePricings) != 0 {
+		t.Errorf("snapshot written for an Offer with a supply date on a Recurring fee: %+v", got.Spec.ServicePricings)
+	}
+	cond := apimeta.FindStatusCondition(got.Status.Conditions, ConditionTypePublished)
+	if cond == nil || cond.Status != metav1.ConditionFalse || cond.Reason != "ServicePeriodNotOneTime" {
+		t.Errorf("Published condition = %+v, want False/ServicePeriodNotOneTime", cond)
+	}
+}

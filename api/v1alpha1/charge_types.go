@@ -185,12 +185,14 @@ type ServicePeriod struct {
 	// Start is the first day, as YYYY-MM-DD.
 	//
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=10
 	// +kubebuilder:validation:Pattern=`^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$`
 	Start string `json:"start"`
 
 	// End is the last day, as YYYY-MM-DD.
 	//
 	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MaxLength=10
 	// +kubebuilder:validation:Pattern=`^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$`
 	End string `json:"end"`
 }

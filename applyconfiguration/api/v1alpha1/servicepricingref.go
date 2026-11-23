@@ -43,6 +43,11 @@ type ServicePricingRefApplyConfiguration struct {
 	// Offer. Only allowed on a Recurring pricing: the Offer controller
 	// won't publish an Offer that sets it on any other.
 	Periods *int32 `json:"periods,omitempty"`
+	// ServicePeriod is the supply date of a OneTime fee: the days the
+	// service it charges for was supplied, such as a cage's installation
+	// date. Unset, the period is the day the fee is charged. Only allowed
+	// on a OneTime pricing.
+	ServicePeriod *ServicePeriodApplyConfiguration `json:"servicePeriod,omitempty"`
 }
 
 // ServicePricingRefApplyConfiguration constructs a declarative configuration of the ServicePricingRef type for use with
@@ -96,5 +101,13 @@ func (b *ServicePricingRefApplyConfiguration) WithBillingTiming(value apiv1alpha
 // If called multiple times, the Periods field is set to the value of the last call.
 func (b *ServicePricingRefApplyConfiguration) WithPeriods(value int32) *ServicePricingRefApplyConfiguration {
 	b.Periods = &value
+	return b
+}
+
+// WithServicePeriod sets the ServicePeriod field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ServicePeriod field is set to the value of the last call.
+func (b *ServicePricingRefApplyConfiguration) WithServicePeriod(value *ServicePeriodApplyConfiguration) *ServicePricingRefApplyConfiguration {
+	b.ServicePeriod = value
 	return b
 }

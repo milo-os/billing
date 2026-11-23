@@ -171,6 +171,33 @@ spec:
                       maximum: 10000
                       minimum: 1
                       type: integer
+                    servicePeriod:
+                      description: |-
+                        ServicePeriod is the supply date of a OneTime fee: the days the
+                        service it charges for was supplied, such as a cage's installation
+                        date. It's the period on the fee's invoice line, which Revenue
+                        Recognition spreads it over. Unset, the period is the day the fee is
+                        charged. It doesn't change when the fee is charged or how much. Only
+                        allowed on a OneTime pricing: a Recurring fee's period is the period
+                        it pays for, and a Usage pricing's is when it was used.
+                      properties:
+                        end:
+                          description: End is the last day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                        start:
+                          description: Start is the first day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                      required:
+                      - end
+                      - start
+                      type: object
+                      x-kubernetes-validations:
+                      - message: the service period can't end before it starts
+                        rule: self.end >= self.start
                   required:
                   - name
                   type: object
@@ -237,9 +264,33 @@ spec:
                       maximum: 10000
                       minimum: 1
                       type: integer
+                    servicePeriod:
+                      description: |-
+                        ServicePeriod is a OneTime fee's supply date, captured from the
+                        reference when the Offer becomes GA. Unset, the fee's period is the
+                        day it's charged.
+                      properties:
+                        end:
+                          description: End is the last day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                        start:
+                          description: Start is the first day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                      required:
+                      - end
+                      - start
+                      type: object
+                      x-kubernetes-validations:
+                      - message: the service period can't end before it starts
+                        rule: self.end >= self.start
                     spec:
-                      description: Spec is a deep copy of the source ServicePricingSpec
-                        at publish time.
+                      description: |-
+                        Spec is a deep copy of the source ServicePricingSpec at publish time,
+                        without its notes, which are for staff only.
                       properties:
                         amount:
                           description: |-
@@ -279,6 +330,14 @@ spec:
                             only in v1.
                           pattern: ^USD$
                           type: string
+                        description:
+                          description: |-
+                            Description says what the price is for, in a sentence or two, for
+                            customers and staff: the portals show it with the item, and it's the
+                            description of the price's Product in Stripe. It isn't printed on
+                            invoice lines.
+                          maxLength: 1000
+                          type: string
                         displayName:
                           description: DisplayName is a human-readable label for invoices
                             and portals.
@@ -301,6 +360,13 @@ spec:
                             Required when chargeType is Usage. The meter must exist and not be
                             Retired, and serviceRef must name the service that owns it.
                           maxLength: 253
+                          type: string
+                        notes:
+                          description: |-
+                            Notes are for staff and finance only: how the price was agreed, what
+                            it covers, who to ask. They're never shown to customers, and they
+                            aren't copied into an Offer's snapshot, which customers can read.
+                          maxLength: 2000
                           type: string
                         pricingUnit:
                           description: |-

@@ -524,6 +524,10 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 				endsAt := metav1.NewTime(validation.ContractFeeEndsAt(terms, invoiceDay, sp.Spec.Interval, sp.Periods))
 				fee.EndsAt = &endsAt
 			}
+			fee.Description = sp.Spec.Description
+			if sp.Spec.ChargeType == billingv1alpha1.ChargeTypeOneTime && sp.ServicePeriod != nil {
+				fee.ServicePeriod = sp.ServicePeriod.DeepCopy()
+			}
 			contract.Fees = append(contract.Fees, fee)
 		}
 	}
