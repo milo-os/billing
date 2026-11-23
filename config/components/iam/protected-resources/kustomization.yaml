@@ -24,4 +24,5 @@ resources:
   - billingaccountbalance.yaml
   - creditgrant.yaml
   - charge.yaml
+  - chargedraft.yaml
 

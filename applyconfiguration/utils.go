@@ -88,6 +88,14 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Charge"):
 		return &apiv1alpha1.ChargeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeDraft"):
+		return &apiv1alpha1.ChargeDraftApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeDraftLine"):
+		return &apiv1alpha1.ChargeDraftLineApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeDraftReference"):
+		return &apiv1alpha1.ChargeDraftReferenceApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeDraftSpec"):
+		return &apiv1alpha1.ChargeDraftSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ChargeInvoiceGroup"):
 		return &apiv1alpha1.ChargeInvoiceGroupApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ChargeInvoiceRef"):

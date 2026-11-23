@@ -66,6 +66,8 @@ const (
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="spec is immutable"
 // +kubebuilder:validation:XValidation:rule="!has(self.draft) || !self.draft || self.mode == 'Preview'",message="draft is only for a Preview"
 // +kubebuilder:validation:XValidation:rule="!has(self.contractDraft) || self.mode == 'Preview'",message="contractDraft is only for a Preview"
+// +kubebuilder:validation:XValidation:rule="!has(self.chargeDraftRef) || self.mode == 'Preview'",message="chargeDraftRef is only for a Preview"
+// +kubebuilder:validation:XValidation:rule="!has(self.chargeDraftRef) || !has(self.contractDraft)",message="a request previews a contract draft or a charge draft, not both"
 type InvoiceRequestSpec struct {
 	// BillingAccountRef references the BillingAccount to invoice, in the
 	// same namespace.
@@ -96,6 +98,23 @@ type InvoiceRequestSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	ContractDraft *InvoiceRequestContractDraft `json:"contractDraft,omitempty"`
+
+	// ChargeDraftRef, on a Preview, previews the invoice a ChargeDraft's
+	// lines would make, on their own, instead of what the account is billed
+	// for now. The draft must be for this billing account.
+	//
+	// +kubebuilder:validation:Optional
+	ChargeDraftRef *ChargeDraftReference `json:"chargeDraftRef,omitempty"`
+}
+
+// ChargeDraftReference names a ChargeDraft in the same namespace.
+type ChargeDraftReference struct {
+	// Name of the ChargeDraft.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=253
+	Name string `json:"name"`
 }
 
 // InvoiceRequestContractDraft is a contract to preview before it's

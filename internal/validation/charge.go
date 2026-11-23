@@ -165,25 +165,41 @@ func CentsString(amount string) (string, bool) {
 
 // ValidateChargeCreate validates a Charge on creation, after defaulting.
 func ValidateChargeCreate(ctx context.Context, c client.Reader, charge *billingv1alpha1.Charge, now time.Time) field.ErrorList {
-	var allErrs field.ErrorList
 	specPath := field.NewPath("spec")
-	spec := &charge.Spec
+	account, allErrs := validateChargeAccount(ctx, c, charge.Namespace, charge.Spec.BillingAccountRef.Name,
+		specPath.Child("billingAccountRef", "name"))
+	allErrs = append(allErrs, validateChargeFields(ctx, c, charge, account, now, specPath)...)
+	allErrs = append(allErrs, validateChargeInvoiceGroup(ctx, c, charge, specPath.Child("invoiceGroup"))...)
+	return allErrs
+}
 
-	account, errs := getReferencedBillingAccount(ctx, c, charge.Namespace, spec.BillingAccountRef.Name)
-	allErrs = append(allErrs, errs...)
-	if account != nil {
-		accountPath := specPath.Child("billingAccountRef", "name")
-		if account.Spec.CurrencyCode != "USD" {
-			allErrs = append(allErrs, field.Invalid(accountPath, account.Name,
-				fmt.Sprintf("billing account %q is billed in %s; charges are USD only", account.Name, account.Spec.CurrencyCode)))
-		}
-		if !apimeta.IsStatusConditionTrue(account.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoiceWriterReady) {
-			allErrs = append(allErrs, field.Forbidden(accountPath,
-				fmt.Sprintf("charges aren't available for billing account %q yet: its invoices aren't written by the invoice writer (condition %s)",
-					account.Name, billingv1alpha1.BillingAccountConditionInvoiceWriterReady)))
-		}
+// validateChargeAccount checks the billing account charges are added to:
+// it exists, is billed in USD, and is on the invoice writer. It returns
+// the account when it could be read.
+func validateChargeAccount(ctx context.Context, c client.Reader, namespace, name string,
+	fldPath *field.Path) (*billingv1alpha1.BillingAccount, field.ErrorList) {
+	account, allErrs := getReferencedBillingAccount(ctx, c, namespace, name)
+	if account == nil {
+		return nil, allErrs
 	}
+	if account.Spec.CurrencyCode != "USD" {
+		allErrs = append(allErrs, field.Invalid(fldPath, account.Name,
+			fmt.Sprintf("billing account %q is billed in %s; charges are USD only", account.Name, account.Spec.CurrencyCode)))
+	}
+	if !apimeta.IsStatusConditionTrue(account.Status.Conditions, billingv1alpha1.BillingAccountConditionInvoiceWriterReady) {
+		allErrs = append(allErrs, field.Forbidden(fldPath,
+			fmt.Sprintf("charges aren't available for billing account %q yet: its invoices aren't written by the invoice writer (condition %s)",
+				account.Name, billingv1alpha1.BillingAccountConditionInvoiceWriterReady)))
+	}
+	return account, allErrs
+}
 
+// validateChargeFields checks what a charge is for, at specPath: its
+// catalog item, description, price, tax and service period.
+func validateChargeFields(ctx context.Context, c client.Reader, charge *billingv1alpha1.Charge,
+	account *billingv1alpha1.BillingAccount, now time.Time, specPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	spec := &charge.Spec
 	if spec.ServicePricingRef != nil {
 		allErrs = append(allErrs, validateChargePricing(ctx, c, charge, account, specPath.Child("servicePricingRef"))...)
 	}
@@ -211,7 +227,6 @@ func ValidateChargeCreate(ctx context.Context, c client.Reader, charge *billingv
 	}
 
 	allErrs = append(allErrs, validateChargePeriod(spec.ServicePeriod, now, specPath.Child("servicePeriod"))...)
-	allErrs = append(allErrs, validateChargeInvoiceGroup(ctx, c, charge, specPath.Child("invoiceGroup"))...)
 	return allErrs
 }
 
