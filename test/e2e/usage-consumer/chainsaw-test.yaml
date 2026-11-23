@@ -117,7 +117,7 @@ spec:
               kind: BillingAccount
               metadata:
                 name: consumer-e2e-account
-                namespace: default
+                namespace: organization-e2e-consumer
               status:
                 phase: Ready
 
@@ -136,7 +136,7 @@ spec:
               kind: BillingAccountBinding
               metadata:
                 name: consumer-e2e-binding
-                namespace: default
+                namespace: organization-e2e-consumer
               status:
                 phase: Active
 

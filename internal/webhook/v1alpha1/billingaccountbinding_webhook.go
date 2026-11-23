@@ -22,7 +22,8 @@ var billingAccountBindingLog = logf.Log.WithName("billingaccountbinding-webhook"
 // webhook with the manager.
 func SetupBillingAccountBindingWebhookWithManager(mgr ctrl.Manager) error {
 	webhook := &billingAccountBindingWebhook{
-		client: mgr.GetClient(),
+		client:        mgr.GetClient(),
+		projectReader: mgr.GetAPIReader(),
 	}
 
 	return ctrl.NewWebhookManagedBy(mgr, &billingv1alpha1.BillingAccountBinding{}).
@@ -33,7 +34,8 @@ func SetupBillingAccountBindingWebhookWithManager(mgr ctrl.Manager) error {
 // +kubebuilder:webhook:path=/validate-billing-miloapis-com-v1alpha1-billingaccountbinding,mutating=false,failurePolicy=fail,sideEffects=None,groups=billing.miloapis.com,resources=billingaccountbindings,verbs=create;update;delete,versions=v1alpha1,name=vbillingaccountbinding.kb.io,admissionReviewVersions=v1
 
 type billingAccountBindingWebhook struct {
-	client client.Client
+	client        client.Client
+	projectReader client.Reader
 }
 
 var _ admission.Validator[*billingv1alpha1.BillingAccountBinding] = &billingAccountBindingWebhook{}
@@ -47,8 +49,9 @@ func (r *billingAccountBindingWebhook) ValidateCreate(ctx context.Context, obj *
 	)
 
 	opts := validation.BillingAccountBindingValidationOptions{
-		Context: ctx,
-		Client:  r.client,
+		Context:       ctx,
+		Client:        r.client,
+		ProjectReader: r.projectReader,
 	}
 
 	if errs := validation.ValidateBillingAccountBindingCreate(obj, opts); len(errs) > 0 {

@@ -6,17 +6,28 @@ import (
 	"context"
 	"fmt"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
+
+const OrganizationNamespacePrefix = "organization-"
+
+func ProjectOwnedByNamespace(project *resourcemanagerv1alpha1.Project, namespace string) bool {
+	owner := project.Spec.OwnerRef
+	return owner.Kind == "Organization" && owner.Name != "" &&
+		namespace == OrganizationNamespacePrefix+owner.Name
+}
 
 // BillingAccountBindingValidationOptions contains the context needed for
 // cross-resource validation of a BillingAccountBinding.
 type BillingAccountBindingValidationOptions struct {
-	Context context.Context
-	Client  client.Client
+	Context       context.Context
+	Client        client.Client
+	ProjectReader client.Reader
 }
 
 // ValidateBillingAccountBindingCreate validates a BillingAccountBinding on creation.
@@ -31,6 +42,8 @@ func ValidateBillingAccountBindingCreate(
 
 	// 2. Validate single active binding per project
 	allErrs = append(allErrs, validateSingleActiveBinding(binding, opts)...)
+
+	allErrs = append(allErrs, validateProjectOwnership(binding, opts)...)
 
 	return allErrs
 }
@@ -71,6 +84,27 @@ func validateBillingAccountReady(
 	}
 
 	return allErrs
+}
+
+func validateProjectOwnership(
+	binding *billingv1alpha1.BillingAccountBinding,
+	opts BillingAccountBindingValidationOptions,
+) field.ErrorList {
+	fldPath := field.NewPath("spec", "projectRef", "name")
+	notFound := field.ErrorList{field.NotFound(fldPath, binding.Spec.ProjectRef.Name)}
+
+	var project resourcemanagerv1alpha1.Project
+	err := opts.ProjectReader.Get(opts.Context, client.ObjectKey{Name: binding.Spec.ProjectRef.Name}, &project)
+	if apierrors.IsNotFound(err) {
+		return notFound
+	}
+	if err != nil {
+		return field.ErrorList{field.InternalError(fldPath, fmt.Errorf("failed to read project: %w", err))}
+	}
+	if !ProjectOwnedByNamespace(&project, binding.Namespace) {
+		return notFound
+	}
+	return nil
 }
 
 // validateSingleActiveBinding checks that no other active binding exists for

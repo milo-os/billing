@@ -8,6 +8,8 @@ import (
 	"testing"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes/scheme"
 	"k8s.io/client-go/rest"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -69,6 +71,8 @@ var _ = BeforeSuite(func() {
 	k8sClient, err = client.New(cfg, client.Options{Scheme: scheme.Scheme})
 	Expect(err).NotTo(HaveOccurred())
 	Expect(k8sClient).NotTo(BeNil())
+
+	Expect(k8sClient.Create(ctx, &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: testOrgNamespace}})).To(Succeed())
 
 	// Start a controller manager with controllers registered
 	mgr, err := ctrl.NewManager(cfg, ctrl.Options{
@@ -201,7 +205,7 @@ var _ = BeforeSuite(func() {
 		For(&billingv1alpha1.BillingAccountBinding{}).
 		Watches(&resourcemanagerv1alpha1.Project{},
 			handler.EnqueueRequestsFromMapFunc(bindingReconciler.requestsForProject),
-			builder.WithPredicates(projectTerminatingOrDeleted),
+			builder.WithPredicates(projectTerminatingDeletedOrTransferred),
 		).
 		Complete(bindingReconciler)
 	Expect(err).NotTo(HaveOccurred())
