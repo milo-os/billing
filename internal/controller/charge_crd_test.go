@@ -80,6 +80,26 @@ var _ = Describe("Charge CRD", func() {
 		expectInvalid(k8sClient.Create(ctx, c), "spec.quantity")
 	})
 
+	It("accepts an invoice group on a charge invoiced now", func() {
+		c := charge("grouped")
+		c.Spec.Invoice = billingv1alpha1.ChargeInvoiceNow
+		c.Spec.InvoiceGroup = &billingv1alpha1.ChargeInvoiceGroup{Name: "test-period", Size: 2}
+		Expect(k8sClient.Create(ctx, c)).To(Succeed())
+	})
+
+	It("refuses an invoice group on a charge sent with the next invoice", func() {
+		c := charge("grouped-next")
+		c.Spec.InvoiceGroup = &billingv1alpha1.ChargeInvoiceGroup{Name: "test-period", Size: 2}
+		expectInvalid(k8sClient.Create(ctx, c), "only a charge invoiced now can be in an invoice group")
+	})
+
+	It("refuses an invoice group of one", func() {
+		c := charge("grouped-alone")
+		c.Spec.Invoice = billingv1alpha1.ChargeInvoiceNow
+		c.Spec.InvoiceGroup = &billingv1alpha1.ChargeInvoiceGroup{Name: "test-period", Size: 1}
+		expectInvalid(k8sClient.Create(ctx, c), "spec.invoiceGroup.size")
+	})
+
 	It("refuses any change to the spec", func() {
 		c := charge("immutable")
 		Expect(k8sClient.Create(ctx, c)).To(Succeed())

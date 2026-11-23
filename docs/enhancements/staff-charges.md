@@ -153,6 +153,9 @@ spec:
     end: "2026-12-15"       # a single day is allowed
   note: Installed for the new cage; agreed price, ticket OPS-1234
   invoice: NextInvoice      # NextInvoice | Now
+  # invoiceGroup:           # optional, invoice-now only: lines sent together
+  #   name: install-cage-12
+  #   size: 2
 status:
   phase: Scheduled          # Pending | Scheduled | Invoiced | Failed
   amount: "500.00"          # quantity × unitAmount, before the discount
@@ -305,6 +308,19 @@ line.
   minimum charge isn't collected on its own: Stripe carries it to the next
   invoice, as it does today.
 
+Several invoice-now charges can go on one invoice together, for an invoice
+of several lines sent at once. Each carries the same `spec.invoiceGroup`: a
+`name`, unique among the account's charges, and the group's `size`, from 2
+to 50. None of them is invoiced until all `size` are added, so the provider
+never sends an invoice with only some of its lines. Then they all go on one
+invoice of their own. Staff add a group from Add charge by adding more than
+one line before invoicing now.
+
+A group whose charges never all arrive waits, each charge `Pending` with
+reason `WaitingForInvoiceGroup` and how many of the group are added. Its
+charges can still be removed, since none is on an invoice yet; staff remove
+the rest and add the lines again.
+
 ### Validation
 
 The validating webhook enforces what CEL can't. Rules are checked on
@@ -324,6 +340,8 @@ create; the spec is immutable after that.
 | `tax.code` not set when `tax.taxable` is false; a non-taxable charge has a `note` | CEL |
 | `note`: up to 500 characters | CRD (Stripe's metadata value limit) |
 | The account's currency is USD | Webhook |
+| `invoiceGroup` only with `invoice: Now`; `size` 2 to 50; `name` a DNS label | CEL, CRD |
+| An `invoiceGroup` has room, its charges agree on `size`, and none of them is on an invoice yet | Webhook |
 
 The controller in billing checks the same rules again on reconcile, as
 billing does for its other resources, and sets `Ready=False` with a reason
@@ -475,6 +493,11 @@ one line. That makes a standard invoice with only the charge on it; the
 filter keeps the account's usage so far off it. The invoice then goes
 through the same draft sync to Stripe as every other invoice.
 
+A charge in an invoice group waits, without a line, until all the group's
+charges are added. Then each gets its line as above, and once every one of
+them has its line, one `InvoicePendingLinesAction` call names all their
+lines, making one invoice with the group's lines and nothing else.
+
 OpenMeter holds a new draft for the billing profile's draft period before
 issuing it. If that's longer than an "invoice now" should wait, the
 controller approves the draft once it's synced. See
@@ -617,8 +640,8 @@ pricing**:
   staging and production;
 - labelled `billing.miloapis.com/purpose: custom-charge`, so the catalog
   picker and contract price lists hide it;
-- named in billing's configuration (`charges.customChargePricing`), so the
-  provider knows it.
+- named in openmeter-provider's configuration
+  (`invoiceWriter.customChargePricing`), so the invoice writer knows it.
 
 stripe-provider makes its Product like any other. Finance then sees custom
 charges as one product in Stripe's reports, and a custom charge that names
@@ -703,6 +726,10 @@ On the invoice   Cross-connect install, cage 12
   "Discountable" (there are no invoice-wide coupons). See
   [Amounts, discounts and tax](#amounts-discounts-and-tax).
 - **When**: "On the next invoice" with its date, or "Invoice now".
+- **Several lines.** "Add another line" keeps the line just filled in and
+  opens a fresh one, so one dialog can add several charges. "When" applies
+  to all of them. Invoiced now, two or more lines go out as one invoice
+  (an invoice group); on the next invoice they join it anyway.
 - **Invoice now asks for confirmation.** Saving opens a second step that
   shows the total before tax and says what happens next, by how the account
   pays: "Acme's card ending 4242 is charged US$ 450.00 plus tax straight

@@ -211,7 +211,69 @@ func ValidateChargeCreate(ctx context.Context, c client.Reader, charge *billingv
 	}
 
 	allErrs = append(allErrs, validateChargePeriod(spec.ServicePeriod, now, specPath.Child("servicePeriod"))...)
+	allErrs = append(allErrs, validateChargeInvoiceGroup(ctx, c, charge, specPath.Child("invoiceGroup"))...)
 	return allErrs
+}
+
+// validateChargeInvoiceGroup checks a charge joining an invoice group: it's
+// invoiced now, it gives the same size as the group's other charges, and
+// the group still has room and isn't on an invoice yet.
+func validateChargeInvoiceGroup(ctx context.Context, c client.Reader, charge *billingv1alpha1.Charge, fldPath *field.Path) field.ErrorList {
+	group := charge.Spec.InvoiceGroup
+	if group == nil {
+		return nil
+	}
+	if charge.Spec.Invoice != billingv1alpha1.ChargeInvoiceNow {
+		return field.ErrorList{field.Invalid(field.NewPath("spec", "invoice"), charge.Spec.Invoice,
+			"only a charge invoiced now can be in an invoice group")}
+	}
+	if c == nil {
+		return nil
+	}
+	members, err := ChargeInvoiceGroupMembers(ctx, c, charge)
+	if err != nil {
+		return field.ErrorList{field.InternalError(fldPath, fmt.Errorf("listing the group's charges: %w", err))}
+	}
+	var allErrs field.ErrorList
+	for i := range members {
+		m := &members[i]
+		if m.Spec.InvoiceGroup.Size != group.Size {
+			return field.ErrorList{field.Invalid(fldPath.Child("size"), group.Size,
+				fmt.Sprintf("invoice group %q has %d charges, as charge %q says", group.Name, m.Spec.InvoiceGroup.Size, m.Name))}
+		}
+		if m.Status.Phase == billingv1alpha1.ChargePhaseInvoiced || ChargeOnInvoice(m) {
+			return field.ErrorList{field.Forbidden(fldPath.Child("name"),
+				fmt.Sprintf("invoice group %q is already on an invoice; use a new group", group.Name))}
+		}
+	}
+	if int32(len(members)) >= group.Size {
+		allErrs = append(allErrs, field.Forbidden(fldPath.Child("name"),
+			fmt.Sprintf("invoice group %q already has all %d of its charges", group.Name, group.Size)))
+	}
+	return allErrs
+}
+
+// ChargeInvoiceGroupMembers returns the other charges of charge's billing
+// account in its invoice group, leaving out any being removed.
+func ChargeInvoiceGroupMembers(ctx context.Context, c client.Reader, charge *billingv1alpha1.Charge) ([]billingv1alpha1.Charge, error) {
+	group := charge.Spec.InvoiceGroup
+	if group == nil {
+		return nil, nil
+	}
+	var list billingv1alpha1.ChargeList
+	if err := c.List(ctx, &list, client.InNamespace(charge.Namespace)); err != nil {
+		return nil, err
+	}
+	var members []billingv1alpha1.Charge
+	for _, m := range list.Items {
+		if m.Name == charge.Name || !m.DeletionTimestamp.IsZero() ||
+			m.Spec.BillingAccountRef.Name != charge.Spec.BillingAccountRef.Name ||
+			m.Spec.InvoiceGroup == nil || m.Spec.InvoiceGroup.Name != group.Name {
+			continue
+		}
+		members = append(members, m)
+	}
+	return members, nil
 }
 
 // validateChargePricing checks a charge's catalog item: a OneTime or

@@ -185,6 +185,25 @@ func TestApplyChargeDefaults(t *testing.T) {
 	}
 }
 
+// inGroup puts a charge invoiced now in an invoice group.
+func inGroup(name string, size int32) func(*billingv1alpha1.Charge) {
+	return func(c *billingv1alpha1.Charge) {
+		c.Spec.Invoice = billingv1alpha1.ChargeInvoiceNow
+		c.Spec.InvoiceGroup = &billingv1alpha1.ChargeInvoiceGroup{Name: name, Size: size}
+	}
+}
+
+// groupMember is another charge on acme in an invoice group.
+func groupMember(name, group string, size int32, mutate func(*billingv1alpha1.Charge)) *billingv1alpha1.Charge {
+	c := customCharge()
+	c.Name = name
+	inGroup(group, size)(c)
+	if mutate != nil {
+		mutate(c)
+	}
+	return c
+}
+
 func TestValidateChargeCreate(t *testing.T) {
 	oneTime := chargeTestPricing("cross-connect-install-v1", billingv1alpha1.ChargeTypeOneTime, "300")
 	usage := chargeTestPricing("egress-v1", billingv1alpha1.ChargeTypeUsage, "0.05")
@@ -269,6 +288,30 @@ func TestValidateChargeCreate(t *testing.T) {
 		{name: "too long", mutate: func(c *billingv1alpha1.Charge) {
 			c.Spec.ServicePeriod = &billingv1alpha1.ServicePeriod{Start: "2026-01-01", End: "2031-06-30"}
 		}, wantErr: "longer than 5 years"},
+		{name: "the first of an invoice group", mutate: inGroup("install-cage-12", 2)},
+		{name: "the last of an invoice group", mutate: inGroup("install-cage-12", 2),
+			extra: []client.Object{groupMember("cpu", "install-cage-12", 2, nil)}},
+		{name: "an invoice group sent next invoice", mutate: func(c *billingv1alpha1.Charge) {
+			inGroup("install-cage-12", 2)(c)
+			c.Spec.Invoice = billingv1alpha1.ChargeInvoiceNext
+		}, wantErr: "only a charge invoiced now"},
+		{name: "a full invoice group", mutate: inGroup("install-cage-12", 2), extra: []client.Object{
+			groupMember("cpu", "install-cage-12", 2, nil), groupMember("gpu", "install-cage-12", 2, nil),
+		}, wantErr: "already has all 2 of its charges"},
+		{name: "an invoice group of another size", mutate: inGroup("install-cage-12", 3),
+			extra: []client.Object{groupMember("cpu", "install-cage-12", 2, nil)}, wantErr: "has 2 charges"},
+		{name: "an invoice group already invoiced", mutate: inGroup("install-cage-12", 3),
+			extra: []client.Object{groupMember("cpu", "install-cage-12", 3, func(m *billingv1alpha1.Charge) {
+				m.Status.Phase = billingv1alpha1.ChargePhaseInvoiced
+			})}, wantErr: "already on an invoice"},
+		{name: "an invoice group already being added", mutate: inGroup("install-cage-12", 3),
+			extra: []client.Object{groupMember("cpu", "install-cage-12", 3, func(m *billingv1alpha1.Charge) {
+				m.Status.Conditions = []metav1.Condition{{Type: billingv1alpha1.ChargeConditionOnInvoice, Status: metav1.ConditionTrue, Reason: "Adding"}}
+			})}, wantErr: "already on an invoice"},
+		{name: "a group of the same name on another account", mutate: inGroup("install-cage-12", 2), extra: []client.Object{
+			groupMember("cpu", "install-cage-12", 2, func(m *billingv1alpha1.Charge) { m.Spec.BillingAccountRef.Name = "other" }),
+			groupMember("gpu", "install-cage-12", 2, func(m *billingv1alpha1.Charge) { m.Spec.BillingAccountRef.Name = "other" }),
+		}},
 		{name: "not a real date", mutate: func(c *billingv1alpha1.Charge) {
 			c.Spec.ServicePeriod = &billingv1alpha1.ServicePeriod{Start: "2026-02-30", End: "2026-03-01"}
 		}, wantErr: "must be a date"},
