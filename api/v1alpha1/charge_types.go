@@ -44,8 +44,8 @@ const (
 const (
 	// ChargeConditionReady is True once the billing provider has the
 	// charge on an invoice. Reasons include Scheduled, Invoiced,
-	// WaitingForProvider, WaitingForCustomer, WaitingForInvoiceWriter and
-	// Refused.
+	// WaitingForProvider, WaitingForCustomer, WaitingForInvoiceWriter,
+	// WaitingForInvoiceGroup and Refused.
 	ChargeConditionReady = "Ready"
 
 	// ChargeConditionOnInvoice is True once the billing provider has put
@@ -78,6 +78,7 @@ const (
 // +kubebuilder:validation:XValidation:rule="self == oldSelf",message="a charge can't be changed; remove it and add another"
 // +kubebuilder:validation:XValidation:rule="has(self.servicePricingRef) || (has(self.description) && has(self.unitAmount))",message="a custom charge (no servicePricingRef) needs a description and a unitAmount"
 // +kubebuilder:validation:XValidation:rule="!has(self.tax) || !has(self.tax.taxable) || self.tax.taxable || (has(self.note) && size(self.note) > 0)",message="a charge that isn't taxable needs a note saying why"
+// +kubebuilder:validation:XValidation:rule="!has(self.invoiceGroup) || (has(self.invoice) && self.invoice == 'Now')",message="only a charge invoiced now can be in an invoice group"
 type ChargeSpec struct {
 	// BillingAccountRef names the BillingAccount, in this namespace, the
 	// charge is billed to.
@@ -159,6 +160,34 @@ type ChargeSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:default=NextInvoice
 	Invoice ChargeInvoiceTiming `json:"invoice,omitempty"`
+
+	// InvoiceGroup puts this charge on one invoice with the account's other
+	// charges in the same group, for several lines staff send together.
+	// Only for a charge invoiced now. The group's charges wait until all of
+	// them are added, then go on one invoice of their own.
+	//
+	// +kubebuilder:validation:Optional
+	InvoiceGroup *ChargeInvoiceGroup `json:"invoiceGroup,omitempty"`
+}
+
+// ChargeInvoiceGroup names the invoice group a charge is in.
+type ChargeInvoiceGroup struct {
+	// Name identifies the group among the billing account's charges.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:MinLength=1
+	// +kubebuilder:validation:MaxLength=63
+	// +kubebuilder:validation:Pattern=`^[a-z0-9]([-a-z0-9]*[a-z0-9])?$`
+	Name string `json:"name"`
+
+	// Size is how many charges the group has. Every charge in the group
+	// gives the same size, and none is invoiced until all of them are
+	// added.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=2
+	// +kubebuilder:validation:Maximum=50
+	Size int32 `json:"size"`
 }
 
 // ChargeServicePricingRef names the ServicePricing a charge is for.

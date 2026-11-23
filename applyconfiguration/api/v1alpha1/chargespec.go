@@ -55,6 +55,11 @@ type ChargeSpecApplyConfiguration struct {
 	// of the account's current billing period, or Now, on an invoice of
 	// its own.
 	Invoice *apiv1alpha1.ChargeInvoiceTiming `json:"invoice,omitempty"`
+	// InvoiceGroup puts this charge on one invoice with the account's other
+	// charges in the same group, for several lines staff send together.
+	// Only for a charge invoiced now. The group's charges wait until all of
+	// them are added, then go on one invoice of their own.
+	InvoiceGroup *ChargeInvoiceGroupApplyConfiguration `json:"invoiceGroup,omitempty"`
 }
 
 // ChargeSpecApplyConfiguration constructs a declarative configuration of the ChargeSpec type for use with
@@ -148,5 +153,13 @@ func (b *ChargeSpecApplyConfiguration) WithNote(value string) *ChargeSpecApplyCo
 // If called multiple times, the Invoice field is set to the value of the last call.
 func (b *ChargeSpecApplyConfiguration) WithInvoice(value apiv1alpha1.ChargeInvoiceTiming) *ChargeSpecApplyConfiguration {
 	b.Invoice = &value
+	return b
+}
+
+// WithInvoiceGroup sets the InvoiceGroup field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the InvoiceGroup field is set to the value of the last call.
+func (b *ChargeSpecApplyConfiguration) WithInvoiceGroup(value *ChargeInvoiceGroupApplyConfiguration) *ChargeSpecApplyConfiguration {
+	b.InvoiceGroup = value
 	return b
 }

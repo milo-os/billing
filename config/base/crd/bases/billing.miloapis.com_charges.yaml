@@ -113,6 +113,33 @@ spec:
                 - NextInvoice
                 - Now
                 type: string
+              invoiceGroup:
+                description: |-
+                  InvoiceGroup puts this charge on one invoice with the account's other
+                  charges in the same group, for several lines staff send together.
+                  Only for a charge invoiced now. The group's charges wait until all of
+                  them are added, then go on one invoice of their own.
+                properties:
+                  name:
+                    description: Name identifies the group among the billing account's
+                      charges.
+                    maxLength: 63
+                    minLength: 1
+                    pattern: ^[a-z0-9]([-a-z0-9]*[a-z0-9])?$
+                    type: string
+                  size:
+                    description: |-
+                      Size is how many charges the group has. Every charge in the group
+                      gives the same size, and none is invoiced until all of them are
+                      added.
+                    format: int32
+                    maximum: 50
+                    minimum: 2
+                    type: integer
+                required:
+                - name
+                - size
+                type: object
               note:
                 description: |-
                   Note is for staff and finance, kept on the invoice line's metadata.
@@ -211,6 +238,9 @@ spec:
             - message: a charge that isn't taxable needs a note saying why
               rule: '!has(self.tax) || !has(self.tax.taxable) || self.tax.taxable
                 || (has(self.note) && size(self.note) > 0)'
+            - message: only a charge invoiced now can be in an invoice group
+              rule: '!has(self.invoiceGroup) || (has(self.invoice) && self.invoice
+                == ''Now'')'
           status:
             description: |-
               ChargeStatus is the observed state of a Charge. Amounts are decimal

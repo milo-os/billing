@@ -88,6 +88,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.CatalogStatusApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("Charge"):
 		return &apiv1alpha1.ChargeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ChargeInvoiceGroup"):
+		return &apiv1alpha1.ChargeInvoiceGroupApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ChargeInvoiceRef"):
 		return &apiv1alpha1.ChargeInvoiceRefApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ChargeServicePricingRef"):
