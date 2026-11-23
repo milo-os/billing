@@ -42,6 +42,11 @@ type ServicePricingSpecApplyConfiguration struct {
 	Currency *string `json:"currency,omitempty"`
 	// DisplayName is a human-readable label for invoices and portals.
 	DisplayName *string `json:"displayName,omitempty"`
+	// Description says what the price is for, for customers and staff.
+	Description *string `json:"description,omitempty"`
+	// Notes are for staff and finance only, and aren't copied into an
+	// Offer's snapshot.
+	Notes *string `json:"notes,omitempty"`
 	// SKU is the product code finance knows this price's product by (e.g.
 	// "DC-CAB-01"). It's internal, for tracking and reporting, and never
 	// printed on an invoice. It names the product, not the price: a
@@ -220,5 +225,21 @@ func (b *ServicePricingSpecApplyConfiguration) WithInterval(value apiv1alpha1.Ch
 // If called multiple times, the BasedOn field is set to the value of the last call.
 func (b *ServicePricingSpecApplyConfiguration) WithBasedOn(value string) *ServicePricingSpecApplyConfiguration {
 	b.BasedOn = &value
+	return b
+}
+
+// WithDescription sets the Description field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Description field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithDescription(value string) *ServicePricingSpecApplyConfiguration {
+	b.Description = &value
+	return b
+}
+
+// WithNotes sets the Notes field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Notes field is set to the value of the last call.
+func (b *ServicePricingSpecApplyConfiguration) WithNotes(value string) *ServicePricingSpecApplyConfiguration {
+	b.Notes = &value
 	return b
 }

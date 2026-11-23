@@ -389,6 +389,22 @@ spec:
 
 - The unit belongs to the pricing, since it's what the amount is per, and
   like the rest of the spec it can't be changed once created.
+
+**Prices can carry a description and notes.** `description` says what the
+price is for, in a sentence or two: the portals show it with the item, and
+it's the description of the price's Product in Stripe, not printed on
+invoice lines. `notes` are for staff and finance only, such as how the price
+was agreed. Both are part of the immutable spec, so new wording is a new
+pricing. An Offer's snapshot copies a pricing's spec without its notes,
+because customers can read their Offer, and `status.contract` lists each
+fee's description.
+
+```yaml
+spec:
+  displayName: Cage setup
+  description: Building and cabling a private cage
+  notes: Price agreed with the customer's facilities team, ticket OPS-412
+```
 - It's a short label such as `port`, `kW` or `rack`, shown as written, so
   staff choose the form that reads well after a number.
 
@@ -1158,6 +1174,10 @@ list price.
   first period (`contract.billingDay: InvoiceDay`).
 - 2026-11-18: Pricings can set `tax`, a tax code or not taxable, which their
   rate cards and invoice lines carry.
+- 2026-11-23: One-time fees can carry a supply date (`servicePeriod` on the
+  Offer's reference, see staff charges' [Service Periods on One-Time
+  Contract Fees](staff-charges.md#service-periods-on-one-time-contract-fees)),
+  and pricings a `description` and staff-only `notes`.
 - 2026-11-19: A pricing's SKU is internal and no longer starts its invoice
   lines. It was only ever on staging's invoices.
 - 2026-11-19: An `InvoiceRequest` Preview can report tax, each line's

@@ -212,6 +212,17 @@ type ServicePricingRef struct {
 	// +kubebuilder:validation:Minimum=1
 	// +kubebuilder:validation:Maximum=1200
 	Periods int32 `json:"periods,omitempty"`
+
+	// ServicePeriod is the supply date of a OneTime fee: the days the
+	// service it charges for was supplied, such as a cage's installation
+	// date. It's the period on the fee's invoice line, which Revenue
+	// Recognition spreads it over. Unset, the period is the day the fee is
+	// charged. It doesn't change when the fee is charged or how much. Only
+	// allowed on a OneTime pricing: a Recurring fee's period is the period
+	// it pays for, and a Usage pricing's is when it was used.
+	//
+	// +kubebuilder:validation:Optional
+	ServicePeriod *ServicePeriod `json:"servicePeriod,omitempty"`
 }
 
 // ServicePricingSnapshot is an immutable copy of a ServicePricingSpec taken
@@ -258,7 +269,15 @@ type ServicePricingSnapshot struct {
 	// +kubebuilder:validation:Maximum=1200
 	Periods int32 `json:"periods,omitempty"`
 
-	// Spec is a deep copy of the source ServicePricingSpec at publish time.
+	// ServicePeriod is a OneTime fee's supply date, captured from the
+	// reference when the Offer becomes GA. Unset, the fee's period is the
+	// day it's charged.
+	//
+	// +kubebuilder:validation:Optional
+	ServicePeriod *ServicePeriod `json:"servicePeriod,omitempty"`
+
+	// Spec is a deep copy of the source ServicePricingSpec at publish time,
+	// without its notes, which are for staff only.
 	//
 	// +kubebuilder:validation:Required
 	Spec ServicePricingSpec `json:"spec"`

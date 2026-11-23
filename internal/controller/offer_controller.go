@@ -166,6 +166,26 @@ func (r *OfferReconciler) Reconcile(ctx context.Context, req reconcile.Request) 
 				})
 				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
 			}
+			// Only OneTime fees have a supply date: a Recurring fee's
+			// period is the one it pays for, and usage's when it was used.
+			if names := validation.PricingsWithServicePeriodNotOneTime(snapshots); len(names) > 0 {
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypeReady,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "ServicePeriodNotOneTime",
+					Message: "servicePeriod is only allowed for OneTime fees; set on: " +
+						strings.Join(names, ", "),
+				})
+				apimeta.SetStatusCondition(&newStatus.Conditions, metav1.Condition{
+					Type:               ConditionTypePublished,
+					Status:             metav1.ConditionFalse,
+					ObservedGeneration: offer.Generation,
+					Reason:             "ServicePeriodNotOneTime",
+					Message:            "Offer sets a supply date on a pricing that isn't a OneTime fee and can't be published.",
+				})
+				return r.updateStatusIfNeeded(ctx, &offer, newStatus)
+			}
 			offer.Spec.ServicePricings = snapshots
 			if err := r.client.Update(ctx, &offer); err != nil {
 				return ctrl.Result{}, fmt.Errorf("writing servicePricings snapshot: %w", err)
@@ -271,10 +291,22 @@ func (r *OfferReconciler) buildSnapshots(ctx context.Context, offer *billingv1al
 			// Kept on any pricing so publishing can refuse it where it
 			// isn't a Recurring fee.
 			Periods: ref.Periods,
-			Spec:    *sp.Spec.DeepCopy(),
+			// Kept on any pricing so publishing can refuse it where it
+			// isn't a OneTime fee.
+			ServicePeriod: ref.ServicePeriod.DeepCopy(),
+			Spec:          snapshotSpec(sp.Spec),
 		})
 	}
 	return snapshots, nil
+}
+
+// snapshotSpec is the copy of a pricing's spec an Offer keeps: all of it
+// but its notes, which are for staff only, while customers can read their
+// Offer.
+func snapshotSpec(spec billingv1alpha1.ServicePricingSpec) billingv1alpha1.ServicePricingSpec {
+	out := *spec.DeepCopy()
+	out.Notes = ""
+	return out
 }
 
 func meterPricedTwiceMessage(dups []validation.MeterPricedTwice) string {

@@ -38,6 +38,7 @@ func ValidateOfferCreate(offer *billingv1alpha1.Offer) field.ErrorList {
 	allErrs = append(allErrs, validateOfferGAHasRefs(offer)...)
 	allErrs = append(allErrs, validateOfferDiscounts(offer)...)
 	allErrs = append(allErrs, validateOfferSignupCredit(offer)...)
+	allErrs = append(allErrs, validateFeeServicePeriods(offer.Spec.ServicePricingRefs, field.NewPath("spec", "servicePricingRefs"))...)
 
 	return allErrs
 }
@@ -52,6 +53,7 @@ func ValidateOfferUpdate(oldOffer, newOffer *billingv1alpha1.Offer, opts OfferUp
 	allErrs = append(allErrs, validateOfferGAHasRefs(newOffer)...)
 	allErrs = append(allErrs, validateOfferDiscounts(newOffer)...)
 	allErrs = append(allErrs, validateOfferSignupCredit(newOffer)...)
+	allErrs = append(allErrs, validateFeeServicePeriods(newOffer.Spec.ServicePricingRefs, field.NewPath("spec", "servicePricingRefs"))...)
 	allErrs = append(allErrs, validateOfferGAImmutability(oldOffer, newOffer, opts)...)
 
 	return allErrs
@@ -99,6 +101,13 @@ func ValidateOfferServicePricingRefs(
 				periodsNotRecurringMessage,
 			))
 		}
+		if ref.ServicePeriod != nil && sp.Spec.ChargeType != billingv1alpha1.ChargeTypeOneTime {
+			allErrs = append(allErrs, field.Invalid(
+				fldPath.Index(i).Child("servicePeriod"),
+				*ref.ServicePeriod,
+				servicePeriodNotOneTimeMessage,
+			))
+		}
 		pricings = append(pricings, billingv1alpha1.ServicePricingSnapshot{Name: sp.Name, Spec: sp.Spec})
 	}
 
@@ -142,6 +151,62 @@ func PricingsWithBillingTimingNotRecurring(pricings []billingv1alpha1.ServicePri
 		}
 	}
 	return names
+}
+
+const servicePeriodNotOneTimeMessage = "servicePeriod is only allowed for OneTime fees; " +
+	"a Recurring fee's period is the one it pays for, and a Usage pricing's when it was used"
+
+// PricingsWithServicePeriodNotOneTime returns the names of pricings other
+// than OneTime fees that carry a supply date, which only OneTime fees may.
+func PricingsWithServicePeriodNotOneTime(pricings []billingv1alpha1.ServicePricingSnapshot) []string {
+	var names []string
+	for _, p := range pricings {
+		if p.Spec.ChargeType != billingv1alpha1.ChargeTypeOneTime && p.ServicePeriod != nil {
+			names = append(names, p.Name)
+		}
+	}
+	return names
+}
+
+// validateFeeServicePeriods checks each fee's supply date: real dates, the
+// end on or after the start, and no longer than a charge's may be. Unlike a
+// charge's, it isn't checked against today: an Offer is checked again on
+// later updates, long after its fees' dates.
+func validateFeeServicePeriods(refs []billingv1alpha1.ServicePricingRef, fldPath *field.Path) field.ErrorList {
+	var allErrs field.ErrorList
+	for i, ref := range refs {
+		allErrs = append(allErrs, validateServicePeriodShape(ref.ServicePeriod, fldPath.Index(i).Child("servicePeriod"))...)
+	}
+	return allErrs
+}
+
+// validateServicePeriodShape checks a period that may be unset: real
+// dates, the end on or after the start, and at most
+// chargePeriodMaxYearsLong years.
+func validateServicePeriodShape(period *billingv1alpha1.ServicePeriod, fldPath *field.Path) field.ErrorList {
+	if period == nil {
+		return nil
+	}
+	var allErrs field.ErrorList
+	start, err := time.Parse(ChargeDateLayout, period.Start)
+	if err != nil {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("start"), period.Start, "must be a date, YYYY-MM-DD"))
+	}
+	end, err2 := time.Parse(ChargeDateLayout, period.End)
+	if err2 != nil {
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("end"), period.End, "must be a date, YYYY-MM-DD"))
+	}
+	if err != nil || err2 != nil {
+		return allErrs
+	}
+	switch {
+	case end.Before(start):
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("end"), period.End, "the supply date can't end before it starts"))
+	case end.After(start.AddDate(chargePeriodMaxYearsLong, 0, 0)):
+		allErrs = append(allErrs, field.Invalid(fldPath.Child("end"), period.End,
+			fmt.Sprintf("the supply date can't span more than %d years", chargePeriodMaxYearsLong)))
+	}
+	return allErrs
 }
 
 const periodsNotRecurringMessage = "periods is only allowed for Recurring fees; " +
@@ -332,6 +397,15 @@ func validateOfferSnapshotMetersPricedOnce(offer *billingv1alpha1.Offer) field.E
 				periodsNotRecurringMessage,
 			))
 		}
+		if snap.ServicePeriod != nil && snap.Spec.ChargeType != billingv1alpha1.ChargeTypeOneTime {
+			allErrs = append(allErrs, field.Invalid(
+				field.NewPath("spec", "servicePricings").Index(i).Child("servicePeriod"),
+				*snap.ServicePeriod,
+				servicePeriodNotOneTimeMessage,
+			))
+		}
+		allErrs = append(allErrs, validateServicePeriodShape(snap.ServicePeriod,
+			field.NewPath("spec", "servicePricings").Index(i).Child("servicePeriod"))...)
 	}
 	return allErrs
 }
