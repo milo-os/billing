@@ -48,6 +48,14 @@ const (
 	// Refused.
 	ChargeConditionReady = "Ready"
 
+	// ChargeConditionOnInvoice is True once the billing provider has put
+	// the charge on an invoice, or has started to. From then on the
+	// charge can't be removed: a mistake is corrected with a credit once
+	// the invoice is issued. The provider adds a next-invoice charge
+	// shortly before its invoice date (status.removableUntil), and an
+	// invoice-now charge straight away. Reasons: Adding, Added.
+	ChargeConditionOnInvoice = "OnInvoice"
+
 	// ChargeAddedByAnnotation records the username of whoever added the
 	// charge. The defaulting webhook sets it from the request, and the
 	// invoice writer copies it onto the invoice line's metadata.
@@ -225,6 +233,14 @@ type ChargeStatus struct {
 	// +kubebuilder:validation:Optional
 	InvoiceAt *metav1.Time `json:"invoiceAt,omitempty"`
 
+	// RemovableUntil is when the billing provider puts the charge on its
+	// invoice. Until then the charge is held in billing alone, and removing
+	// it bills nothing. Unset once the charge is on its invoice (see
+	// ChargeConditionOnInvoice), and for an invoice-now charge.
+	//
+	// +kubebuilder:validation:Optional
+	RemovableUntil *metav1.Time `json:"removableUntil,omitempty"`
+
 	// InvoiceRef names the Invoice the charge was billed on, once it's
 	// issued.
 	//
@@ -232,7 +248,7 @@ type ChargeStatus struct {
 	InvoiceRef *ChargeInvoiceRef `json:"invoiceRef,omitempty"`
 
 	// Conditions are the latest observations of the charge. See
-	// ChargeConditionReady.
+	// ChargeConditionReady and ChargeConditionOnInvoice.
 	//
 	// +kubebuilder:validation:Optional
 	// +listType=map

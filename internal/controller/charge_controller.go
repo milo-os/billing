@@ -84,7 +84,9 @@ func (r *ChargeReconciler) Reconcile(ctx context.Context, req reconcile.Request)
 	if equalChargeStatus(&charge.Status, desired) {
 		return ctrl.Result{}, nil
 	}
-	patch := client.MergeFrom(charge.DeepCopy())
+	// Optimistic: the provider writes the phase and its conditions, and a
+	// patch from a stale copy mustn't undo them.
+	patch := client.MergeFromWithOptions(charge.DeepCopy(), client.MergeFromWithOptimisticLock{})
 	charge.Status = *desired
 	return ctrl.Result{}, r.client.Status().Patch(ctx, &charge, patch)
 }

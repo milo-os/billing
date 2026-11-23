@@ -107,7 +107,7 @@ Goals:
 - The charge is on the account's next invoice with everything else, or on
   an invoice of its own when staff choose "invoice now".
 - It shows in the account's invoice preview before it's billed, and staff
-  can remove it until the invoice is issued.
+  can remove it until a day before its invoice date.
 - It's a platform resource, with RBAC and an activity trail.
 
 Non-goals:
@@ -118,7 +118,8 @@ Non-goals:
 - **Recurring charges.** A charge is billed once. Something billed every
   month is a contract fee.
 - **Editing a charge.** A charge is immutable. To change one, remove it and
-  add another.
+  add another, while it's still held (see
+  [Removing a charge](#removing-a-charge)).
 - **Showing charges to customers in the portal.** Customers see the charge
   on their invoice, as today. The resource itself is staff-only, because it
   holds the staff note.
@@ -157,12 +158,16 @@ status:
   amount: "500.00"          # quantity × unitAmount, before the discount
   listUnitAmount: "300.00"  # the pricing's own price, when it was changed
   invoiceAt: "2027-01-01T00:00:00Z"
+  removableUntil: "2026-12-31T00:00:00Z"   # when the provider puts it on the invoice
   invoiceRef:
     name: ""                # the Invoice once it's issued
   conditions:
     - type: Ready
       status: "True"
       reason: Scheduled
+    - type: OnInvoice       # True once it's on the provider's invoice
+      status: "False"
+      reason: Held
   observedGeneration: 1
 ```
 
@@ -329,7 +334,7 @@ if a pricing has since been deleted.
 | Phase | Meaning | Who sets it |
 |---|---|---|
 | `Pending` | Accepted, not yet on an invoice in the provider. Reasons include `WaitingForCustomer`, and `WaitingForInvoiceWriter` for an account moved back off the writer. | billing, on create; the provider while it waits |
-| `Scheduled` | On the account's gathering invoice (or a draft, for invoice now). `status.invoiceAt` says when it's invoiced. | Provider |
+| `Scheduled` | Due on an invoice. `status.invoiceAt` says when it's invoiced. Until `status.removableUntil` the charge is held in billing alone; after that it's on the account's gathering invoice (or a draft, for invoice now), and `OnInvoice` is True. | Provider |
 | `Invoiced` | On an issued invoice. `status.invoiceRef` names the `Invoice`. | Provider |
 | `Failed` | The provider refused it, with the reason in `Ready`. Staff remove it and add a corrected one. | Provider |
 
@@ -338,33 +343,48 @@ phase, age.
 
 ### Removing a charge
 
-Staff remove a charge by deleting it.
+Staff remove a charge by deleting it. Whether they can depends on whether
+it's on the provider's invoice yet, which the `OnInvoice` condition says.
 
-- **Before it's invoiced** (`Pending` or `Scheduled`): the provider's
-  finalizer removes the line from OpenMeter, then lets the charge go.
-- **Once it's invoiced**: the webhook refuses the delete. The charge is the
-  record of what was billed. A mistake on an issued invoice is corrected
-  with a Stripe credit note, as today. The exception is when its billing
-  account is being deleted, or its namespace is terminating: then the
-  delete is let through, so an account or organization can always be
-  removed. The `Invoice` resources and Stripe keep the record.
-- If the invoice is issued between the webhook's check and the finalizer,
-  the line can't be removed. The provider lets the charge go anyway, and
-  records a warning event and an activity line saying it was already
-  invoiced, so staff know to credit it.
+- **Before it's on an invoice** (`Pending`, `Failed`, or `Scheduled` before
+  `removableUntil`): the delete goes through, and nothing is billed. The
+  provider holds a next-invoice charge in billing until a day before its
+  invoice date, so there's nothing to take off an invoice.
+- **Once it's on an invoice** (`OnInvoice` True, or `Invoiced`): the webhook
+  refuses the delete. A mistake is corrected with a Stripe credit note once
+  the invoice is issued, as today. The charge stays as the record of what
+  was billed. The exception is when its billing account is being deleted,
+  or its namespace is terminating: then the delete is let through, so an
+  account or organization can always be removed. The `Invoice` resources
+  and Stripe keep the record.
+
+The provider never takes a line off an OpenMeter invoice. OpenMeter
+(beta.236) can only remove one line by replacing the whole invoice, and
+that replace isn't conditional: a line subscription sync adds or changes
+between the read and the write is dropped or reverted, and marked
+hand-managed so sync doesn't put it back. Holding the charge until shortly
+before its invoice date keeps removal possible for most of a charge's life
+without that risk.
+
+The provider and the webhook can't race. The provider sets `OnInvoice`
+True (reason `Adding`) with an optimistic write before it creates the
+line, and the API server runs the webhook's delete check against the
+charge as it is at the moment of the delete. So either the delete lands
+first, the provider's write conflicts and it never adds the line, or the
+condition lands first and the delete is refused.
 
 When the billing account itself is deleted:
 
-- **Scheduled charges are billed.** The account's finalizer invoices its
-  pending lines before it deletes the OpenMeter customer
-  (`PrepareInvoicesForCustomerDeletion`). So the `Charge` finalizer doesn't
-  remove the line when the account is deleting: it leaves it for the
-  account's final invoice and lets the charge go.
-- **Pending charges aren't billed.** They never reached OpenMeter, so
-  there's nothing to invoice. The provider lets them go with a warning
-  event and an activity line ("not billed: the account was deleted").
-  The staff portal's delete-account confirmation lists any pending or
-  scheduled charges, so staff can invoice them now first.
+- **Charges on an invoice are billed.** The account's finalizer invoices
+  its pending lines before it deletes the OpenMeter customer
+  (`PrepareInvoicesForCustomerDeletion`). The `Charge` finalizer leaves the
+  line for the account's final invoice and lets the charge go.
+- **Charges not on an invoice yet aren't billed** (`Pending`, or
+  `Scheduled` and still held). They never reached OpenMeter, so there's
+  nothing to invoice. The provider lets them go with a warning event and
+  an activity line ("not billed: the account was deleted"). The staff
+  portal's delete-account confirmation lists them, so staff can add them
+  again as invoice now first.
 - **Invoiced charges** are deleted with the namespace, as above.
 
 ### RBAC
@@ -406,7 +426,18 @@ exists.
 
 ### The pending line
 
-It creates one pending line with `CreatePendingInvoiceLine`
+A next-invoice charge is held in billing until a day before its
+`invoiceAt` (`status.removableUntil`), and only then put on OpenMeter's
+invoice. Until then the provider shows it as `Scheduled` and wakes again at
+`removableUntil`, or within the hour if the billing period moves. A charge
+added inside that last day is put on the invoice straight away, so it can't
+be removed. A day leaves room for the provider to be down or retrying
+before OpenMeter cuts the period's invoice. If it misses the cut anyway,
+`invoiceAt` moves to the end of the next period, and the charge is held
+for the invoice after.
+
+When it's time, the provider sets `OnInvoice` True (reason `Adding`), then
+creates one pending line with `CreatePendingInvoiceLine`
 (`POST /api/v1/billing/customers/{customerId}/invoices/pending-lines`):
 
 | OpenMeter field | From the charge |
@@ -415,7 +446,7 @@ It creates one pending line with `CreatePendingInvoiceLine`
 | `name` | `spec.description`. Printed on invoices, so never the SKU. |
 | `period.from` | `servicePeriod.start` at 00:00 UTC |
 | `period.to` | the day after `servicePeriod.end`, at 00:00 UTC (OpenMeter's period end is exclusive) |
-| `invoiceAt` | `NextInvoice`: the end of the subscription's current billing period, read through the v3 subscription API. Without a subscription, the next billing day from the rule above. `Now`: the current time. |
+| `invoiceAt` | `NextInvoice`: the end of the subscription's current billing period, read through the v3 subscription API. Without a subscription, the next billing day from the rule above. `Now`: the current time. Worked out again on each reconcile until the line exists. |
 | `rateCard.price` | A flat price of `status.amount`, `paymentTerm: in_advance` |
 | `rateCard.discounts.percentage` | `discountPercent`, when set, so OpenMeter's total matches Stripe's |
 | `rateCard.taxConfig.stripe.code` | `tax.code`, or Stripe's non-taxable code when `taxable` is false |
@@ -429,13 +460,16 @@ It creates one pending line with `CreatePendingInvoiceLine`
   lost response never makes two lines. It records the line's ID in an
   annotation (`openmeter.billing.miloapis.com/line-id`), as it records the
   billing profile's ID today.
-- **Removal.** The finalizer deletes the line from the gathering invoice, or
-  from the draft invoice while OpenMeter holds it for sync. Once the line is
-  on an issued invoice, it leaves it, as above.
+- **No removal.** The provider never removes a line; see
+  [Removing a charge](#removing-a-charge). If OpenMeter refuses the line
+  (a 4xx), `OnInvoice` goes back to False and the charge is `Failed`, so
+  staff can remove it.
 
 ### Invoice now
 
-For `invoice: Now`, the controller creates the line with `invoiceAt` now,
+For `invoice: Now`, there's no hold: as soon as the account and its
+OpenMeter customer are ready, the controller sets `OnInvoice` and creates
+the line with `invoiceAt` now,
 then calls `InvoicePendingLinesAction` with `filters.lineIds` set to that
 one line. That makes a standard invoice with only the charge on it; the
 filter keeps the account's usage so far off it. The invoice then goes
@@ -448,7 +482,8 @@ controller approves the draft once it's synced. See
 
 ### Status back to the charge
 
-- `Scheduled`, with `invoiceAt`, once the line exists.
+- `Scheduled`, with `invoiceAt` and `removableUntil`, while it's held, and
+  then with `OnInvoice` True (reason `Added`) once the line exists.
 - `Invoiced`, with `invoiceRef`, once the line is on an issued invoice. The
   controller finds it through the existing invoice sync, which already
   projects each issued OpenMeter invoice to an `Invoice`: a line carrying
@@ -461,7 +496,11 @@ controller approves the draft once it's synced. See
 Nothing to add. The next-invoice preview (`InvoiceRequest` Preview,
 `previewNextInvoice`) reads OpenMeter's draft invoice or the gathering
 invoice's flat lines. A charge is a flat line on one of them, so it's in
-the preview, with its period, as soon as it's `Scheduled`.
+the preview, with its period, once it's on OpenMeter's invoice. A held
+charge isn't there yet, so the provider adds each held next-invoice charge
+to the preview of fixed charges waiting for later periods, from the charge
+itself. A draft that's waiting to be issued is shown without them: they go
+on the invoice after it.
 
 ### What to confirm on staging first
 
@@ -599,8 +638,10 @@ A new "Charges" card on the account dashboard, beside Invoices:
   "Invoicing now", "Invoiced on INV-0042" (linking to the invoice), or the
   failure reason.
 - The note is shown under the description, marked "Staff only".
-- A "Remove" action on rows that aren't invoiced, with a confirmation that
-  says the charge comes off the next invoice.
+- A "Remove" action on rows that aren't on an invoice yet, saying until
+  when ("Can be removed until 31 Dec 2026"), with a confirmation that says
+  nothing is billed. Rows already on an invoice say they can be corrected
+  with a credit note once the invoice is issued.
 - "Add charge" on the card, and in the header's Actions menu, shown only to
   staff with Charge Admin.
 - An empty state that says charges added here go on the account's next
@@ -688,7 +729,7 @@ Stripe's, tax included.
 
 Previewing an unsaved charge with Stripe's tax, before it's added, would
 need an `InvoiceRequest` with a `chargeDraft`, like `contractDraft`. It's
-not in the first version: a scheduled charge can be previewed and removed,
+not in the first version: a held charge can be previewed and removed,
 which covers the same need.
 
 ## Service Periods on One-Time Contract Fees
@@ -751,7 +792,7 @@ cloud portal's contract card show the date next to the fee.
 | 1. `Charge` CRD, webhooks, controller, IAM, activity policies | billing | Nothing. Charges stay `Pending` until a provider acts on them. |
 | 2. Custom charge pricing, per environment | pricing components, finance | Finance's SKU and tax code |
 | 3. Invoice writer (phase 4) | stripe-provider, openmeter-provider | Its own design, in stripe-provider |
-| 4. `Charge` controller (pending lines, invoice now, removal, status), and the `InvoiceWriterReady` condition | openmeter-provider | 0, 1, 3 |
+| 4. `Charge` controller (the hold, pending lines, invoice now, status), and the `InvoiceWriterReady` condition | openmeter-provider | 0, 1, 3 |
 | 5. Line builder reads charges | openmeter-provider | 3, 4 |
 | 6. Charges card and Add charge, shown only on accounts with `InvoiceWriterReady` | staff-portal | 1, and the condition from 3 |
 | 7. `servicePeriod` on one-time contract fees, and the contract editor's supply date | billing, staff-portal | Nothing |
@@ -771,10 +812,11 @@ after the writer, the staff portal a week and a half.
 
 - **billing:** webhook tables for every validation rule and default,
   including periods across short months and billing days 29 to 31; envtest
-  for immutability and the delete refusal once invoiced.
+  for immutability and the delete refusal once on an invoice.
 - **openmeter-provider:** unit tests for the line mapping and the period
   conversion; the e2e suite against a real OpenMeter for the pending line,
-  its period on the issued invoice, invoice now and removal, alongside the
+  its period on the issued invoice, invoice now, the hold and its lead
+  time, and removal while held, alongside the
   existing invoice scripts.
 - **stripe-provider:** nothing new; line periods are covered.
 - **staff-portal:** form tests for the defaults, the UTC dates and the
