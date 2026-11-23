@@ -345,7 +345,8 @@ func ValidateChargeUpdate(oldCharge, newCharge *billingv1alpha1.Charge) field.Er
 // the billing account is being deleted or already gone, so an account or
 // organization can always be removed.
 func ValidateChargeDelete(ctx context.Context, c client.Reader, charge *billingv1alpha1.Charge) field.ErrorList {
-	if charge.Status.Phase != billingv1alpha1.ChargePhaseInvoiced {
+	invoiced := charge.Status.Phase == billingv1alpha1.ChargePhaseInvoiced
+	if !invoiced && !ChargeOnInvoice(charge) {
 		return nil
 	}
 	if c != nil && charge.Namespace != "" {
@@ -373,6 +374,16 @@ func ValidateChargeDelete(ctx context.Context, c client.Reader, charge *billingv
 			return nil
 		}
 	}
+	if invoiced {
+		return field.ErrorList{field.Forbidden(field.NewPath("metadata"),
+			"an invoiced charge can't be removed: it's the record of what was billed; correct the invoice with a credit note")}
+	}
 	return field.ErrorList{field.Forbidden(field.NewPath("metadata"),
-		"an invoiced charge can't be removed: it's the record of what was billed; correct the invoice with a credit note")}
+		"the charge is already on its invoice in the billing provider, so it can't be removed; once the invoice is issued, correct it with a credit note")}
+}
+
+// ChargeOnInvoice reports whether the billing provider has put the charge
+// on an invoice, or has started to (ChargeConditionOnInvoice is True).
+func ChargeOnInvoice(charge *billingv1alpha1.Charge) bool {
+	return apimeta.IsStatusConditionTrue(charge.Status.Conditions, billingv1alpha1.ChargeConditionOnInvoice)
 }

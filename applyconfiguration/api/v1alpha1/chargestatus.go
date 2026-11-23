@@ -28,11 +28,16 @@ type ChargeStatusApplyConfiguration struct {
 	ListUnitAmount *string `json:"listUnitAmount,omitempty"`
 	// InvoiceAt is when the billing provider invoices the charge.
 	InvoiceAt *v1.Time `json:"invoiceAt,omitempty"`
+	// RemovableUntil is when the billing provider puts the charge on its
+	// invoice. Until then the charge is held in billing alone, and removing
+	// it bills nothing. Unset once the charge is on its invoice (see
+	// ChargeConditionOnInvoice), and for an invoice-now charge.
+	RemovableUntil *v1.Time `json:"removableUntil,omitempty"`
 	// InvoiceRef names the Invoice the charge was billed on, once it's
 	// issued.
 	InvoiceRef *ChargeInvoiceRefApplyConfiguration `json:"invoiceRef,omitempty"`
 	// Conditions are the latest observations of the charge. See
-	// ChargeConditionReady.
+	// ChargeConditionReady and ChargeConditionOnInvoice.
 	Conditions []metav1.ConditionApplyConfiguration `json:"conditions,omitempty"`
 	// ObservedGeneration is the generation billing last worked out the
 	// amounts for.
@@ -82,6 +87,14 @@ func (b *ChargeStatusApplyConfiguration) WithListUnitAmount(value string) *Charg
 // If called multiple times, the InvoiceAt field is set to the value of the last call.
 func (b *ChargeStatusApplyConfiguration) WithInvoiceAt(value v1.Time) *ChargeStatusApplyConfiguration {
 	b.InvoiceAt = &value
+	return b
+}
+
+// WithRemovableUntil sets the RemovableUntil field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the RemovableUntil field is set to the value of the last call.
+func (b *ChargeStatusApplyConfiguration) WithRemovableUntil(value v1.Time) *ChargeStatusApplyConfiguration {
+	b.RemovableUntil = &value
 	return b
 }
 

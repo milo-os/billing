@@ -320,6 +320,13 @@ func TestValidateChargeDelete(t *testing.T) {
 		c.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "acme-uid"}}
 		return c
 	}
+	onInvoice := func(status metav1.ConditionStatus) *billingv1alpha1.Charge {
+		c := customCharge()
+		c.Status.Phase = billingv1alpha1.ChargePhaseScheduled
+		c.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "acme-uid"}}
+		c.Status.Conditions = []metav1.Condition{{Type: billingv1alpha1.ChargeConditionOnInvoice, Status: status, Reason: "Added"}}
+		return c
+	}
 	ns := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: "org-acme"}}
 	now := metav1.Now()
 
@@ -335,6 +342,14 @@ func TestValidateChargeDelete(t *testing.T) {
 			return c
 		}(), objs: []client.Object{ns, chargeTestAccount(true)}, allowed: true},
 		{name: "an invoiced charge", charge: invoiced(), objs: []client.Object{ns, chargeTestAccount(true)}},
+		{name: "a scheduled charge held in billing", charge: onInvoice(metav1.ConditionFalse), objs: []client.Object{ns, chargeTestAccount(true)}, allowed: true},
+		{name: "a scheduled charge on its invoice", charge: onInvoice(metav1.ConditionTrue), objs: []client.Object{ns, chargeTestAccount(true)}},
+		{name: "a charge on its invoice whose account is deleting", charge: onInvoice(metav1.ConditionTrue), objs: []client.Object{ns, func() *billingv1alpha1.BillingAccount {
+			a := chargeTestAccount(true)
+			a.DeletionTimestamp = &now
+			a.Finalizers = []string{"test"}
+			return a
+		}()}, allowed: true},
 		{name: "an invoiced charge whose account is deleting", charge: invoiced(), objs: []client.Object{ns, func() *billingv1alpha1.BillingAccount {
 			a := chargeTestAccount(true)
 			a.DeletionTimestamp = &now

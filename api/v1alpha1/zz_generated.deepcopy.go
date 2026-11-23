@@ -1106,6 +1106,10 @@ func (in *ChargeStatus) DeepCopyInto(out *ChargeStatus) {
 		in, out := &in.InvoiceAt, &out.InvoiceAt
 		*out = (*in).DeepCopy()
 	}
+	if in.RemovableUntil != nil {
+		in, out := &in.RemovableUntil, &out.RemovableUntil
+		*out = (*in).DeepCopy()
+	}
 	if in.InvoiceRef != nil {
 		in, out := &in.InvoiceRef, &out.InvoiceRef
 		*out = new(ChargeInvoiceRef)
