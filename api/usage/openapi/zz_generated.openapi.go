@@ -477,7 +477,7 @@ func schema_billing_api_usage_v1alpha1_MeterUsage(ref common.ReferenceCallback) 
 					},
 					"spend": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Spend is what the meter's usage over the time range costs, when spec.includeSpend is set. It is priced with the prices of each billing account's plan in effect at the time, the same way its invoice is, so tiered prices continue from the usage earlier in the billing period. Left empty when no billing account's plan prices this meter.",
+							Description: "Spend is what the meter's usage over the time range costs, when spec.includeSpend is set. It is priced with the prices of each billing account's plan in effect at the time, the same way its invoice is, so tiered prices continue from the usage earlier in the billing period, and the Offer's discounts come off. Left empty when no billing account's plan prices this meter.",
 							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
 						},
 					},
@@ -899,7 +899,7 @@ func schema_billing_api_usage_v1alpha1_UsageQueryStatus(ref common.ReferenceCall
 					},
 					"spend": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Spend is the sum of every meter's spend in Meters, when spec.includeSpend is set: what the usage the query read costs altogether. Meters no plan prices add nothing. Left empty when no meter is priced, or when SpendError is set.",
+							Description: "Spend is the sum of every meter's spend in Meters, when spec.includeSpend is set: what the usage the query read costs altogether. Meters no plan prices add nothing. Each amount is the sum of the meters' amounts; AmountBeforeDiscounts and DiscountAmount are left empty when any priced meter lacks them. Left empty when no meter is priced, or when SpendError is set.",
 							Ref:         ref("go.miloapis.com/billing/api/usage/v1alpha1.UsageSpend"),
 						},
 					},
@@ -1009,20 +1009,34 @@ func schema_billing_api_usage_v1alpha1_UsageSpend(ref common.ReferenceCallback) 
 	return common.OpenAPIDefinition{
 		Schema: spec.Schema{
 			SchemaProps: spec.SchemaProps{
-				Description: "UsageSpend is what usage costs.",
+				Description: "UsageSpend is what usage costs.\n\nThe usage is priced at the billing account's own rates: those of the pricings in its Offer, including a customer pricing that replaces a list price (spec.basedOn), never the list price it replaces. The Offer's discounts then come off, as they do on the invoice:\n\n\tamount = amountBeforeDiscounts - discountAmount",
 				Type:        []string{"object"},
 				Properties: map[string]spec.Schema{
 					"amount": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Amount is the cost as a decimal string in Currency (for example \"12.5\"), before taxes, credits, discounts and minimum commitments. In a project, or with spec.projects set, it prices only that usage, as if it were the billing account's only usage.",
+							Description: "Amount is what the usage costs as a decimal string in Currency (for example \"12.5\"), after the Offer's discounts, as the invoice charges it. It is before taxes, credits and minimum commitments. In a project, or with spec.projects set, it prices only that usage, as if it were the billing account's only usage.",
 							Default:     "",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"amountBeforeDiscounts": {
+						SchemaProps: spec.SchemaProps{
+							Description: "AmountBeforeDiscounts is what the usage costs before the Offer's discounts, as a decimal string in Currency: the amount the invoice shows before its discount lines. Left empty by providers that don't report it; Amount is then all that is known.",
+							Type:        []string{"string"},
+							Format:      "",
+						},
+					},
+					"discountAmount": {
+						SchemaProps: spec.SchemaProps{
+							Description: "DiscountAmount is what the Offer's discounts take off AmountBeforeDiscounts, as a decimal string in Currency: \"0\" when nothing is discounted. Set whenever AmountBeforeDiscounts is.",
 							Type:        []string{"string"},
 							Format:      "",
 						},
 					},
 					"currency": {
 						SchemaProps: spec.SchemaProps{
-							Description: "Currency is the ISO 4217 code of Amount, for example \"USD\".",
+							Description: "Currency is the ISO 4217 code of the amounts, for example \"USD\".",
 							Default:     "",
 							Type:        []string{"string"},
 							Format:      "",

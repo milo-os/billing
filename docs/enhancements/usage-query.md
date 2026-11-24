@@ -144,7 +144,12 @@ with empty results, so a client can tell a mistake from "no usage".
   it. Tiered prices continue from the usage earlier in the billing period,
   so a window inside a billing period costs what it adds to that invoice.
   With a project filter, the filtered usage is priced as if it were the
-  account's only usage. Accounts billed in different currencies give a
+  account's only usage. The usage is priced at the account's own rates,
+  those of the pricings in its Offer (a customer pricing rather than the
+  list price it replaces), and the Offer's discounts come off: `amount` is
+  what the invoice charges, `amountBeforeDiscounts` what it shows before its
+  discount lines, and `discountAmount` the difference, so portals can show
+  what a discount saves even when it covers everything. Accounts billed in different currencies give a
   `spendError` instead. `status.spend` adds up every meter's spend; it is
   left out, with a `status.spendError`, if any meter's usage or spend could
   not be read, so a partial total is never shown as the whole.
@@ -196,9 +201,17 @@ status:
               total: "412.5"
               points:
                 - { start: "2026-10-05T00:00:00Z", end: "2026-10-06T00:00:00Z", value: "18.2" }
-      spend: { amount: "20.63", currency: USD }   # with includeSpend
+      spend:                          # with includeSpend
+        amount: "16.50"               # after the Offer's discounts
+        amountBeforeDiscounts: "20.63"
+        discountAmount: "4.13"
+        currency: USD
       error: ""                       # set when this meter could not be read
-  spend: { amount: "20.63", currency: USD }       # every meter's spend together
+  spend:                              # every meter's spend together
+    amount: "16.50"
+    amountBeforeDiscounts: "20.63"
+    discountAmount: "4.13"
+    currency: USD
 ```
 
 Values are decimal strings, because Kubernetes APIs do not use floats.
@@ -267,3 +280,5 @@ A provider's REST storage for `usagequeries`:
   total.
 - 2026-10-19: Usage is converted into each `ServicePricing`'s pricing unit.
 - 2026-10-27: Spend includes the account's Offer discounts.
+- 2026-11-24: Spend also gives the amount before discounts and the discount,
+  so portals can show what usage costs before a discount that covers it all.
