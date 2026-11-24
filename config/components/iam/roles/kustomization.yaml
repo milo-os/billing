@@ -5,6 +5,7 @@
 
 resources:
   - billing-admin.yaml
+  - billing-account-editor.yaml
   - billing-viewer.yaml
   - billing-arrangement-admin.yaml
   - billing-arrangement-viewer.yaml
