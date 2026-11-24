@@ -6,6 +6,8 @@ import (
 	"context"
 	"fmt"
 
+	authenticationv1 "k8s.io/api/authentication/v1"
+	authorizationv1 "k8s.io/api/authorization/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	ctrl "sigs.k8s.io/controller-runtime"
@@ -76,6 +78,7 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 	billingAccountLog.Info("validating update", "name", newObj.GetName())
 
 	errs := validation.ValidateBillingAccountUpdate(oldObj, newObj)
+	errs = append(errs, r.contactDetailsEditorLimits(ctx, oldObj, newObj)...)
 	if !defaultPaymentMethodRefUnchanged(oldObj, newObj) {
 		errs = append(errs, validation.ValidateBillingAccountDefaultPaymentMethodRef(ctx, r.reader, newObj)...)
 	}
@@ -91,6 +94,76 @@ func (r *billingAccountWebhook) ValidateUpdate(ctx context.Context, oldObj, newO
 	}
 
 	return nil, nil
+}
+
+// contactDetailsEditorLimits refuses an update from a contact-details editor
+// (staff, through Billing Account Editor) that changes more than the contact
+// details and tax IDs: the default card, default for new projects, the
+// currency, labels or annotations. A caller who can also manage the
+// account's settings, such as a member of staff in their own organization,
+// isn't limited. See validation.BillingAccountEditContactDetailsVerb.
+func (r *billingAccountWebhook) contactDetailsEditorLimits(ctx context.Context, oldObj, newObj *billingv1alpha1.BillingAccount) field.ErrorList {
+	changed, err := validation.BillingAccountSettingsChanges(oldObj, newObj)
+	if err != nil {
+		return field.ErrorList{field.InternalError(field.NewPath("spec"), err)}
+	}
+	if len(changed) == 0 {
+		return nil
+	}
+
+	// Fail closed: without the caller, the limit can't be checked.
+	req, err := admission.RequestFromContext(ctx)
+	if err != nil {
+		return field.ErrorList{field.InternalError(changed[0], fmt.Errorf("couldn't read the admission request: %w", err))}
+	}
+	editor, err := r.callerCan(ctx, req.UserInfo, validation.BillingAccountEditContactDetailsVerb, newObj)
+	if err != nil {
+		return field.ErrorList{field.InternalError(changed[0], err)}
+	}
+	if !editor {
+		return nil
+	}
+	manager, err := r.callerCan(ctx, req.UserInfo, validation.BillingAccountManageSettingsVerb, newObj)
+	if err != nil {
+		return field.ErrorList{field.InternalError(changed[0], err)}
+	}
+	if manager {
+		return nil
+	}
+
+	billingAccountLog.Info("refusing a contact-details editor's change to the account's settings",
+		"name", newObj.GetName(), "user", req.UserInfo.Username)
+	errs := make(field.ErrorList, 0, len(changed))
+	for _, path := range changed {
+		errs = append(errs, field.Forbidden(path,
+			"your role can change only a billing account's contact details, address and tax IDs"))
+	}
+	return errs
+}
+
+// callerCan reports whether the admission caller holds verb on the account.
+// The caller's extras go along, since they carry the organization Milo
+// authorizes the request in.
+func (r *billingAccountWebhook) callerCan(ctx context.Context, user authenticationv1.UserInfo, verb string, account *billingv1alpha1.BillingAccount) (bool, error) {
+	sar := &authorizationv1.SubjectAccessReview{
+		Spec: authorizationv1.SubjectAccessReviewSpec{
+			ResourceAttributes: &authorizationv1.ResourceAttributes{
+				Verb:      verb,
+				Group:     billingv1alpha1.GroupVersion.Group,
+				Resource:  "billingaccounts",
+				Namespace: account.Namespace,
+				Name:      account.Name,
+			},
+			User:   user.Username,
+			Groups: user.Groups,
+			UID:    user.UID,
+			Extra:  convertAuthExtra(user.Extra),
+		},
+	}
+	if err := r.client.Create(ctx, sar); err != nil {
+		return false, fmt.Errorf("couldn't check the caller's %s permission: %w", verb, err)
+	}
+	return sar.Status.Allowed, nil
 }
 
 func defaultPaymentMethodRefUnchanged(oldAccount, newAccount *billingv1alpha1.BillingAccount) bool {

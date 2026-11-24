@@ -1,19 +1,25 @@
 # Bound to staff only (see the staff PolicyBindings in infra), so support can
 # fix a billing account's contact details, address and tax IDs when the
 # customer can't. Unlike Billing Admin it can't create or delete accounts.
-# Milo grants whole verbs, not fields: the BillingAccount webhook is what keeps
-# payment terms (staff grant those through a BillingArrangement) and an active
-# account's currency from changing.
+#
+# Milo grants whole verbs, not fields, so update and patch alone would let
+# staff change any field. editContactDetails limits them: billing's webhook
+# refuses a change to anything but spec.contactInfo and spec.taxIds from a
+# caller who holds it without Billing Admin's manageSettings. A member of
+# staff who is also an owner of their own organization keeps full access
+# there. The webhook still locks payment terms and an active account's
+# currency for everyone.
 apiVersion: iam.miloapis.com/v1alpha1
 kind: Role
 metadata:
   name: billing.miloapis.com-account-editor
   annotations:
     kubernetes.io/display-name: Billing Account Editor
-    kubernetes.io/description: "Edit existing billing accounts' contact details, address and tax IDs"
+    kubernetes.io/description: "Edit existing billing accounts' contact details, address and tax IDs, and nothing else"
 spec:
   launchStage: Alpha
   includedPermissions:
     - billing.miloapis.com/billingaccounts.get
     - billing.miloapis.com/billingaccounts.update
     - billing.miloapis.com/billingaccounts.patch
+    - billing.miloapis.com/billingaccounts.editContactDetails

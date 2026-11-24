@@ -14,6 +14,9 @@ spec:
     - billing.miloapis.com/billingaccounts.update
     - billing.miloapis.com/billingaccounts.patch
     - billing.miloapis.com/billingaccounts.delete
+    # The default card, default for new projects, currency, labels and
+    # annotations: what Billing Account Editor can't change.
+    - billing.miloapis.com/billingaccounts.manageSettings
     - billing.miloapis.com/billingaccountbindings.create
     - billing.miloapis.com/billingaccountbindings.update
     - billing.miloapis.com/billingaccountbindings.patch
