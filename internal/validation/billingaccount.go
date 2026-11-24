@@ -6,8 +6,11 @@ import (
 	"context"
 	"fmt"
 	"regexp"
+	"sort"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -213,4 +216,71 @@ func validateTaxIDs(taxIDs []billingv1alpha1.TaxID, fldPath *field.Path) field.E
 		seenTypes[tid.Type] = struct{}{}
 	}
 	return allErrs
+}
+
+// BillingAccountEditContactDetailsVerb and BillingAccountManageSettingsVerb
+// are IAM verbs on billingaccounts that no request uses; the webhook asks for
+// them with a SubjectAccessReview. Billing Account Editor (staff) holds the
+// first, Billing Admin (customers, through their organization roles) the
+// second. A caller who holds the first but not the second may change only
+// the account's contact details and tax IDs.
+//
+// The restriction keys on the editor's verb rather than on lacking the
+// admin's, so callers that hold neither (billing's controller, the billing
+// providers, Milo) are never restricted by it.
+const (
+	BillingAccountEditContactDetailsVerb = "editContactDetails"
+	BillingAccountManageSettingsVerb     = "manageSettings"
+)
+
+// contactDetailsFields are the spec fields a contact-details editor may change.
+var contactDetailsFields = map[string]bool{"contactInfo": true, "taxIds": true}
+
+// BillingAccountSettingsChanges lists what an update changes beyond the
+// contact details and tax IDs: each other spec field, and the labels and
+// annotations. Finalizers, owner references and status aren't listed;
+// controllers manage those.
+func BillingAccountSettingsChanges(oldAccount, newAccount *billingv1alpha1.BillingAccount) ([]*field.Path, error) {
+	oldSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&oldAccount.Spec)
+	if err != nil {
+		return nil, fmt.Errorf("reading the stored spec: %w", err)
+	}
+	newSpec, err := runtime.DefaultUnstructuredConverter.ToUnstructured(&newAccount.Spec)
+	if err != nil {
+		return nil, fmt.Errorf("reading the new spec: %w", err)
+	}
+
+	keys := make([]string, 0, len(oldSpec)+len(newSpec))
+	seen := make(map[string]bool, len(oldSpec)+len(newSpec))
+	for _, spec := range []map[string]any{oldSpec, newSpec} {
+		for key := range spec {
+			if !seen[key] && !contactDetailsFields[key] {
+				seen[key] = true
+				keys = append(keys, key)
+			}
+		}
+	}
+	sort.Strings(keys)
+
+	var changed []*field.Path
+	for _, key := range keys {
+		if !equality.Semantic.DeepEqual(oldSpec[key], newSpec[key]) {
+			changed = append(changed, field.NewPath("spec", key))
+		}
+	}
+	if !equality.Semantic.DeepEqual(nonEmpty(oldAccount.Labels), nonEmpty(newAccount.Labels)) {
+		changed = append(changed, field.NewPath("metadata", "labels"))
+	}
+	if !equality.Semantic.DeepEqual(nonEmpty(oldAccount.Annotations), nonEmpty(newAccount.Annotations)) {
+		changed = append(changed, field.NewPath("metadata", "annotations"))
+	}
+	return changed, nil
+}
+
+// nonEmpty treats an empty map as unset, so {} and nil compare equal.
+func nonEmpty(m map[string]string) map[string]string {
+	if len(m) == 0 {
+		return nil
+	}
+	return m
 }

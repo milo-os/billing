@@ -20,6 +20,8 @@
 # - Say when a person changes the default payment method, rather than
 #   "updated billing account". Only merge patches that set nothing but
 #   spec.defaultPaymentMethodRef match, so other edits read as updates.
+# - Say when a person edits the billing contact, address or tax IDs (customers
+#   in the cloud portal, staff in the staff portal).
 # - Event rules read their detail from event.billing.miloapis.com/
 #   annotations and guard each one they read, because a summary that errors
 #   sends the event to the dead-letter queue.
@@ -53,6 +55,14 @@ spec:
     - name: set-default-payment-method
       match: "!audit.user.username.startsWith('system:') && audit.verb == 'patch' && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && size(audit.requestObject.spec) == 1 && has(audit.requestObject.spec.defaultPaymentMethodRef) && type(audit.requestObject.spec.defaultPaymentMethodRef) == map && has(audit.requestObject.spec.defaultPaymentMethodRef.name) && type(audit.requestObject.spec.defaultPaymentMethodRef.name) == string && has(audit.objectRef.namespace) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
       summary: "{{ actor }} made payment method {{ link(audit.requestObject.spec.defaultPaymentMethodRef.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'paymentmethods', 'namespace': audit.objectRef.namespace, 'name': audit.requestObject.spec.defaultPaymentMethodRef.name}) }} the default for billing account {{ link(audit.objectRef.name, audit.objectRef) }}"
+
+    # The portals' billing details forms: "Jo updated the billing details for
+    # billing account acme". Only merge patches that set nothing in spec but
+    # contactInfo and taxIds match; the cloud portal's display-name annotation
+    # may ride along in metadata.
+    - name: update-billing-details
+      match: "!audit.user.username.startsWith('system:') && audit.verb == 'patch' && !has(audit.objectRef.subresource) && type(audit.requestObject) == map && has(audit.requestObject.spec) && type(audit.requestObject.spec) == map && size(audit.requestObject.spec) > 0 && audit.requestObject.spec.all(k, k in ['contactInfo', 'taxIds']) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"
+      summary: "{{ actor }} updated the billing details for billing account {{ link(audit.objectRef.name, audit.objectRef) }}"
 
     - name: update
       match: "!audit.user.username.startsWith('system:') && audit.verb in ['update', 'patch'] && !has(audit.objectRef.subresource) && has(audit.responseStatus.code) && audit.responseStatus.code >= 200 && audit.responseStatus.code < 300 && !(has(audit.requestURI) && audit.requestURI.contains('dryRun='))"

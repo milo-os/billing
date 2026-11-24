@@ -313,6 +313,157 @@ tests:
       status: {}
   exp_rule: update
   exp_summary: alice@example.com updated billing account acme
+- name: staff edit the billing contact
+  audit:
+    verb: patch
+    user:
+      username: staff@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        contactInfo:
+          email: billing@acme.example
+          name: null
+          businessName: Acme Ltd
+          invoiceEmails: []
+          address:
+            country: GB
+            city: London
+        taxIds:
+        - type: gb_vat
+          value: GB123456789
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update-billing-details
+  exp_summary: staff@example.com updated the billing details for billing account acme
+- name: the cloud portal saves billing details with the display name
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      metadata:
+        annotations:
+          billing.miloapis.com/display-name: Acme production
+      spec:
+        contactInfo:
+          email: billing@acme.example
+          invoiceEmails:
+          - finance@acme.example
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update-billing-details
+  exp_summary: alice@example.com updated the billing details for billing account acme
+- name: editing contact details with other spec fields is a plain update
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        contactInfo:
+          email: billing@acme.example
+        defaultForNewProjects: true
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update
+  exp_summary: alice@example.com updated billing account acme
+- name: a billing details edit the webhook refuses is not an activity
+  audit:
+    verb: patch
+    user:
+      username: staff@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 422
+    requestObject:
+      spec:
+        contactInfo:
+          email: not-an-email
+  exp_no_match: true
+- name: a dry-run billing details edit is not an activity
+  audit:
+    verb: patch
+    user:
+      username: staff@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme?dryRun=All
+    responseStatus:
+      code: 200
+    requestObject:
+      spec:
+        contactInfo:
+          email: not-an-email
+  exp_no_match: true
+- name: changing only the display name is a plain update
+  audit:
+    verb: patch
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingaccounts
+      name: acme
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingaccounts/acme
+    responseStatus:
+      code: 200
+    requestObject:
+      metadata:
+        annotations:
+          billing.miloapis.com/display-name: Acme production
+    responseObject:
+      metadata:
+        name: acme
+        namespace: organization-acme
+      spec: {}
+      status: {}
+  exp_rule: update
+  exp_summary: alice@example.com updated billing account acme
 - name: invoice sent with its Invoice
   event:
     metadata:
