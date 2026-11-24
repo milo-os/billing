@@ -68,4 +68,31 @@ var _ = Describe("InvoiceRequest draft", func() {
 		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "got %v", err)
 		Expect(err.Error()).To(ContainSubstring("contractDraft is only for a Preview"))
 	})
+
+	chargeDraft := func(name string, mode billingv1alpha1.InvoiceRequestMode) *billingv1alpha1.InvoiceRequest {
+		ir := request(name, mode, true)
+		if mode != billingv1alpha1.InvoiceRequestModePreview {
+			ir.Spec.Draft = false
+		}
+		ir.Spec.ChargeDraftRef = &billingv1alpha1.ChargeDraftReference{Name: "acme-charges"}
+		return ir
+	}
+
+	It("accepts a charge draft with a Preview", func() {
+		Expect(k8sClient.Create(ctx, chargeDraft("preview-charge-draft", billingv1alpha1.InvoiceRequestModePreview))).To(Succeed())
+	})
+
+	It("refuses a charge draft with an Issue", func() {
+		err := k8sClient.Create(ctx, chargeDraft("issue-charge-draft", billingv1alpha1.InvoiceRequestModeIssue))
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "got %v", err)
+		Expect(err.Error()).To(ContainSubstring("chargeDraftRef is only for a Preview"))
+	})
+
+	It("refuses a charge draft and a contract draft together", func() {
+		ir := contractDraft("both-drafts", billingv1alpha1.InvoiceRequestModePreview)
+		ir.Spec.ChargeDraftRef = &billingv1alpha1.ChargeDraftReference{Name: "acme-charges"}
+		err := k8sClient.Create(ctx, ir)
+		Expect(apierrors.IsInvalid(err)).To(BeTrue(), "got %v", err)
+		Expect(err.Error()).To(ContainSubstring("not both"))
+	})
 })

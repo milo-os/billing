@@ -423,6 +423,64 @@ When the billing account itself is deleted:
 Who can add charges, and whether large ones need a second approval, is an
 [open question](#open-questions). The first version gates on the role only.
 
+`ChargeDraft` is protected the same way: Charge Admin can create, change and
+delete drafts, Billing Entitlement Viewer can read them, and customers can't,
+since their lines carry staff notes.
+
+### Drafts
+
+Staff can prepare charges and send them later. A `ChargeDraft` holds one or
+more lines and when they'll be invoiced:
+
+```yaml
+apiVersion: billing.miloapis.com/v1alpha1
+kind: ChargeDraft
+metadata:
+  name: acme-remote-hands
+  namespace: organization-acme
+spec:
+  billingAccountRef:
+    name: acme
+  invoice: Now            # NextInvoice | Now, for every line
+  lines:                  # 1 to 50, in invoice order
+    - description: Remote hands, December
+      quantity: "3"
+      unitAmount: "150.00"
+      servicePeriod:
+        start: "2026-12-01"
+        end: "2026-12-31"
+    - servicePricingRef:
+        name: cross-connect-install-v1
+      quantity: "1"
+```
+
+- **Lines** hold what a Charge's spec does for one charge (catalog item or
+  custom item, quantity, price, tax, discount, service period, note), with
+  the same CRD rules.
+- **Unlike a Charge, a draft can be changed.** Its billing account can't.
+- **Validated on every save.** The webhook checks the account takes charges,
+  then each line as it would check the Charge it becomes, once billing fills
+  in what the line leaves out, and reports problems at `spec.lines[i]`. So
+  staff see a bad period or cents that don't divide when they save, not when
+  they send.
+- **Nothing is filled in on the draft.** A line left to its catalog item's
+  price, or to the current billing period, gets them when it's sent, as of
+  then.
+- **Nothing in a draft is billed.** No provider reads drafts except to
+  preview one.
+- **Sending** is done by the staff portal: it adds a Charge for each line,
+  in one invoice group when they're invoiced now, and then deletes the
+  draft. A send that stops part way leaves the charges it added; sending
+  again adds the rest to the same group.
+- **Previewing**: an `InvoiceRequest` Preview with `chargeDraftRef` works out
+  the invoice the draft's lines would make on their own, with Stripe's tax,
+  and with `draft: true` leaves a draft invoice in the Stripe dashboard,
+  deleted after a day, as a contract draft's preview does. See
+  [Previews](#previews).
+- Drafts have no status and no activity: they're staff's working notes
+  until sent, and the charges they become are on the timeline.
+- A draft goes with its billing account (an owner reference).
+
 ### Activity
 
 Activity policies for `Charge` put these on the account's billing
@@ -524,6 +582,16 @@ charge isn't there yet, so the provider adds each held next-invoice charge
 to the preview of fixed charges waiting for later periods, from the charge
 itself. A draft that's waiting to be issued is shown without them: they go
 on the invoice after it.
+
+A `ChargeDraft` is previewed on its own, with an `InvoiceRequest` that names
+it in `chargeDraftRef`. openmeter-provider prices its lines as billing would
+fill them in now (each catalog item's price, tax and the current billing
+period where the line leaves them out) and asks stripe-provider for a
+`StripeInvoice` preview, as for a contract's first invoice. A line without a
+catalog item uses the custom charge pricing. With `draft: true`, the preview
+is a `PreviewDraft`, a real draft invoice in the Stripe dashboard that's
+never finalized and is deleted after a day. The preview is of the lines
+alone, whether the draft would be invoiced now or with the next invoice.
 
 ### What to confirm on staging first
 
@@ -754,10 +822,10 @@ for the account, for every account, not only contract ones. A scheduled
 charge is a line on it, with its period. With the writer, that preview is
 Stripe's, tax included.
 
-Previewing an unsaved charge with Stripe's tax, before it's added, would
-need an `InvoiceRequest` with a `chargeDraft`, like `contractDraft`. It's
-not in the first version: a held charge can be previewed and removed,
-which covers the same need.
+Charges not yet added are previewed as a draft: Add charge can save its
+lines as a `ChargeDraft`, and the draft's Preview shows Stripe's invoice for
+them, with an option to leave a draft in the Stripe dashboard. See
+[Drafts](#drafts).
 
 ## Service Periods on One-Time Contract Fees
 

@@ -20,7 +20,7 @@ func ValidateInvoiceRequestCreate(
 	req *billingv1alpha1.InvoiceRequest,
 ) field.ErrorList {
 	_, errs := getReferencedBillingAccount(ctx, c, req.Namespace, req.Spec.BillingAccountRef.Name)
-	return errs
+	return append(errs, validateInvoiceRequestChargeDraft(ctx, c, req)...)
 }
 
 // ValidateInvoiceRequestUpdate validates an InvoiceRequest on update. The

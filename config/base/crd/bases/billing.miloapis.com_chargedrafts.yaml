@@ -1,0 +1,226 @@
+---
+apiVersion: apiextensions.k8s.io/v1
+kind: CustomResourceDefinition
+metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.4
+    discovery.miloapis.com/parent-contexts: Organization
+  name: chargedrafts.billing.miloapis.com
+spec:
+  group: billing.miloapis.com
+  names:
+    kind: ChargeDraft
+    listKind: ChargeDraftList
+    plural: chargedrafts
+    singular: chargedraft
+  scope: Namespaced
+  versions:
+  - additionalPrinterColumns:
+    - jsonPath: .spec.billingAccountRef.name
+      name: Account
+      type: string
+    - jsonPath: .spec.invoice
+      name: Invoice
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: Age
+      type: date
+    name: v1alpha1
+    schema:
+      openAPIV3Schema:
+        description: |-
+          ChargeDraft is charges staff are preparing for a billing account, to
+          check and send later: several lines, which can be changed, previewed
+          with an InvoiceRequest, and sent as Charges. Only staff can read drafts,
+          because of their notes.
+        properties:
+          apiVersion:
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
+            type: string
+          kind:
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
+            type: string
+          metadata:
+            type: object
+          spec:
+            description: |-
+              ChargeDraftSpec is charges staff are preparing for a billing account and
+              haven't sent: one or more lines, and when they'll be invoiced. Unlike a
+              Charge, a draft can be changed until it's sent. Sending it adds a Charge
+              for each line, in one invoice group when they're invoiced now, and
+              removes the draft. Nothing in a draft is billed.
+            properties:
+              billingAccountRef:
+                description: |-
+                  BillingAccountRef names the BillingAccount, in this namespace, the
+                  charges are for.
+                properties:
+                  name:
+                    description: Name is the name of the BillingAccount.
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
+                x-kubernetes-validations:
+                - message: billingAccountRef can't be changed
+                  rule: self == oldSelf
+              invoice:
+                default: NextInvoice
+                description: |-
+                  Invoice is when the charges will be invoiced once sent: NextInvoice,
+                  with the rest of the account's current billing period, or Now, together
+                  on an invoice of their own.
+                enum:
+                - NextInvoice
+                - Now
+                type: string
+              lines:
+                description: Lines are the charges, in the order the invoice lists
+                  them.
+                items:
+                  description: |-
+                    ChargeDraftLine is one charge in a draft: what a Charge's spec holds for
+                    it, without the account or timing, which the draft gives for every line.
+                    Billing fills in what's left out, as it does for a Charge, when the
+                    draft is sent.
+                  properties:
+                    currency:
+                      default: USD
+                      description: Currency is the ISO 4217 currency of the amounts.
+                        USD only.
+                      pattern: ^USD$
+                      type: string
+                    description:
+                      description: |-
+                        Description is what the invoice calls the charge. Defaulted from the
+                        pricing's displayName. It's printed on the invoice, so it never
+                        carries the SKU.
+                      maxLength: 256
+                      minLength: 1
+                      type: string
+                    discountPercent:
+                      description: |-
+                        DiscountPercent is a percentage off this charge, more than 0 and up
+                        to 100, with up to two decimal places (e.g. "10"). The discount must
+                        come to whole cents.
+                      pattern: ^(100(\.0{1,2})?|[1-9]?[0-9](\.[0-9]{1,2})?)$
+                      type: string
+                    note:
+                      description: |-
+                        Note is for staff and finance, kept on the invoice line's metadata.
+                        It's never printed on the invoice or shown to the customer.
+                      maxLength: 500
+                      type: string
+                    quantity:
+                      description: |-
+                        Quantity is how many are charged: a positive decimal with up to two
+                        decimal places (e.g. "2", "3.5").
+                      pattern: ^([1-9][0-9]{0,8}(\.[0-9]{1,2})?|0\.(0[1-9]|[1-9][0-9]?))$
+                      type: string
+                    servicePeriod:
+                      description: |-
+                        ServicePeriod is the dates the charge is for: the invoice line's
+                        service period. Defaulted to the account's current billing period.
+                      properties:
+                        end:
+                          description: End is the last day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                        start:
+                          description: Start is the first day, as YYYY-MM-DD.
+                          maxLength: 10
+                          pattern: ^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$
+                          type: string
+                      required:
+                      - end
+                      - start
+                      type: object
+                      x-kubernetes-validations:
+                      - message: the service period can't end before it starts
+                        rule: self.end >= self.start
+                    servicePricingRef:
+                      description: |-
+                        ServicePricingRef names the catalog item: a OneTime or Recurring
+                        ServicePricing. Its displayName, amount and tax are the defaults for
+                        description, unitAmount and tax, and the invoice line counts as its
+                        product in reports, at whatever price. Omitted, this is a custom
+                        item, which uses the custom charge product.
+                      properties:
+                        name:
+                          description: Name of the ServicePricing.
+                          maxLength: 253
+                          minLength: 1
+                          type: string
+                        namespace:
+                          default: milo-system
+                          description: Namespace of the ServicePricing.
+                          type: string
+                      required:
+                      - name
+                      type: object
+                    tax:
+                      description: |-
+                        Tax is how the charge is taxed. Defaulted from the pricing's tax.
+                        Omitted on a custom charge, the account's default tax code applies.
+                      minProperties: 1
+                      properties:
+                        code:
+                          description: |-
+                            Code is the tax engine's code for what this price sells, which sets
+                            the rate it's taxed at. With Stripe Tax it's one of Stripe's tax
+                            codes (e.g. "txcd_10103001" for software as a service). Finance
+                            chooses it. Omitted, the billing profile's default code applies.
+                          maxLength: 64
+                          pattern: ^[A-Za-z0-9][A-Za-z0-9_.-]*$
+                          type: string
+                        taxable:
+                          description: |-
+                            Taxable is false for a charge that's never taxed, wherever the
+                            customer is. Omitted, the charge is taxable.
+                          type: boolean
+                      type: object
+                      x-kubernetes-validations:
+                      - message: code can't be set on a pricing that isn't taxable
+                        rule: '!has(self.taxable) || self.taxable || !has(self.code)'
+                    unitAmount:
+                      description: |-
+                        UnitAmount is the price of one, before any discount: a decimal with
+                        up to two decimal places, zero or more (e.g. "300.00"). Defaulted
+                        from the pricing's amount; staff may change it.
+                      pattern: ^(0|[1-9][0-9]{0,11})(\.[0-9]{1,2})?$
+                      type: string
+                  required:
+                  - quantity
+                  type: object
+                  x-kubernetes-validations:
+                  - message: a custom charge (no servicePricingRef) needs a description
+                      and a unitAmount
+                    rule: has(self.servicePricingRef) || (has(self.description) &&
+                      has(self.unitAmount))
+                  - message: a charge that isn't taxable needs a note saying why
+                    rule: '!has(self.tax) || !has(self.tax.taxable) || self.tax.taxable
+                      || (has(self.note) && size(self.note) > 0)'
+                maxItems: 50
+                minItems: 1
+                type: array
+            required:
+            - billingAccountRef
+            - lines
+            type: object
+        required:
+        - spec
+        type: object
+    served: true
+    storage: true
+    subresources: {}

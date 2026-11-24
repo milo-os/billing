@@ -1,14 +1,14 @@
 # Bound to staff only (see the staff PolicyBindings in infra). Customers are
-# never granted charges, not even read access: a charge holds a note for
-# staff that the customer must not see. They see the charge as a line on
-# their invoice.
+# never granted charges or charge drafts, not even read access: they hold
+# notes for staff that the customer must not see. They see a charge as a line
+# on their invoice.
 apiVersion: iam.miloapis.com/v1alpha1
 kind: Role
 metadata:
   name: billing.miloapis.com-charge-admin
   annotations:
     kubernetes.io/display-name: Charge Admin
-    kubernetes.io/description: "Add charges to billing accounts' invoices, and remove them before they're invoiced"
+    kubernetes.io/description: "Add charges to billing accounts' invoices, and remove them before they're invoiced; prepare draft charges"
 spec:
   launchStage: Alpha
   includedPermissions:
@@ -18,3 +18,10 @@ spec:
     - billing.miloapis.com/charges.list
     - billing.miloapis.com/charges.watch
     - billing.miloapis.com/charges/status.get
+    - billing.miloapis.com/chargedrafts.create
+    - billing.miloapis.com/chargedrafts.update
+    - billing.miloapis.com/chargedrafts.patch
+    - billing.miloapis.com/chargedrafts.delete
+    - billing.miloapis.com/chargedrafts.get
+    - billing.miloapis.com/chargedrafts.list
+    - billing.miloapis.com/chargedrafts.watch

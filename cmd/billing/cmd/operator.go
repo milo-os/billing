@@ -359,6 +359,9 @@ func newOperatorCommand(info BuildInfo) *cobra.Command {
 				if err = billingwebhooks.SetupChargeWebhookWithManager(mgr); err != nil {
 					return fmt.Errorf("creating Charge webhook: %w", err)
 				}
+				if err = billingwebhooks.SetupChargeDraftWebhookWithManager(mgr); err != nil {
+					return fmt.Errorf("creating ChargeDraft webhook: %w", err)
+				}
 			}
 
 			if err := mgr.AddHealthzCheck("healthz", healthz.Ping); err != nil {
