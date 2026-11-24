@@ -218,7 +218,10 @@ A billing provider that supports discounts must:
 
 - Apply the percentage to the service's whole charge, as described above.
 - Show the discount as its own line on the invoice, next to the full-price line.
-- Report spend (`UsageQuery`) net of the discount, so it matches the invoice.
+- Report spend (`UsageQuery`) net of the discount, so it matches the invoice,
+  with the amount before the discount and the discount beside it
+  (`amountBeforeDiscounts` and `discountAmount`), so a usage page can show
+  what a 100% discount saves.
 - Reject, with a clear condition on the Offer, a discount it cannot represent.
 
 Providers that don't support discounts must reject an Offer that has one,
@@ -244,3 +247,5 @@ With Offer-level discounts, **`service-catalog` requires no changes**:
   and in the spend `UsageQuery` returns.
 - 2026-10-29: An account's Offer discounts are published on
   `BillingAccount` status for the portals to show.
+- 2026-11-24: `UsageQuery` spend gives the amount before discounts and the
+  discount as well as what's due, for the portals' usage pages.
