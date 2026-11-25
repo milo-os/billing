@@ -152,8 +152,40 @@ as every contract does today.
 **Month to month.** Nothing changes in what's charged. The subscription keeps
 running with the same fees and usage rates, and the contract is now out of
 term: it stays flagged for renewal until staff agree a new term or stop it.
-Choosing `Stop` while month to month stops the contract at the next billing
-date, the end of the month already being billed.
+
+To stop a contract that's already month to month, staff set `atEnd: Stop`
+and `stopsAt`, the date it stops, since the term's end has passed:
+
+```yaml
+term:
+  months: 36
+  atEnd: Stop
+  stopsAt: "2029-08-18T00:00:00Z"
+  offerAfterRef:
+    name: payg-v6
+```
+
+- `stopsAt` must be a billing date on or after the contract's next one, so
+  the month already billed is billed in full.
+- It must also end the period of every quarterly and annual fee billed in
+  advance, counted as the fee's periods are. Those fees keep renewing for a
+  whole period while the contract runs month to month, and a stop partway
+  through one would leave the customer having paid for time after it. A
+  contract with an annual rack fee billed in advance on 18 April can stop on
+  18 April only, not at the end of any month.
+- Quarterly and annual fees billed in arrears don't hold the stop back: they
+  are charged for the part period up to it, by time, as they are when a
+  contract is amended.
+- The staff portal offers the dates that are allowed: the next billing date
+  for a contract with only monthly fees, or the next date each in-advance
+  fee's period ends ("18 April 2030, when the annual rack fee's year ends").
+- `stopsAt` is only for a contract that's month to month. A contract in its
+  term stops at the term's end, and stopping one before then is ending it
+  early, which this design leaves out.
+
+So a contract set to stop has one **stop date**: its term's end, or `stopsAt`
+once it's month to month. Everything that acts on a stop below uses that
+date.
 
 **Renew.** A new term starts on the old one's end, at the same prices. Nothing
 changes in what's charged either; what changes is the date the term ends, and
@@ -173,8 +205,9 @@ another, so the ends stay on the contract's billing day: 18 April 2029, then
 18 April 2030, and so on. Billing doesn't store which term the contract is
 in; it works it out from `startsAt`, `months`, `renewMonths` and the time.
 
-**Stop.** The contract's charges stop at the end of the term, and the account
-moves onto `offerAfterRef`, an ordinary Offer, from that moment:
+**Stop.** The contract's charges stop at the end of the term (or on `stopsAt`
+for a contract already month to month), and the account moves onto
+`offerAfterRef`, an ordinary Offer, from that moment:
 
 ```yaml
 term:
@@ -195,9 +228,9 @@ term:
   day like any account without a contract (see
   [openmeter-provider](#openmeter-provider)).
 - Fees billed in advance are never charged past the end: the term's end is a
-  whole number of every recurring fee's periods (see
-  [Validation](#validation)), so each fee's last charge covers the period
-  ending on it.
+  whole number of every recurring fee's periods, and `stopsAt` ends every
+  in-advance fee's period (see [Validation](#validation)), so each fee's last
+  charge covers the period ending on the stop date.
 - The contract stays on the entitlement, ended. It can't be removed, as
   today, and its term can't change any more.
 - Usage up to the end is billed at the contract's rates on the contract's
@@ -208,11 +241,17 @@ term:
 Staff can change the term until the contract stops: when the customer gives
 notice, agrees to renew early, or signs a new term while month to month.
 
-- `atEnd` and `offerAfterRef` can change at any time before the end. If the
-  provider has already scheduled the stop, it undoes it.
+- `atEnd`, `stopsAt` and `offerAfterRef` can change at any time before the
+  stop date. If the provider has already scheduled the stop, it undoes it.
 - `months` and `renewMonths` can change too, so long as the current term
   still ends on or after the contract's next billing date. A term can't be
   shortened into the month already billed.
+- Renewals are worked out from the start, so changing `renewMonths` on a
+  contract that has already renewed changes the past terms' ends too, and
+  with them `currentTermStartsAt` and the count of renewals. Nothing already
+  billed changes, and the next-billing-date rule keeps the current term from
+  ending in a month that's billed. The staff portal shows the new current
+  term's end before saving.
 - A term can be added to a contract that's already running, which is how the
   contracts running today get one. It can be removed, which makes the
   contract open-ended again, until the contract stops.
@@ -348,6 +387,8 @@ status:
   stopped.
 - `renewals` counts the renewals so far, for `Renew` only.
 - `renewalDueAt` is 90 days before `endsAt`, when the flag turns on.
+- `stopsAt` is the stop date, for a contract set to stop: the term's end, or
+  the spec's `stopsAt` once it's month to month.
 - `offerAfterRef` isn't published: what the account moves to is shown by its
   prices once it has moved.
 - A stopped contract keeps `startsAt`, its billing day and its term, and has
@@ -383,7 +424,9 @@ In the staff portal:
 - **Contract editor** (`components/contract-editor/`): a Term section with
   the length in months, what happens at the end (three choices, month to
   month first), the renewal length for Renew and the Offer to move to for
-  Stop, defaulted to the default Offer. The summary shows the term's end. A
+  Stop, defaulted to the default Offer. For a contract that's month to
+  month, Stop also asks for the stop date, from the dates allowed. The
+  summary shows the term's end. A
   contract that's running can have its term added or changed from the same
   page, without changing its fees.
 - **Contract card** on the account dashboard: the term, its end, the choice,
@@ -410,7 +453,7 @@ On `BillingEntitlement`, by CRD schema and CEL:
 - `term.atEnd` is an enum of `MonthToMonth`, `Renew` and `Stop`, defaulting
   to `MonthToMonth`.
 - `renewMonths` only with `Renew`; `offerAfterRef` required with `Stop` and
-  not allowed otherwise.
+  not allowed otherwise; `stopsAt` only with `Stop`, at midnight UTC.
 
 By the webhook, when the term or `offerRef` changes:
 
@@ -422,9 +465,13 @@ By the webhook, when the term or `offerRef` changes:
 - With `Stop`, no fee in the Offer may end after the term does.
 - The current term must end on or after the contract's next billing date
   (the start, before the contract starts).
+- `stopsAt` is only allowed once the term has ended, and is then required
+  with `Stop`. It must be a billing date on or after the contract's next one,
+  and a whole number of periods, counted as fees' periods are, of every
+  quarterly or annual fee billed in advance.
 - `offerAfterRef` must name an assignable Offer with no `OneTime` fees.
-- Once the contract has stopped (`atEnd` is `Stop` and the end has passed),
-  the term can't change.
+- Once the contract has stopped (`atEnd` is `Stop` and the stop date has
+  passed), the term can't change.
 
 The Offer webhook can't see the contract, so an amendment that adds an annual
 fee to a contract whose term isn't a multiple of 12 is refused when
@@ -437,13 +484,13 @@ set on an account whose entitlement has a contract.
 
 - **BillingAccount controller.** Works out `status.contract.term` and the
   `ContractRenewalDue` condition from the entitlement and the time, and
-  requeues at the next of `renewalDueAt` and `endsAt`. It records the
+  requeues at the next of `renewalDueAt`, `endsAt` and `stopsAt`. It records the
   transitions as events (see [Activity](#activity)), once each, from the
   change in `status.contract.term`.
-- **BillingEntitlement controller.** At the end of a term with `Stop`, sets
-  `spec.offerRef` to `offerAfterRef`. It's the only place billing writes an
-  entitlement's spec, and the audit log records it as billing's service
-  account. It requeues itself for the end.
+- **BillingEntitlement controller.** On the stop date, sets `spec.offerRef`
+  to `offerAfterRef`. It's the only place billing writes an entitlement's
+  spec, and the audit log records it as billing's service account. It
+  requeues itself for the stop date.
 - **BillingArrangement controller.** An arrangement's phase now depends on
   the contract when `endsWithContract` is set: `Ended` from the contract's
   stop. It records `PaymentTermsEnded` then, as for an arrangement that
@@ -461,14 +508,17 @@ the same items, and a fee with `periods` still ends at its own end, as today.
 during the last monthly billing period, so nothing is charged in advance after
 the end, and nothing is scheduled earlier than it has to be.
 
-1. When `atEnd` is `Stop` and the current billing period ends on the term's
-   end, the provider cancels the subscription timed at the end. It records the
-   time on the entitlement (`openmeter.miloapis.com/contractStopAt`) and
+1. The provider works out the stop date as billing does: the term's end, or
+   `stopsAt` for a contract already month to month. When `atEnd` is `Stop`
+   and the current monthly billing period ends on the stop date, it cancels
+   the subscription timed at that date. For a contract month to month, that
+   is as soon as `stopsAt` is set, if it's the next billing date. It records
+   the time on the entitlement (`openmeter.miloapis.com/contractStopAt`) and
    reports `ContractStopScheduled`.
-2. If staff change `atEnd` or the term before the end, the provider undoes
-   the scheduled cancel, as it already does before cancelling again, and
-   removes the annotation.
-3. At the end, it subscribes the account to `offerAfterRef` from that
+2. If staff change `atEnd`, `stopsAt` or the term before the stop date, the
+   provider undoes the scheduled cancel, as it already does before
+   cancelling again, and removes the annotation.
+3. On the stop date, it subscribes the account to `offerAfterRef` from that
    moment, billed on the account's invoice day like any new subscription,
    once the account can pay, and doesn't wait for billing to change
    `offerRef`. When `offerRef` then names
@@ -611,7 +661,9 @@ Infra needs only the usual version pins.
   (`test/timetravel/contract`): a contract with monthly in-advance, monthly
   in-arrears and annual fees set to Stop, checking the last invoice, nothing
   charged after the end, and the new subscription's first invoice; Stop
-  changed back to month to month after the cancel is scheduled; a provider
+  changed back to month to month after the cancel is scheduled; a contract
+  month to month with an annual in-advance fee stopped on `stopsAt`, at the
+  end of the fee's year; a provider
   stopped over the boundary; Month to month and Renew billing on past the end
   unchanged.
 - **Staging**: a test contract with a one-month term set to Stop, watched
@@ -644,3 +696,6 @@ Infra needs only the usual version pins.
 ## Implementation History
 
 - 2026-11-25: Enhancement drafted.
+- 2026-11-25: A contract that's month to month stops on `stopsAt`, a billing
+  date that ends every quarterly and annual in-advance fee's period, rather
+  than at the next billing date.
