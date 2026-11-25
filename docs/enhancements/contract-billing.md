@@ -120,8 +120,8 @@ A contract's fees and rates are also harder to set up than they should be:
 
 ### Non-Goals
 
-- Ending or renewing a contract at the end of its term. Decided below, built
-  next.
+- Ending or renewing a contract at the end of its term. See
+  [Contract Renewals](contract-renewals.md).
 - Minimum spend commitments, where a customer commits to spending an amount
   over the term. See [Minimum Spend Commitments](#minimum-spend-commitments).
 - Changing how a customer's usage is measured. A customer's own rates price the
@@ -762,7 +762,8 @@ status:
 - Once the contract has started, billing cycles follow `billingDayOfMonth`
   instead of the payment terms' `invoiceDayOfMonth`: in the portal's usage
   cycles, and in the usage tools of Patch and `datumctl billing`.
-- The contract's length isn't shown until [End of Term](#end-of-term) adds it.
+- The contract's length isn't shown until [Contract
+  Renewals](contract-renewals.md#what-customers-see) adds it.
 
 The rates the contract bills usage at aren't in `status.contract`. They're in
 `status.prices`, which lists every pricing in the account's published Offer,
@@ -1063,9 +1064,12 @@ is still running, without anyone deciding to.
 Continuing past the term also needs the account to stay payable: if its invoice
 terms end with the contract, the renewal flag covers them too.
 
-A fee's own `periods` stays separate from the contract's term. Whether a fee
-may run past the contract's end, and whether a fee that ends can carry on
-month-to-month like the contract, are for this design to settle.
+A fee's own `periods` stays separate from the contract's term.
+
+[Contract Renewals](contract-renewals.md) designs this: `contract.term` with
+its length and `atEnd` choice, the `ContractRenewalDue` condition, payment
+terms that end with the contract, and how a fee's `periods` fits with the
+term.
 
 ### Contract Rates for Customers
 
