@@ -723,3 +723,66 @@ func TestValidateOffer_SignupCredit(t *testing.T) {
 		}
 	})
 }
+
+func TestValidateOfferServicePricingRefs_SupplyDates(t *testing.T) {
+	setup := &billingv1alpha1.ServicePricing{
+		ObjectMeta: metav1.ObjectMeta{Name: "setup-1500", Namespace: billingv1alpha1.DefaultServicePricingNamespace},
+		Spec: billingv1alpha1.ServicePricingSpec{
+			ChargeType: billingv1alpha1.ChargeTypeOneTime,
+			Currency:   "USD",
+			Amount:     "1500.00",
+			Trigger:    billingv1alpha1.ChargeTriggerBillingAccountActivation,
+		},
+	}
+	cl := fake.NewClientBuilder().WithScheme(newScheme()).WithObjects(
+		setup, cpuPricing("compute-cpu-allocated-v1", "0.025"),
+	).Build()
+	install := &billingv1alpha1.ServicePeriod{Start: "2027-01-10", End: "2027-01-12"}
+
+	offer := newDraftOffer("contract")
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{{Name: "setup-1500", ServicePeriod: install}}
+	if errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer); len(errs) != 0 {
+		t.Errorf("a supply date on a one-time fee: unexpected errors %v", errs)
+	}
+
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{{Name: "compute-cpu-allocated-v1", ServicePeriod: install}}
+	errs := ValidateOfferServicePricingRefs(context.Background(), cl, offer)
+	if len(errs) != 1 || errs[0].Field != "spec.servicePricingRefs[0].servicePeriod" {
+		t.Errorf("want one error on a Usage pricing's supply date, got %v", errs)
+	}
+}
+
+func TestValidateOfferCreate_SupplyDateShape(t *testing.T) {
+	for _, tt := range []struct {
+		name   string
+		period billingv1alpha1.ServicePeriod
+		field  string
+	}{
+		{"ends before it starts", billingv1alpha1.ServicePeriod{Start: "2027-01-10", End: "2027-01-09"}, "spec.servicePricingRefs[0].servicePeriod.end"},
+		{"not a date", billingv1alpha1.ServicePeriod{Start: "2027-02-30", End: "2027-03-01"}, "spec.servicePricingRefs[0].servicePeriod.start"},
+		{"too long", billingv1alpha1.ServicePeriod{Start: "2027-01-01", End: "2040-01-01"}, "spec.servicePricingRefs[0].servicePeriod.end"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			offer := newDraftOffer("contract")
+			period := tt.period
+			offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{{Name: "setup-1500", ServicePeriod: &period}}
+			errs := ValidateOfferCreate(offer)
+			found := false
+			for _, e := range errs {
+				found = found || e.Field == tt.field
+			}
+			if !found {
+				t.Errorf("want an error on %s, got %v", tt.field, errs)
+			}
+		})
+	}
+
+	offer := newDraftOffer("contract")
+	offer.Spec.ServicePricingRefs = []billingv1alpha1.ServicePricingRef{{Name: "setup-1500",
+		ServicePeriod: &billingv1alpha1.ServicePeriod{Start: "2019-01-10", End: "2019-01-10"}}}
+	for _, e := range ValidateOfferCreate(offer) {
+		if strings.Contains(e.Field, "servicePeriod") {
+			t.Errorf("a supply date long past isn't refused on an Offer: %v", e)
+		}
+	}
+}

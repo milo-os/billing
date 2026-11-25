@@ -87,6 +87,11 @@ func TestAccountContract(t *testing.T) {
 	setup := fee("acme-setup", "Setup fee", billingv1alpha1.ChargeTypeOneTime, "5000.00")
 	endsAt := metav1.NewTime(time.Date(2029, time.April, 18, 0, 0, 0, 0, time.UTC))
 
+	install := &billingv1alpha1.ServicePeriod{Start: "2026-05-02", End: "2026-05-02"}
+	cageSetup := fee("cage-setup", "Cage setup", billingv1alpha1.ChargeTypeOneTime, "5000.00")
+	cageSetup.Spec.Description = "Building and cabling a cage"
+	cageSetup.ServicePeriod = install
+
 	tests := []struct {
 		name        string
 		entitlement *billingv1alpha1.BillingEntitlement
@@ -152,6 +157,20 @@ func TestAccountContract(t *testing.T) {
 				Fees: []billingv1alpha1.BillingAccountContractFee{
 					{Name: "acme-setup", DisplayName: "Setup fee", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD"},
 					{Name: "support-annual", DisplayName: "Premium support", ServiceRef: "compute.datumapis.com", ChargeType: billingv1alpha1.ChargeTypeRecurring, Amount: "1200.00", Quantity: 1, Currency: "USD", Interval: billingv1alpha1.ChargeIntervalAnnual, BillingTiming: billingv1alpha1.BillingTimingInAdvance, Periods: 3, EndsAt: &endsAt},
+				},
+			},
+		},
+		{
+			name:        "one-time fee with a supply date",
+			entitlement: contractEntitlement("acme-install", startsAt),
+			offer:       publishedOffer("acme-install", billingv1alpha1.OfferLaunchStageGA, cageSetup),
+			want: &billingv1alpha1.BillingAccountContract{
+				StartsAt:          metav1.NewTime(startsAt),
+				BillingDayOfMonth: 18,
+				BillingDay:        billingv1alpha1.ContractBillingDayStartDate,
+				Fees: []billingv1alpha1.BillingAccountContractFee{
+					{Name: "cage-setup", DisplayName: "Cage setup", Description: "Building and cabling a cage", ServiceRef: "compute.datumapis.com",
+						ChargeType: billingv1alpha1.ChargeTypeOneTime, Amount: "5000.00", Quantity: 1, Currency: "USD", ServicePeriod: install},
 				},
 			},
 		},

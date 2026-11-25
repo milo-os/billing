@@ -23,4 +23,6 @@ resources:
   - usagequery.yaml
   - billingaccountbalance.yaml
   - creditgrant.yaml
+  - charge.yaml
+  - chargedraft.yaml
 

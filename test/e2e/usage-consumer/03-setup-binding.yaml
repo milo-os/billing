@@ -2,7 +2,7 @@ apiVersion: billing.miloapis.com/v1alpha1
 kind: BillingAccountBinding
 metadata:
   name: consumer-e2e-binding
-  namespace: default
+  namespace: organization-e2e-consumer
 spec:
   billingAccountRef:
     name: consumer-e2e-account

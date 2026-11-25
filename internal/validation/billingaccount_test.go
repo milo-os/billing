@@ -424,3 +424,102 @@ func TestValidateBillingAccountDefaultForNewProjects(t *testing.T) {
 		})
 	}
 }
+
+func TestBillingAccountSettingsChanges(t *testing.T) {
+	base := func() *billingv1alpha1.BillingAccount {
+		return &billingv1alpha1.BillingAccount{
+			ObjectMeta: metav1.ObjectMeta{
+				Name:        "acme",
+				Annotations: map[string]string{"kubernetes.io/display-name": "Acme"},
+			},
+			Spec: billingv1alpha1.BillingAccountSpec{
+				CurrencyCode: "USD",
+				ContactInfo:  &billingv1alpha1.BillingContactInfo{Email: "billing@acme.example"},
+			},
+		}
+	}
+
+	tests := []struct {
+		name   string
+		change func(*billingv1alpha1.BillingAccount)
+		want   []string
+	}{
+		{
+			name: "contact details and tax IDs",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Spec.ContactInfo = &billingv1alpha1.BillingContactInfo{
+					Email:   "ap@acme.example",
+					Address: &billingv1alpha1.BillingAddress{Country: "GB"},
+				}
+				a.Spec.TaxIDs = []billingv1alpha1.TaxID{{Type: "gb_vat", Value: "GB123456789"}}
+			},
+		},
+		{
+			name: "removing the contact details",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Spec.ContactInfo = nil
+			},
+		},
+		{
+			name: "finalizers and owner references are the controllers'",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Finalizers = []string{"billing.miloapis.com/bindings"}
+				a.OwnerReferences = []metav1.OwnerReference{{Name: "acme", Kind: "Organization"}}
+			},
+		},
+		{
+			name: "empty labels are no labels",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Labels = map[string]string{}
+			},
+		},
+		{
+			name: "the default card",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Spec.DefaultPaymentMethodRef = &billingv1alpha1.DefaultPaymentMethodRef{Name: "card-1"}
+			},
+			want: []string{"spec.defaultPaymentMethodRef"},
+		},
+		{
+			name: "settings alongside the contact details",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Spec.ContactInfo.Email = "ap@acme.example"
+				a.Spec.DefaultForNewProjects = true
+				a.Spec.CurrencyCode = "EUR"
+			},
+			want: []string{"spec.currencyCode", "spec.defaultForNewProjects"},
+		},
+		{
+			name: "labels and annotations",
+			change: func(a *billingv1alpha1.BillingAccount) {
+				a.Labels = map[string]string{"tier": "gold"}
+				a.Annotations["kubernetes.io/display-name"] = "Acme production"
+			},
+			want: []string{"metadata.labels", "metadata.annotations"},
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			oldAccount := base()
+			newAccount := base()
+			tt.change(newAccount)
+			changed, err := BillingAccountSettingsChanges(oldAccount, newAccount)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := make([]string, 0, len(changed))
+			for _, path := range changed {
+				got = append(got, path.String())
+			}
+			if len(got) != len(tt.want) {
+				t.Fatalf("changes = %v, want %v", got, tt.want)
+			}
+			for i := range got {
+				if got[i] != tt.want[i] {
+					t.Fatalf("changes = %v, want %v", got, tt.want)
+				}
+			}
+		})
+	}
+}

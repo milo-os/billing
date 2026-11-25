@@ -16,6 +16,9 @@ spec:
     - patch
     - delete
     - watch
+    # Checked by billing's webhook, never requested: see Billing Account Editor.
+    - editContactDetails
+    - manageSettings
   subresources:
     - name: status
       permissions:

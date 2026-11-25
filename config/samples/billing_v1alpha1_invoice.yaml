@@ -29,4 +29,5 @@ spec:
 #   amountPaid: "0.00"
 #   amountDue: "482.19"
 #   dueDate: "2026-07-15T00:00:00Z"
+#   number: "DATUM-0042"
 #   documentUri: "https://provider.example/invoices/..."

@@ -24,7 +24,7 @@ spec:
               kind: BillingAccount
               metadata:
                 name: binding-test-account-a
-                namespace: default
+                namespace: organization-e2e-binding
               status:
                 phase: Ready
         - assert:
@@ -34,7 +34,7 @@ spec:
               kind: BillingAccount
               metadata:
                 name: binding-test-account-b
-                namespace: default
+                namespace: organization-e2e-binding
               status:
                 phase: Ready
 
@@ -57,7 +57,7 @@ spec:
               kind: BillingAccount
               metadata:
                 name: binding-test-account-a
-                namespace: default
+                namespace: organization-e2e-binding
               status:
                 linkedProjectsCount: 1
 
@@ -94,7 +94,7 @@ spec:
             content: |
               # Patch the status subresource of the first binding to mark it as Superseded.
               # We provide lastTransitionTime in the condition block to satisfy API server schema requirements.
-              kubectl patch billingaccountbinding binding-test-first -n default --type=merge --subresource=status --patch '{"status":{"phase":"Superseded","conditions":[{"type":"Bound","status":"False","reason":"Superseded","message":"Superseded by binding binding-test-second.","lastTransitionTime":"2026-06-24T11:51:00Z"}]}}'
+              kubectl patch billingaccountbinding binding-test-first -n organization-e2e-binding --type=merge --subresource=status --patch '{"status":{"phase":"Superseded","conditions":[{"type":"Bound","status":"False","reason":"Superseded","message":"Superseded by binding binding-test-second.","lastTransitionTime":"2026-06-24T11:51:00Z"}]}}'
         - assert:
             timeout: 30s
             resource:
@@ -102,7 +102,7 @@ spec:
               kind: BillingAccountBinding
               metadata:
                 name: binding-test-first
-                namespace: default
+                namespace: organization-e2e-binding
               status:
                 phase: Superseded
                 conditions:
@@ -115,7 +115,7 @@ spec:
       try:
         - script:
             content: |
-              COUNT=$(kubectl get billingaccount binding-test-account-a -n default -o jsonpath='{.status.linkedProjectsCount}')
+              COUNT=$(kubectl get billingaccount binding-test-account-a -n organization-e2e-binding -o jsonpath='{.status.linkedProjectsCount}')
               if [ -n "$COUNT" ] && [ "$COUNT" -ne 0 ]; then
                 echo "Error: expected linkedProjectsCount to be 0 or null, got $COUNT" >&2
                 exit 1
@@ -136,7 +136,7 @@ spec:
               kind: BillingAccountBinding
               metadata:
                 name: binding-test-second
-                namespace: default
+                namespace: organization-e2e-binding
               status:
                 phase: Active
                 billingResponsibility:
@@ -147,7 +147,7 @@ spec:
       try:
         - script:
             content: |
-              if kubectl delete billingaccount binding-test-account-b -n default 2>&1 | grep -q "billing account has active binding"; then
+              if kubectl delete billingaccount binding-test-account-b -n organization-e2e-binding 2>&1 | grep -q "billing account has active binding"; then
                 echo "Rejected as expected"
               else
                 echo "Error: Did not reject deleting billing account with active binding" >&2
@@ -159,5 +159,5 @@ spec:
       try:
         - script:
             content: |
-              kubectl delete billingaccountbinding --all -n default
+              kubectl delete billingaccountbinding --all -n organization-e2e-binding
 

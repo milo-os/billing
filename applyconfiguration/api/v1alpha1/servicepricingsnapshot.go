@@ -34,6 +34,9 @@ type ServicePricingSnapshotApplyConfiguration struct {
 	// counted from the contract's start, captured from the reference when
 	// the Offer becomes GA. Unset when the fee has no end.
 	Periods *int32 `json:"periods,omitempty"`
+	// ServicePeriod is a OneTime fee's supply date, captured from the
+	// reference when the Offer becomes GA.
+	ServicePeriod *ServicePeriodApplyConfiguration `json:"servicePeriod,omitempty"`
 	// Spec is a deep copy of the source ServicePricingSpec at publish time.
 	Spec *ServicePricingSpecApplyConfiguration `json:"spec,omitempty"`
 }
@@ -89,5 +92,13 @@ func (b *ServicePricingSnapshotApplyConfiguration) WithPeriods(value int32) *Ser
 // If called multiple times, the Spec field is set to the value of the last call.
 func (b *ServicePricingSnapshotApplyConfiguration) WithSpec(value *ServicePricingSpecApplyConfiguration) *ServicePricingSnapshotApplyConfiguration {
 	b.Spec = value
+	return b
+}
+
+// WithServicePeriod sets the ServicePeriod field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ServicePeriod field is set to the value of the last call.
+func (b *ServicePricingSnapshotApplyConfiguration) WithServicePeriod(value *ServicePeriodApplyConfiguration) *ServicePricingSnapshotApplyConfiguration {
+	b.ServicePeriod = value
 	return b
 }

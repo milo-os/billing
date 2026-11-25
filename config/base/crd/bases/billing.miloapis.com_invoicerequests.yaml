@@ -85,6 +85,20 @@ spec:
                 required:
                 - name
                 type: object
+              chargeDraftRef:
+                description: |-
+                  ChargeDraftRef, on a Preview, previews the invoice a ChargeDraft's
+                  lines would make, on their own, instead of what the account is billed
+                  for now. The draft must be for this billing account.
+                properties:
+                  name:
+                    description: Name of the ChargeDraft.
+                    maxLength: 253
+                    minLength: 1
+                    type: string
+                required:
+                - name
+                type: object
               contractDraft:
                 description: |-
                   ContractDraft, on a Preview, previews the first invoice of a contract
@@ -149,6 +163,11 @@ spec:
               rule: '!has(self.draft) || !self.draft || self.mode == ''Preview'''
             - message: contractDraft is only for a Preview
               rule: '!has(self.contractDraft) || self.mode == ''Preview'''
+            - message: chargeDraftRef is only for a Preview
+              rule: '!has(self.chargeDraftRef) || self.mode == ''Preview'''
+            - message: a request previews a contract draft or a charge draft, not
+                both
+              rule: '!has(self.chargeDraftRef) || !has(self.contractDraft)'
           status:
             description: |-
               InvoiceRequestStatus defines the observed state of an InvoiceRequest.

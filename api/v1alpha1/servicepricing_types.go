@@ -59,6 +59,24 @@ type ServicePricingSpec struct {
 	// +kubebuilder:validation:Optional
 	// +kubebuilder:validation:MaxLength=128
 	DisplayName string `json:"displayName,omitempty"`
+
+	// Description says what the price is for, in a sentence or two, for
+	// customers and staff: the portals show it with the item, and it's the
+	// description of the price's Product in Stripe. It isn't printed on
+	// invoice lines.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=1000
+	Description string `json:"description,omitempty"`
+
+	// Notes are for staff and finance only: how the price was agreed, what
+	// it covers, who to ask. They're never shown to customers, and they
+	// aren't copied into an Offer's snapshot, which customers can read.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:MaxLength=2000
+	Notes string `json:"notes,omitempty"`
+
 	// SKU is the product code finance knows this price's product by (e.g.
 	// "DC-CAB-01"). It's internal, for tracking and reporting, and never
 	// printed on an invoice. It names the product, not the price: a

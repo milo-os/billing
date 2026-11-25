@@ -19,6 +19,9 @@ spec:
     - jsonPath: .spec.billingAccountRef.name
       name: Account
       type: string
+    - jsonPath: .status.number
+      name: Number
+      type: string
     - jsonPath: .status.phase
       name: Phase
       type: string
@@ -210,6 +213,14 @@ spec:
               dueDate:
                 description: DueDate is when payment is due.
                 format: date-time
+                type: string
+              number:
+                description: |-
+                  Number is the invoice's number as the customer sees it, on the
+                  invoice document and for their accounting, such as "DATUM-0042".
+                  The provider assigns it when the invoice is issued, so a draft has
+                  none. It's not the object's name, which is internal.
+                maxLength: 64
                 type: string
               observedGeneration:
                 description: |-

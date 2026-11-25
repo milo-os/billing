@@ -5,9 +5,11 @@
 
 resources:
   - billing-admin.yaml
+  - billing-account-editor.yaml
   - billing-viewer.yaml
   - billing-arrangement-admin.yaml
   - billing-arrangement-viewer.yaml
+  - billing-charge-admin.yaml
   - billing-entitlement-admin.yaml
   - billing-entitlement-viewer.yaml
   - meter-definition-admin.yaml

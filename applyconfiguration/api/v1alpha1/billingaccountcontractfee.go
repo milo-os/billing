@@ -52,6 +52,10 @@ type BillingAccountContractFeeApplyConfiguration struct {
 	// last period, on the contract's billing day. Empty when the fee has
 	// no end.
 	EndsAt *v1.Time `json:"endsAt,omitempty"`
+	// Description is the pricing's description of what the fee is for.
+	Description *string `json:"description,omitempty"`
+	// ServicePeriod is a OneTime fee's supply date, from the contract.
+	ServicePeriod *ServicePeriodApplyConfiguration `json:"servicePeriod,omitempty"`
 }
 
 // BillingAccountContractFeeApplyConfiguration constructs a declarative configuration of the BillingAccountContractFee type for use with
@@ -161,5 +165,21 @@ func (b *BillingAccountContractFeeApplyConfiguration) WithPeriods(value int32) *
 // If called multiple times, the EndsAt field is set to the value of the last call.
 func (b *BillingAccountContractFeeApplyConfiguration) WithEndsAt(value v1.Time) *BillingAccountContractFeeApplyConfiguration {
 	b.EndsAt = &value
+	return b
+}
+
+// WithDescription sets the Description field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Description field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithDescription(value string) *BillingAccountContractFeeApplyConfiguration {
+	b.Description = &value
+	return b
+}
+
+// WithServicePeriod sets the ServicePeriod field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ServicePeriod field is set to the value of the last call.
+func (b *BillingAccountContractFeeApplyConfiguration) WithServicePeriod(value *ServicePeriodApplyConfiguration) *BillingAccountContractFeeApplyConfiguration {
+	b.ServicePeriod = value
 	return b
 }

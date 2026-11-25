@@ -6,6 +6,7 @@ import (
 	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/controller/controllerutil"
@@ -16,6 +17,8 @@ import (
 	. "github.com/onsi/ginkgo/v2"
 	. "github.com/onsi/gomega"
 )
+
+const testOrgNamespace = organizationNamespacePrefix + "test-org"
 
 // newTestProject returns a minimal valid Project for a binding's ProjectRef
 // to resolve against.
@@ -45,7 +48,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-active",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -78,7 +81,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding1 := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-supersede-old",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "account-a"},
@@ -118,6 +121,47 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 		})
 	})
 
+	Context("Project transfer", func() {
+		It("should stop a binding being Active when its project moves to another organization", func() {
+			project := newTestProject("project-transferred")
+			Expect(k8sClient.Create(ctx, project)).To(Succeed())
+
+			binding := &billingv1alpha1.BillingAccountBinding{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-bind-project-transferred",
+					Namespace: testOrgNamespace,
+				},
+				Spec: billingv1alpha1.BillingAccountBindingSpec{
+					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
+					ProjectRef:        billingv1alpha1.ProjectRef{Name: project.Name},
+				},
+			}
+			Expect(k8sClient.Create(ctx, binding)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var fetched billingv1alpha1.BillingAccountBinding
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(binding), &fetched)).To(Succeed())
+				g.Expect(fetched.Status.Phase).To(Equal(billingv1alpha1.BillingAccountBindingPhaseActive))
+			}, timeout, interval).Should(Succeed())
+
+			var fetchedProject resourcemanagerv1alpha1.Project
+			Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(project), &fetchedProject)).To(Succeed())
+			fetchedProject.Spec.OwnerRef.Name = "other-org"
+			Expect(k8sClient.Update(ctx, &fetchedProject)).To(Succeed())
+
+			Eventually(func(g Gomega) {
+				var fetched billingv1alpha1.BillingAccountBinding
+				g.Expect(k8sClient.Get(ctx, client.ObjectKeyFromObject(binding), &fetched)).To(Succeed())
+				g.Expect(fetched.Status.Phase).NotTo(Equal(billingv1alpha1.BillingAccountBindingPhaseActive))
+				cond := apimeta.FindStatusCondition(fetched.Status.Conditions, ConditionTypeBound)
+				g.Expect(cond).NotTo(BeNil())
+				g.Expect(cond.Reason).To(Equal(ReasonProjectNotFound))
+			}, timeout, interval).Should(Succeed())
+
+			Expect(k8sClient.Delete(ctx, binding)).To(Succeed())
+		})
+	})
+
 	Context("Project deletion", func() {
 		It("should delete a binding whose project no longer exists", func() {
 			// No Project is ever created for this binding, which is
@@ -126,7 +170,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-orphaned",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -150,7 +194,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-project-terminating",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},
@@ -194,7 +238,7 @@ var _ = Describe("BillingAccountBinding Controller", func() {
 			binding := &billingv1alpha1.BillingAccountBinding{
 				ObjectMeta: metav1.ObjectMeta{
 					Name:      "test-bind-superseded-orphan",
-					Namespace: "default",
+					Namespace: testOrgNamespace,
 				},
 				Spec: billingv1alpha1.BillingAccountBindingSpec{
 					BillingAccountRef: billingv1alpha1.BillingAccountRef{Name: "some-account"},

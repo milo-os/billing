@@ -170,6 +170,13 @@ Offer and click **Switch**. The account moves straight away: what it uses
 from now is billed at the new Offer's prices, and its next invoice reflects
 the change.
 
+Tiered prices carry on from what the account has already used this month.
+If a price is free for the first 200 GB and the account used 150 GB before
+the switch, only 50 GB more are free after it. The account doesn't get a
+second free allowance by switching mid-month. Usage that reaches billing
+after the switch but happened before it is billed at the old Offer's prices
+and doesn't count towards the new Offer's tiers.
+
 The list shows published Offers only, and leaves out other customers'
 contract offers, which belong to one account each.
 

@@ -81,6 +81,7 @@ func TestSummarizeInvoices(t *testing.T) {
 		Message: "Invoice currency EUR does not match the billing account's USD.",
 	}}
 	invoices = append(invoices, mismatch)
+	invoices[2].Status.Number = "DATUM-0042"
 
 	got := SummarizeInvoices(invoices, "", 0, accountNow)
 	if len(got) != 3 || got[0].Name != "acme-2026-10" || got[1].Name != "acme-2026-09" || got[2].Name != "acme-2026-07" {
@@ -89,7 +90,7 @@ func TestSummarizeInvoices(t *testing.T) {
 	if !got[1].Overdue || got[0].Overdue {
 		t.Errorf("only the September invoice is past its due date: %+v", got)
 	}
-	if got[0].Total != "$12.50" || got[0].Link != "https://invoice.stripe.com/i/acct_1/test_acme-2026-10" {
+	if got[0].Total != "$12.50" || got[0].Number != "DATUM-0042" || got[0].Link != "https://invoice.stripe.com/i/acct_1/test_acme-2026-10" {
 		t.Errorf("invoice = %+v", got[0])
 	}
 	if got[2].Problem == "" {

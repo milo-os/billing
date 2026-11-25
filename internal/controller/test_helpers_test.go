@@ -19,6 +19,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
+	"go.miloapis.com/billing/internal/validation"
 	resourcemanagerv1alpha1 "go.miloapis.com/milo/pkg/apis/resourcemanager/v1alpha1"
 )
 
@@ -302,6 +303,10 @@ func (r *testBillingAccountBindingReconciler) Reconcile(ctx context.Context, req
 
 	if binding.Status.Phase == billingv1alpha1.BillingAccountBindingPhaseSuperseded {
 		return ctrl.Result{}, nil
+	}
+
+	if !validation.ProjectOwnedByNamespace(&project, binding.Namespace) {
+		return ctrl.Result{}, (&BillingAccountBindingReconciler{client: r.client}).markProjectNotFound(ctx, &binding)
 	}
 
 	// Set billing responsibility

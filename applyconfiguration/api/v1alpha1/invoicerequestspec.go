@@ -31,6 +31,10 @@ type InvoiceRequestSpecApplyConfiguration struct {
 	// labelled with ContractBillingAccountLabel and
 	// ContractOrganizationLabel, usually still at launch stage Draft.
 	ContractDraft *InvoiceRequestContractDraftApplyConfiguration `json:"contractDraft,omitempty"`
+	// ChargeDraftRef, on a Preview, previews the invoice a ChargeDraft's
+	// lines would make, on their own, instead of what the account is billed
+	// for now. The draft must be for this billing account.
+	ChargeDraftRef *ChargeDraftReferenceApplyConfiguration `json:"chargeDraftRef,omitempty"`
 }
 
 // InvoiceRequestSpecApplyConfiguration constructs a declarative configuration of the InvoiceRequestSpec type for use with
@@ -68,5 +72,13 @@ func (b *InvoiceRequestSpecApplyConfiguration) WithDraft(value bool) *InvoiceReq
 // If called multiple times, the ContractDraft field is set to the value of the last call.
 func (b *InvoiceRequestSpecApplyConfiguration) WithContractDraft(value *InvoiceRequestContractDraftApplyConfiguration) *InvoiceRequestSpecApplyConfiguration {
 	b.ContractDraft = value
+	return b
+}
+
+// WithChargeDraftRef sets the ChargeDraftRef field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the ChargeDraftRef field is set to the value of the last call.
+func (b *InvoiceRequestSpecApplyConfiguration) WithChargeDraftRef(value *ChargeDraftReferenceApplyConfiguration) *InvoiceRequestSpecApplyConfiguration {
+	b.ChargeDraftRef = value
 	return b
 }
