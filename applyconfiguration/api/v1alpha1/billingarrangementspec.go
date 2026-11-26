@@ -16,27 +16,41 @@ import (
 type BillingArrangementSpecApplyConfiguration struct {
 	// BillingAccountRef references the BillingAccount in the same
 	// namespace that these terms apply to. Immutable.
+	//
 	BillingAccountRef *BillingAccountRefApplyConfiguration `json:"billingAccountRef,omitempty"`
 	// Type selects how the account is billed. Immutable; to change type,
 	// end this arrangement and create a new one.
+	//
 	Type *apiv1alpha1.BillingArrangementType `json:"type,omitempty"`
 	// Invoice carries the invoice terms. Required when type is Invoice.
+	//
 	Invoice *InvoiceArrangementTermsApplyConfiguration `json:"invoice,omitempty"`
 	// StartsAt is when the arrangement takes effect. Defaulted to the
 	// time of creation when omitted.
+	//
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
 	// EndsAt is when the arrangement stops applying. Leave unset for terms
 	// with no fixed end. Staff end terms early by setting this to the
 	// current time, which keeps the record for history.
+	//
 	EndsAt *v1.Time `json:"endsAt,omitempty"`
+	// EndsWithContract ties the terms to the contract on the account's
+	// BillingEntitlement: they stay in effect while the contract runs, in
+	// its term, renewed or month to month, and end when it stops. With
+	// endsAt too, they end at whichever comes first. Only allowed when the
+	// account has a contract. It can be set or cleared at any time.
+	//
+	EndsWithContract *bool `json:"endsWithContract,omitempty"`
 	// ApplicationRef names the BillingArrangementApplication in the same
 	// namespace that these terms approve, when they were granted in
 	// response to one. Leave unset for terms granted without an
 	// application (the sales-led path). The application must be for the
 	// same billing account and still pending. Immutable.
+	//
 	ApplicationRef *BillingArrangementApplicationRefApplyConfiguration `json:"applicationRef,omitempty"`
 	// Reason records why staff granted these terms (for example "Signed
 	// MSA, sales call 2026-10-01"). Internal: never shown to customers.
+	//
 	Reason *string `json:"reason,omitempty"`
 }
 
@@ -83,6 +97,14 @@ func (b *BillingArrangementSpecApplyConfiguration) WithStartsAt(value v1.Time) *
 // If called multiple times, the EndsAt field is set to the value of the last call.
 func (b *BillingArrangementSpecApplyConfiguration) WithEndsAt(value v1.Time) *BillingArrangementSpecApplyConfiguration {
 	b.EndsAt = &value
+	return b
+}
+
+// WithEndsWithContract sets the EndsWithContract field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the EndsWithContract field is set to the value of the last call.
+func (b *BillingArrangementSpecApplyConfiguration) WithEndsWithContract(value bool) *BillingArrangementSpecApplyConfiguration {
+	b.EndsWithContract = &value
 	return b
 }
 

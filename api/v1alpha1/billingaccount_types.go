@@ -426,10 +426,18 @@ type BillingAccountPaymentArrangement struct {
 	// +kubebuilder:validation:Optional
 	StartsAt *metav1.Time `json:"startsAt,omitempty"`
 
-	// EndsAt is when the arrangement ends, if it has a fixed end.
+	// EndsAt is when the arrangement ends, if it has a fixed end. For
+	// terms that end with the contract, it's the contract's stop date once
+	// the contract is set to stop, and empty while it will carry on.
 	//
 	// +kubebuilder:validation:Optional
 	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+
+	// EndsWithContract is true when the terms last as long as the
+	// account's contract and end when it stops.
+	//
+	// +kubebuilder:validation:Optional
+	EndsWithContract bool `json:"endsWithContract,omitempty"`
 
 	// Invoice carries the invoice terms when type is Invoice.
 	//

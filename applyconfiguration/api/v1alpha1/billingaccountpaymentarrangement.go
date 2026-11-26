@@ -18,14 +18,25 @@ import (
 // granted) are deliberately not copied.
 type BillingAccountPaymentArrangementApplyConfiguration struct {
 	// Name is the name of the active BillingArrangement.
+	//
 	Name *string `json:"name,omitempty"`
 	// Type is how the account is billed.
+	//
 	Type *apiv1alpha1.BillingArrangementType `json:"type,omitempty"`
 	// StartsAt is when the arrangement took effect.
+	//
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
-	// EndsAt is when the arrangement ends, if it has a fixed end.
+	// EndsAt is when the arrangement ends, if it has a fixed end. For
+	// terms that end with the contract, it's the contract's stop date once
+	// the contract is set to stop, and empty while it will carry on.
+	//
 	EndsAt *v1.Time `json:"endsAt,omitempty"`
+	// EndsWithContract is true when the terms last as long as the
+	// account's contract and end when it stops.
+	//
+	EndsWithContract *bool `json:"endsWithContract,omitempty"`
 	// Invoice carries the invoice terms when type is Invoice.
+	//
 	Invoice *InvoiceArrangementTermsApplyConfiguration `json:"invoice,omitempty"`
 }
 
@@ -64,6 +75,14 @@ func (b *BillingAccountPaymentArrangementApplyConfiguration) WithStartsAt(value 
 // If called multiple times, the EndsAt field is set to the value of the last call.
 func (b *BillingAccountPaymentArrangementApplyConfiguration) WithEndsAt(value v1.Time) *BillingAccountPaymentArrangementApplyConfiguration {
 	b.EndsAt = &value
+	return b
+}
+
+// WithEndsWithContract sets the EndsWithContract field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the EndsWithContract field is set to the value of the last call.
+func (b *BillingAccountPaymentArrangementApplyConfiguration) WithEndsWithContract(value bool) *BillingAccountPaymentArrangementApplyConfiguration {
+	b.EndsWithContract = &value
 	return b
 }
 

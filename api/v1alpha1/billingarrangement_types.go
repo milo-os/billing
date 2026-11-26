@@ -20,7 +20,8 @@ const (
 )
 
 // BillingArrangementPhase represents where an arrangement sits in its
-// validity window. Derived from spec.startsAt and spec.endsAt.
+// validity window. Derived from spec.startsAt and spec.endsAt, and, with
+// spec.endsWithContract, the stop date of the account's contract.
 // +kubebuilder:validation:Enum=Scheduled;Active;Ended
 type BillingArrangementPhase string
 
@@ -33,7 +34,8 @@ const (
 	// and counts towards the billing account's PaymentReady condition.
 	BillingArrangementPhaseActive BillingArrangementPhase = "Active"
 
-	// BillingArrangementPhaseEnded indicates spec.endsAt has passed.
+	// BillingArrangementPhaseEnded indicates spec.endsAt has passed, or,
+	// for terms tied to the contract, the contract has stopped.
 	BillingArrangementPhaseEnded BillingArrangementPhase = "Ended"
 )
 
@@ -77,6 +79,15 @@ type BillingArrangementSpec struct {
 	//
 	// +kubebuilder:validation:Optional
 	EndsAt *metav1.Time `json:"endsAt,omitempty"`
+
+	// EndsWithContract ties the terms to the contract on the account's
+	// BillingEntitlement: they stay in effect while the contract runs, in
+	// its term, renewed or month to month, and end when it stops. With
+	// endsAt too, they end at whichever comes first. Only allowed when the
+	// account has a contract. It can be set or cleared at any time.
+	//
+	// +kubebuilder:validation:Optional
+	EndsWithContract bool `json:"endsWithContract,omitempty"`
 
 	// ApplicationRef names the BillingArrangementApplication in the same
 	// namespace that these terms approve, when they were granted in
@@ -178,6 +189,7 @@ type BillingArrangementStatus struct {
 // +kubebuilder:printcolumn:name="Phase",type=string,JSONPath=`.status.phase`
 // +kubebuilder:printcolumn:name="Starts",type=date,JSONPath=`.spec.startsAt`
 // +kubebuilder:printcolumn:name="Ends",type=date,JSONPath=`.spec.endsAt`
+// +kubebuilder:printcolumn:name="With Contract",type=boolean,JSONPath=`.spec.endsWithContract`,priority=1
 // +kubebuilder:printcolumn:name="Age",type=date,JSONPath=`.metadata.creationTimestamp`
 // +kubebuilder:metadata:annotations="discovery.miloapis.com/parent-contexts=Organization"
 // +genclient

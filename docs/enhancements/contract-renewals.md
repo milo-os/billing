@@ -723,4 +723,5 @@ Infra needs only the usual version pins.
 - 2026-11-26: Design approved
   ([#296](https://github.com/milo-os/billing/pull/296)). Billing's term,
   renewal flag, stop and activity built behind the `ContractStop` feature
-  gate; payment terms tied to the contract follow separately.
+  gate.
+- 2026-11-26: Payment terms tied to the contract (`endsWithContract`) built.

@@ -46,6 +46,51 @@ tests:
         reason: Internal note that must never appear
     requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
   exp_summary: 'alice@example.com granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471'
+- name: grant terms that end with the contract
+  audit:
+    verb: create
+    user:
+      username: alice@example.com
+    objectRef:
+      apiGroup: billing.miloapis.com
+      resource: billingarrangements
+      name: acme-terms
+      namespace: organization-acme
+    requestURI: /apis/billing.miloapis.com/v1alpha1/namespaces/organization-acme/billingarrangements/acme-terms
+    responseStatus:
+      code: 201
+    requestObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        endsWithContract: true
+        reason: Internal note that must never appear
+    responseObject:
+      metadata:
+        name: acme-terms
+        namespace: organization-acme
+      spec:
+        billingAccountRef:
+          name: acme
+        type: Invoice
+        invoice:
+          netDays: 30
+          creditLimit: '10000'
+          purchaseOrderNumber: PO-4471
+        startsAt: '2026-10-06T10:00:00Z'
+        endsWithContract: true
+        reason: Internal note that must never appear
+    requestReceivedTimestamp: '2026-10-06T10:00:00.123456Z'
+  exp_summary: 'alice@example.com granted invoice terms to billing account acme: net 30, credit limit 10000, PO PO-4471, while the contract runs'
 - name: grant scheduled terms with an end date
   audit:
     verb: create

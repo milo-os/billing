@@ -234,6 +234,16 @@ Payment card. The account then needs a card to keep using paid services.
 Only one set of terms can be active at a time: end the current terms before
 granting new ones that overlap.
 
+**Terms for a contract** can end with it instead of on a date
+(`endsWithContract` on the terms). The staff portal can't set this yet, so
+ask the billing team. Tied terms stay in effect while the contract runs, in
+its term, renewed or month to month, and end when it stops. With an end date
+too, they end at whichever comes first. Until the contract is set to stop,
+they have no end, so the customer can't apply to renew them, and no other
+terms can be scheduled after them. Tie the terms of a contract that will
+carry on month to month: terms with an end date on the term's last day would
+leave it billed under the contract with no way to pay.
+
 ### Customers on a contract
 
 A contract customer, such as a bare metal customer, has agreed fees and a
