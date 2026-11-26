@@ -4,10 +4,10 @@
   "version": "0.1.0",
   "type": "module",
   "description": "Billing's staff-portal plugin: a fleet-wide billing overview (money collected, outstanding and past due, aging, top accounts, collections, usage by service) as the Overview of /admin/service-catalog/billing-miloapis-com.",
-  "packageManager": "pnpm@12.16.1",
+  "packageManager": "pnpm@12.23.0",
   "engines": {
     "node": ">=26.13.0",
-    "pnpm": ">=12.16.1"
+    "pnpm": ">=12.23.0"
   },
   "devEngines": {
     "runtime": {
@@ -17,7 +17,7 @@
     },
     "packageManager": {
       "name": "pnpm",
-      "version": ">=12.16.1",
+      "version": ">=12.23.0",
       "onFail": "error"
     }
   },

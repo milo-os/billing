@@ -126,7 +126,7 @@ register it with `PORTAL_PLUGINS_JSON` (the simple `PORTAL_PLUGINS` form
 can't carry the `serviceRef` a service page needs):
 
 ```
-PORTAL_PLUGINS_JSON='[{"slug":"billing-miloapis-com","assets":{"baseURL":"http://localhost:5299"},"serviceRef":{"name":"billing-miloapis-com"}}]' npm run dev
+PORTAL_PLUGINS_JSON='[{"slug":"billing-miloapis-com","assets":{"baseURL":"http://localhost:5299"},"serviceRef":{"name":"billing-miloapis-com"}}]' pnpm run dev
 ```
 
 then open `/admin/service-catalog/billing-miloapis-com`.
