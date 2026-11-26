@@ -389,7 +389,88 @@ func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 	}
 	state, ok := validation.ContractTermAt(contract, invoiceDay, now)
 	setContractRenewalDueCondition(account, contract, state, ok, now)
-	return validation.NextContractTermBoundary(state, ok, now), nil
+	next := validation.NextContractTermBoundary(state, ok, now)
+
+	blocked, err := r.contractStopBlocked(ctx, entitlement, state, now)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if blocked != "" || stopCheckDue(entitlement, state, now) {
+		// Look again within the hour: the Offer to move onto may be fixed,
+		// or retired, without anything here being told.
+		if recheck := now.Add(contractStopRecheck); next.IsZero() || recheck.Before(next) {
+			next = recheck
+		}
+	}
+	if blocked != "" {
+		apimeta.SetStatusCondition(&account.Status.Conditions, metav1.Condition{
+			Type:               billingv1alpha1.BillingAccountConditionContractRenewalDue,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: account.Generation,
+			Reason:             billingv1alpha1.ContractRenewalDueReasonStopBlocked,
+			Message:            blocked,
+		})
+	}
+	return next, nil
+}
+
+// contractStopRecheck is how often billing checks again that an account can
+// move onto the Offer its contract stops to, from the renewal notice until
+// it has.
+const contractStopRecheck = time.Hour
+
+// contractStopGrace is how long after a contract's stop billing waits for
+// the BillingEntitlement controller to move the account before it reports
+// the stop as blocked.
+const contractStopGrace = 10 * time.Minute
+
+// contractMoved reports whether billing has moved the account onto the
+// Offer its contract stopped to.
+func contractMoved(entitlement *billingv1alpha1.BillingEntitlement) bool {
+	_, moved := entitlement.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation]
+	return moved
+}
+
+// stopCheckDue reports whether a contract set to stop is close enough to its
+// stop, or past it without the account having moved, for billing to check
+// the Offer it moves onto: from the renewal notice before the stop.
+func stopCheckDue(entitlement *billingv1alpha1.BillingEntitlement, state validation.ContractTermState, now time.Time) bool {
+	return !state.StopsAt.IsZero() && entitlement != nil && !contractMoved(entitlement) &&
+		!now.Before(state.StopsAt.AddDate(0, 0, -validation.ContractRenewalNoticeDays))
+}
+
+// contractStopBlocked says why the account can't be moved onto the Offer its
+// contract stops to, from the renewal notice before the stop until it has
+// moved, or returns "". Staff can then pick another Offer before the stop,
+// or after it, since the account stays on the contract's prices until
+// billing moves it.
+func (r *BillingAccountReconciler) contractStopBlocked(
+	ctx context.Context,
+	entitlement *billingv1alpha1.BillingEntitlement,
+	state validation.ContractTermState,
+	now time.Time,
+) (string, error) {
+	if !stopCheckDue(entitlement, state, now) {
+		return "", nil
+	}
+	name := entitlement.Spec.Contract.Term.OfferAfterRef.Name
+	stopped := state.Phase == billingv1alpha1.ContractTermPhaseStopped
+	problem, err := validation.OfferAfterRefProblem(ctx, r.client, name)
+	if err != nil {
+		return "", err
+	}
+	if problem == "" && stopped && !now.Before(state.StopsAt.Add(contractStopGrace)) {
+		problem = "billing hasn't moved it there yet"
+	}
+	if problem == "" {
+		return "", nil
+	}
+	if stopped {
+		return fmt.Sprintf("The contract was due to stop on %s, but the account is still billed at the contract's prices: it can't move onto offer %q: %s.",
+			formatEventDate(state.StopsAt), name, problem), nil
+	}
+	return fmt.Sprintf("The contract stops on %s, but the account can't move onto offer %q then: %s.",
+		formatEventDate(state.StopsAt), name, problem), nil
 }
 
 // entitledOffer returns the account's BillingEntitlement and the published
@@ -505,8 +586,9 @@ func accountPrices(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAccoun
 // contract is added, so its fees show before it starts. invoiceDay is the
 // account's, which a contract billed on the invoice day bills on.
 //
-// A contract that has stopped keeps its start, billing day and term, and
-// has no fees: the account's Offer is no longer the contract's.
+// A contract that has stopped keeps its start, billing day and term, and,
+// once billing has moved the account onto the Offer it stops to, has no
+// fees: the account's Offer is no longer the contract's.
 func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *billingv1alpha1.Offer,
 	invoiceDay int32, now time.Time) *billingv1alpha1.BillingAccountContract {
 	if entitlement == nil || entitlement.Spec.Contract == nil || offer == nil {
@@ -526,7 +608,9 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 	}
 	if state, ok := validation.ContractTermAt(terms, invoiceDay, now); ok {
 		contract.Term = accountContractTerm(terms.Term, state)
-		if state.Phase == billingv1alpha1.ContractTermPhaseStopped {
+		// Until billing has moved the account onto the Offer it stops to,
+		// it's still billed the contract's fees.
+		if state.Phase == billingv1alpha1.ContractTermPhaseStopped && contractMoved(entitlement) {
 			return contract
 		}
 	}

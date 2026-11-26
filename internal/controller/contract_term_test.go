@@ -8,11 +8,15 @@ import (
 	"testing"
 	"time"
 
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/validation/field"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+	"sigs.k8s.io/controller-runtime/pkg/client/interceptor"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -34,6 +38,7 @@ func termAccountClient(t *testing.T, be *billingv1alpha1.BillingEntitlement) cli
 				fee("acme-monthly", "Monthly fee", billingv1alpha1.ChargeTypeRecurring, "2400.00"),
 				snapshot("alb-requests", "ALB Requests", -1)),
 			publishedOffer("payg", billingv1alpha1.OfferLaunchStageGA, snapshot("alb-requests", "ALB Requests", -1)),
+			publishedOffer("withdrawn", billingv1alpha1.OfferLaunchStageDraft, snapshot("alb-requests", "ALB Requests", -1)),
 			&billingv1alpha1.BillingAccount{ObjectMeta: metav1.ObjectMeta{Name: "acme", Namespace: "org-acme"}},
 		).
 		WithIndex(&billingv1alpha1.BillingEntitlement{}, BillingEntitlementBillingAccountRefField, func(obj client.Object) []string {
@@ -50,9 +55,13 @@ func termEntitlement(offer string, term *billingv1alpha1.ContractTerm) *billingv
 }
 
 func stopTerm(stopsAt *metav1.Time) *billingv1alpha1.ContractTerm {
+	return stopTermTo("payg", stopsAt)
+}
+
+func stopTermTo(offer string, stopsAt *metav1.Time) *billingv1alpha1.ContractTerm {
 	return &billingv1alpha1.ContractTerm{
 		Months: 36, AtEnd: billingv1alpha1.ContractTermAtEndStop,
-		OfferAfterRef: &billingv1alpha1.OfferReference{Name: "payg"}, StopsAt: stopsAt,
+		OfferAfterRef: &billingv1alpha1.OfferReference{Name: offer}, StopsAt: stopsAt,
 	}
 }
 
@@ -60,6 +69,7 @@ func TestReconcileContractTerm(t *testing.T) {
 	tests := []struct {
 		name       string
 		term       *billingv1alpha1.ContractTerm
+		moved      bool
 		now        time.Time
 		wantPhase  billingv1alpha1.ContractTermPhase
 		wantEndsAt time.Time
@@ -87,14 +97,48 @@ func TestReconcileContractTerm(t *testing.T) {
 			wantFees: true,
 		},
 		{
-			name: "stopped", term: stopTerm(nil), now: utcDate(2029, time.May, 1),
+			name: "stopped", term: stopTerm(nil), moved: true, now: utcDate(2029, time.May, 1),
 			wantPhase: billingv1alpha1.ContractTermPhaseStopped, wantEndsAt: utcDate(2029, time.April, 18),
 			wantReason: billingv1alpha1.ContractRenewalDueReasonStopped, wantStatus: metav1.ConditionFalse,
+		},
+		{
+			name: "set to stop onto an Offer that's usable", term: stopTerm(nil), now: utcDate(2029, time.February, 1),
+			wantPhase: billingv1alpha1.ContractTermPhaseInTerm, wantEndsAt: utcDate(2029, time.April, 18),
+			wantReason: billingv1alpha1.ContractRenewalDueReasonTermEndingSoon, wantStatus: metav1.ConditionTrue,
+			wantFees: true, wantNext: utcDate(2029, time.February, 1).Add(contractStopRecheck),
+		},
+		{
+			name: "set to stop onto an Offer that was withdrawn", term: stopTermTo("withdrawn", nil), now: utcDate(2029, time.February, 1),
+			wantPhase: billingv1alpha1.ContractTermPhaseInTerm, wantEndsAt: utcDate(2029, time.April, 18),
+			wantReason: billingv1alpha1.ContractRenewalDueReasonStopBlocked, wantStatus: metav1.ConditionTrue,
+			wantFees: true, wantNext: utcDate(2029, time.February, 1).Add(contractStopRecheck),
+		},
+		{
+			name: "set to stop, but not near it yet", term: stopTermTo("withdrawn", nil), now: utcDate(2027, time.June, 1),
+			wantPhase: billingv1alpha1.ContractTermPhaseInTerm, wantEndsAt: utcDate(2029, time.April, 18),
+			wantReason: billingv1alpha1.ContractRenewalDueReasonInTerm, wantStatus: metav1.ConditionFalse,
+			wantFees: true, wantNext: utcDate(2029, time.January, 18),
+		},
+		{
+			name: "just stopped, waiting for billing to move it", term: stopTerm(nil), now: utcDate(2029, time.April, 18).Add(time.Minute),
+			wantPhase: billingv1alpha1.ContractTermPhaseStopped, wantEndsAt: utcDate(2029, time.April, 18),
+			wantReason: billingv1alpha1.ContractRenewalDueReasonStopped, wantStatus: metav1.ConditionFalse,
+			wantFees: true, wantNext: utcDate(2029, time.April, 18).Add(time.Minute + contractStopRecheck),
+		},
+		{
+			name: "stopped, but never moved", term: stopTermTo("withdrawn", nil), now: utcDate(2029, time.May, 1),
+			wantPhase: billingv1alpha1.ContractTermPhaseStopped, wantEndsAt: utcDate(2029, time.April, 18),
+			wantReason: billingv1alpha1.ContractRenewalDueReasonStopBlocked, wantStatus: metav1.ConditionTrue,
+			wantFees: true, wantNext: utcDate(2029, time.May, 1).Add(contractStopRecheck),
 		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			cl := termAccountClient(t, termEntitlement("acme-contract", tt.term))
+			be := termEntitlement("acme-contract", tt.term)
+			if tt.moved {
+				be.Annotations = map[string]string{billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation: "2029-04-18T00:00:00Z"}
+			}
+			cl := termAccountClient(t, be)
 			account := &billingv1alpha1.BillingAccount{ObjectMeta: metav1.ObjectMeta{Name: "acme", Namespace: "org-acme"}}
 			r := &BillingAccountReconciler{client: cl}
 			next, err := r.reconcileEntitlementSummary(context.Background(), account, tt.now)
@@ -270,4 +314,43 @@ func TestBillingEntitlementReconcileStopsContract(t *testing.T) {
 			t.Errorf("offerRef = %s after staff changed it, want it left alone", name)
 		}
 	})
+}
+
+func TestBillingEntitlementReconcileStopRefused(t *testing.T) {
+	ctx := context.Background()
+	be := termEntitlement("acme-contract", stopTerm(nil))
+	scheme := setupTestScheme(t)
+	cl := fake.NewClientBuilder().
+		WithScheme(scheme).
+		WithObjects(be, &billingv1alpha1.BillingAccount{ObjectMeta: metav1.ObjectMeta{Name: "acme", Namespace: "org-acme"}}).
+		WithStatusSubresource(&billingv1alpha1.BillingEntitlement{}).
+		WithInterceptorFuncs(interceptor.Funcs{
+			// The webhook refusing the Offer, retired since the term was set.
+			Patch: func(ctx context.Context, c client.WithWatch, obj client.Object, patch client.Patch, opts ...client.PatchOption) error {
+				return apierrors.NewInvalid(schema.GroupKind{Group: "billing.miloapis.com", Kind: "BillingEntitlement"}, obj.GetName(),
+					field.ErrorList{field.Invalid(field.NewPath("spec", "offerRef", "name"), "payg", "offer \"payg\" isn't published")})
+			},
+		}).
+		Build()
+	rec := &captureRecorder{}
+	now := utcDate(2029, time.April, 18)
+	r := &BillingEntitlementReconciler{client: cl, recorder: rec, now: func() time.Time { return now }}
+
+	res, err := r.Reconcile(ctx, reconcile.Request{NamespacedName: types.NamespacedName{Namespace: "org-acme", Name: "acme"}})
+	if err != nil {
+		t.Fatalf("Reconcile() = %v, want the refusal reported rather than retried at once", err)
+	}
+	if res.RequeueAfter != contractStopRecheck {
+		t.Errorf("RequeueAfter = %s, want %s", res.RequeueAfter, contractStopRecheck)
+	}
+	if got := rec.reasons(); !slices.Equal(got, []string{billingv1alpha1.EventReasonContractStopBlocked}) {
+		t.Fatalf("events = %v", got)
+	}
+	e := rec.events[0]
+	if _, isAccount := e.object.(*billingv1alpha1.BillingAccount); !isAccount || e.eventType != "Warning" {
+		t.Errorf("event on %T of type %s, want a warning on the BillingAccount", e.object, e.eventType)
+	}
+	if _, scoped := e.annotations[billingv1alpha1.ScopeTypeAnnotation]; scoped || e.annotations[billingv1alpha1.EventAnnotationOffer] != "payg" {
+		t.Errorf("annotations = %v, want the offer and no organization scope", e.annotations)
+	}
 }

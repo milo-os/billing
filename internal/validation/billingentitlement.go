@@ -400,24 +400,38 @@ func validateTermFitsFees(contract *billingv1alpha1.BillingContract, invoiceDay 
 }
 
 // validateOfferAfterRef checks the Offer a contract set to stop moves the
-// account onto is published and charges no one-time fees: the account has
-// already paid the contract's.
+// account onto (see OfferAfterRefProblem).
 func validateOfferAfterRef(ctx context.Context, c client.Client, ref *billingv1alpha1.OfferReference,
 	fldPath *field.Path) field.ErrorList {
 	if ref == nil || ref.Name == "" {
 		return field.ErrorList{field.Required(fldPath, "required when atEnd is Stop")}
 	}
 	namePath := fldPath.Child("name")
+	problem, err := OfferAfterRefProblem(ctx, c, ref.Name)
+	switch {
+	case err != nil:
+		return field.ErrorList{field.InternalError(namePath, err)}
+	case problem != "":
+		return field.ErrorList{field.Invalid(namePath, ref.Name, problem)}
+	}
+	return nil
+}
+
+// OfferAfterRefProblem says why an account can't be moved onto the Offer
+// its contract stops to, or returns "" when it can. The Offer must exist,
+// be published, and charge no one-time fees: the account has already paid
+// the contract's. The webhook checks it when a term is set to stop, and
+// billing again before the stop, since the Offer may change in between.
+func OfferAfterRefProblem(ctx context.Context, c client.Client, name string) (string, error) {
 	var offer billingv1alpha1.Offer
-	if err := c.Get(ctx, types.NamespacedName{Name: ref.Name}, &offer); err != nil {
+	if err := c.Get(ctx, types.NamespacedName{Name: name}, &offer); err != nil {
 		if apierrors.IsNotFound(err) {
-			return field.ErrorList{field.NotFound(namePath, ref.Name)}
+			return fmt.Sprintf("offer %q doesn't exist", name), nil
 		}
-		return field.ErrorList{field.InternalError(namePath, fmt.Errorf("reading offer: %w", err))}
+		return "", fmt.Errorf("reading offer %q: %w", name, err)
 	}
 	if !OfferIsAssignable(&offer) {
-		return field.ErrorList{field.Invalid(namePath, ref.Name, fmt.Sprintf(
-			"offer %q isn't published: only GA Offers with published rates may be assigned", offer.Name))}
+		return fmt.Sprintf("offer %q isn't published: only GA Offers with published rates may be assigned", name), nil
 	}
 	var oneTime []string
 	for _, sp := range offer.Spec.ServicePricings {
@@ -426,11 +440,10 @@ func validateOfferAfterRef(ctx context.Context, c client.Client, ref *billingv1a
 		}
 	}
 	if len(oneTime) > 0 {
-		return field.ErrorList{field.Forbidden(namePath, fmt.Sprintf(
-			"offer %q charges one-time fees (%s), which the account would be charged when the contract stops",
-			offer.Name, strings.Join(oneTime, ", ")))}
+		return fmt.Sprintf("offer %q charges one-time fees (%s), which the account would be charged when the contract stops",
+			name, strings.Join(oneTime, ", ")), nil
 	}
-	return nil
+	return "", nil
 }
 
 // entitlementInvoiceDay returns the invoice day of the account an

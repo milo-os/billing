@@ -164,6 +164,14 @@ const (
 	// EventReasonContractStopped is recorded on a BillingAccount when its
 	// contract stops. Annotations: ends at (when it stopped).
 	EventReasonContractStopped = "ContractStopped"
+
+	// EventReasonContractStopBlocked is a warning recorded on a
+	// BillingAccount when billing can't move it onto its contract's
+	// term.offerAfterRef at the stop, because the Offer was retired or
+	// changed since. Billing tries again hourly; until it succeeds, the
+	// account is billed at the contract's prices. It's for staff, so it
+	// carries no organization scope. Annotations: ends at (the stop), offer.
+	EventReasonContractStopBlocked = "ContractStopBlocked"
 )
 
 // EventAnnotationPrefix prefixes every annotation billing reads from a
@@ -244,6 +252,9 @@ const (
 	// EventAnnotationMonths is a contract term's length in months, as a
 	// decimal string.
 	EventAnnotationMonths = EventAnnotationPrefix + "months"
+
+	// EventAnnotationOffer is the name of the Offer the event concerns.
+	EventAnnotationOffer = EventAnnotationPrefix + "offer"
 )
 
 // DeclineReason is the normalized reason a payment or payment method setup

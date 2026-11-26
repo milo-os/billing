@@ -7,10 +7,12 @@ import (
 	"fmt"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/handler"
@@ -23,8 +25,9 @@ import (
 
 // BillingEntitlementReconciler reconciles a BillingEntitlement object.
 type BillingEntitlementReconciler struct {
-	client client.Client
-	now    func() time.Time
+	client   client.Client
+	recorder record.EventRecorder
+	now      func() time.Time
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingentitlements,verbs=get;list;watch;create;update;patch;delete
@@ -65,7 +68,7 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 	// billed on.
 	var stopRequeue ctrl.Result
 	if accountErr == nil {
-		moved, result, err := r.reconcileContractStop(ctx, &be, validation.AccountInvoiceDay(&account))
+		moved, result, err := r.reconcileContractStop(ctx, &be, &account)
 		if err != nil {
 			return ctrl.Result{}, err
 		}
@@ -147,10 +150,10 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 func (r *BillingEntitlementReconciler) reconcileContractStop(
 	ctx context.Context,
 	be *billingv1alpha1.BillingEntitlement,
-	invoiceDay int32,
+	account *billingv1alpha1.BillingAccount,
 ) (bool, ctrl.Result, error) {
 	contract := be.Spec.Contract
-	stop := validation.ContractStopDate(contract, invoiceDay)
+	stop := validation.ContractStopDate(contract, validation.AccountInvoiceDay(account))
 	if stop.IsZero() || contract.Term.OfferAfterRef == nil || !be.DeletionTimestamp.IsZero() {
 		return false, ctrl.Result{}, nil
 	}
@@ -169,8 +172,25 @@ func (r *BillingEntitlementReconciler) reconcileContractStop(
 	be.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation] = billingv1alpha1.EventTime(stop)
 	be.Spec.OfferRef = *contract.Term.OfferAfterRef.DeepCopy()
 	if err := r.client.Patch(ctx, be, client.MergeFrom(base)); err != nil {
-		return false, ctrl.Result{}, fmt.Errorf("moving the account onto offer %q at the contract's stop: %w",
-			contract.Term.OfferAfterRef.Name, err)
+		offerName := contract.Term.OfferAfterRef.Name
+		if !apierrors.IsInvalid(err) && !apierrors.IsForbidden(err) {
+			return false, ctrl.Result{}, fmt.Errorf("moving the account onto offer %q at the contract's stop: %w", offerName, err)
+		}
+		// The webhook refused the Offer, typically because it was retired
+		// or gained a one-time fee since the term was set to stop. Retrying
+		// soon won't help: tell staff, who pick another Offer, and look
+		// again in an hour. The account's ContractRenewalDue condition says
+		// the same while it lasts.
+		log.FromContext(ctx).Error(err, "contract stop refused", "offer", offerName)
+		if r.recorder != nil {
+			r.recorder.AnnotatedEventf(account, map[string]string{
+				billingv1alpha1.EventAnnotationEndsAt: billingv1alpha1.EventTime(stop),
+				billingv1alpha1.EventAnnotationOffer:  offerName,
+			}, corev1.EventTypeWarning, billingv1alpha1.EventReasonContractStopBlocked,
+				"The contract was due to stop on %s, but the account can't move onto offer %q: %s",
+				formatEventDate(stop), offerName, err.Error())
+		}
+		return false, ctrl.Result{RequeueAfter: contractStopRecheck}, nil
 	}
 	log.FromContext(ctx).Info("contract stopped: moved the account onto its next offer",
 		"billingAccount", be.Spec.BillingAccountRef.Name, "offer", be.Spec.OfferRef.Name, "stoppedAt", stop)
@@ -219,6 +239,7 @@ func billingEntitlementStatusEqual(a, b billingv1alpha1.BillingEntitlementStatus
 // SetupWithManager sets up the controller with the Manager.
 func (r *BillingEntitlementReconciler) SetupWithManager(mgr ctrl.Manager) error {
 	r.client = mgr.GetClient()
+	r.recorder = mgr.GetEventRecorderFor(eventRecorderName) //nolint:staticcheck // SA1019: the events/v1 recorder can't set annotations, which timeline events need.
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billing-billingentitlement").
 		For(&billingv1alpha1.BillingEntitlement{}).

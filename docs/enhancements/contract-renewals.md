@@ -342,6 +342,7 @@ needs a decision:
 | `False` | `InTerm` | The current term ends more than 90 days from now |
 | `False` | `NoTerm` | There is no contract, or it has no term |
 | `False` | `Stopped` | The contract has stopped |
+| `True` | `StopBlocked` | The contract is set to stop, but the account can't move onto `offerAfterRef`: checked from 90 days before the stop, and after it until billing has moved the account |
 
 - It's set by billing's BillingAccount controller, which already works out
   `status.contract`, and which requeues itself for the moment the flag or the
@@ -491,6 +492,16 @@ set on an account whose entitlement has a contract.
   to `offerAfterRef`. It's the only place billing writes an entitlement's
   spec, and the audit log records it as billing's service account. It
   requeues itself for the stop date.
+- **A stop billing can't make.** `offerAfterRef` is checked when the term is
+  set to stop, which may be years before the stop, and the Offer may be
+  retired or gain a one-time fee in between. Then the webhook refuses the
+  controller's change. So the BillingAccount controller checks the Offer
+  hourly from 90 days before the stop, and sets `ContractRenewalDue` to
+  `StopBlocked` with the reason while it can't be used. If the stop comes and
+  the change is refused, the BillingEntitlement controller records a
+  `ContractStopBlocked` warning on the account and tries again hourly. Until
+  the account moves, it's still billed the contract's fees, and
+  `status.contract` keeps showing them.
 - **BillingArrangement controller.** An arrangement's phase now depends on
   the contract when `endsWithContract` is set: `Ended` from the contract's
   stop. It records `PaymentTermsEnded` then, as for an arrangement that
@@ -574,6 +585,9 @@ Recorded on the BillingAccount by billing:
 | `ContractTermEnded` | Organization | The contract's term ended, and it carries on month to month |
 | `ContractRenewed` | Organization | The contract renewed for N months, until {date} |
 | `ContractStopped` | Organization | The contract ended on {date} |
+
+And `ContractStopBlocked` (staff only, a warning) when billing can't move
+the account onto `offerAfterRef` at the stop.
 
 Recorded on the BillingEntitlement by openmeter-provider, staff only:
 `ContractStopScheduled`, and `ContractStoppedLate` as a warning.

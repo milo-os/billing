@@ -327,7 +327,7 @@ func TestValidateBillingEntitlementUpdate_Term(t *testing.T) {
 				OfferAfterRef: &billingv1alpha1.OfferReference{Name: "setup"}}, wantErr: "charges one-time fees"},
 		{name: "moving onto a missing Offer", now: inTerm, oldTerm: &billingv1alpha1.ContractTerm{Months: 36},
 			newTerm: &billingv1alpha1.ContractTerm{Months: 36, AtEnd: billingv1alpha1.ContractTermAtEndStop,
-				OfferAfterRef: &billingv1alpha1.OfferReference{Name: "nope"}}, wantErr: "Not found"},
+				OfferAfterRef: &billingv1alpha1.OfferReference{Name: "nope"}}, wantErr: "doesn't exist"},
 		{name: "changing a stopped contract's term", now: monthToMonth, oldOffer: "payg", newOffer: "payg",
 			oldTerm: stop(36, nil), newTerm: &billingv1alpha1.ContractTerm{Months: 48}, wantErr: "stopped on 18 April 2029"},
 		{name: "billing moving a stopped contract onto offerAfterRef", now: monthToMonth,

@@ -84,6 +84,9 @@ const BillingAccountConditionInvoiceWriterReady = "InvoiceWriterReady"
 //   - InTerm — the current term ends after the notice (False)
 //   - NoTerm — there's no contract, or it has no term (False)
 //   - Stopped — the contract has stopped (False)
+//   - StopBlocked — the contract is set to stop, but the account can't move
+//     onto term.offerAfterRef: from the notice before the stop, and after it
+//     until billing has moved the account (True)
 const BillingAccountConditionContractRenewalDue = "ContractRenewalDue"
 
 // Reasons for the ContractRenewalDue condition.
@@ -93,6 +96,7 @@ const (
 	ContractRenewalDueReasonInTerm         = "InTerm"
 	ContractRenewalDueReasonNoTerm         = "NoTerm"
 	ContractRenewalDueReasonStopped        = "Stopped"
+	ContractRenewalDueReasonStopBlocked    = "StopBlocked"
 )
 
 // BillingAccountSpec defines the desired state of a BillingAccount.

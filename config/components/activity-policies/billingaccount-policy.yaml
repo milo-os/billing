@@ -9,7 +9,8 @@
 # again, and billing making a card the default. They also cover InvoiceSent,
 # which the payment processor's provider (stripe-provider) records on the
 # account each time an invoice is emailed, and a contract's term reaching
-# its renewal notice, its end, a renewal or a stop.
+# its renewal notice, its end, a renewal or a stop, and a stop billing
+# couldn't make.
 #
 # Design principles:
 # - Prefer contactInfo.businessName / contactInfo.name as the display label,
@@ -148,3 +149,14 @@ spec:
     - name: contract-stopped-fallback
       match: "event.reason == 'ContractStopped' && has(event.regarding.namespace)"
       summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ended"
+
+    # Billing couldn't move the account onto the Offer its contract stops to, usually because
+    # the Offer was retired since. Staff only: "The contract for billing account acme was due to
+    # stop on 18 April 2029, but the account can't move onto offer payg-v6"
+    - name: contract-stop-blocked
+      match: "event.reason == 'ContractStopBlocked' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/ends-at' in event.metadata.annotations && 'event.billing.miloapis.com/offer' in event.metadata.annotations"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was due to stop on {{ string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getFullYear()) }}, but the account can't move onto offer {{ link(event.metadata.annotations['event.billing.miloapis.com/offer'], {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'offers', 'name': event.metadata.annotations['event.billing.miloapis.com/offer']}) }}"
+
+    - name: contract-stop-blocked-fallback
+      match: "event.reason == 'ContractStopBlocked' && has(event.regarding.namespace)"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} couldn't stop"

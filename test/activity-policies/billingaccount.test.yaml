@@ -859,3 +859,54 @@ tests:
       component: billing-controller
   exp_rule: contract-stopped-fallback
   exp_summary: The contract for billing account acme ended
+- name: contract stop blocked
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+        event.billing.miloapis.com/offer: payg-v6
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractStopBlocked
+    type: Warning
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-stop-blocked
+  exp_summary: The contract for billing account acme was due to stop on 18 April 2029, but the account can't move onto offer payg-v6
+- name: contract stop blocked without its detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractStopBlocked
+    type: Warning
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-stop-blocked-fallback
+  exp_summary: The contract for billing account acme couldn't stop
