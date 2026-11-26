@@ -5,6 +5,7 @@ package controller
 import (
 	"context"
 	"fmt"
+	"time"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	apimeta "k8s.io/apimachinery/pkg/api/meta"
@@ -23,6 +24,7 @@ import (
 // BillingEntitlementReconciler reconciles a BillingEntitlement object.
 type BillingEntitlementReconciler struct {
 	client client.Client
+	now    func() time.Time
 }
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingentitlements,verbs=get;list;watch;create;update;patch;delete
@@ -57,6 +59,23 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 
 	var offer billingv1alpha1.Offer
 	offerErr := r.client.Get(ctx, types.NamespacedName{Name: be.Spec.OfferRef.Name}, &offer)
+
+	// Move the account onto the Offer its contract stops to, at the stop.
+	// Everything that reads offerRef then follows the Offer the account is
+	// billed on.
+	var stopRequeue ctrl.Result
+	if accountErr == nil {
+		moved, result, err := r.reconcileContractStop(ctx, &be, validation.AccountInvoiceDay(&account))
+		if err != nil {
+			return ctrl.Result{}, err
+		}
+		if moved {
+			// The patch changes the generation; the next reconcile sets
+			// status against the new Offer.
+			return ctrl.Result{}, nil
+		}
+		stopRequeue = result
+	}
 
 	baReady := accountErr == nil && account.DeletionTimestamp.IsZero()
 	offerAssignable := offerErr == nil && validation.OfferIsAssignable(&offer)
@@ -107,7 +126,7 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 	}
 
 	if billingEntitlementStatusEqual(be.Status, *newStatus) {
-		return ctrl.Result{}, nil
+		return stopRequeue, nil
 	}
 	be.Status = *newStatus
 	if err := r.client.Status().Update(ctx, &be); err != nil {
@@ -118,7 +137,44 @@ func (r *BillingEntitlementReconciler) Reconcile(ctx context.Context, req reconc
 		"billingAccount", be.Spec.BillingAccountRef.Name,
 		"offer", be.Spec.OfferRef.Name,
 	)
-	return ctrl.Result{}, nil
+	return stopRequeue, nil
+}
+
+// reconcileContractStop sets offerRef to the contract's offerAfterRef once
+// a contract set to stop has stopped, and records when on the entitlement
+// so it's done once. Before the stop, it returns a result that requeues for
+// it. It reports whether it changed the entitlement.
+func (r *BillingEntitlementReconciler) reconcileContractStop(
+	ctx context.Context,
+	be *billingv1alpha1.BillingEntitlement,
+	invoiceDay int32,
+) (bool, ctrl.Result, error) {
+	contract := be.Spec.Contract
+	stop := validation.ContractStopDate(contract, invoiceDay)
+	if stop.IsZero() || contract.Term.OfferAfterRef == nil || !be.DeletionTimestamp.IsZero() {
+		return false, ctrl.Result{}, nil
+	}
+	if _, done := be.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation]; done {
+		return false, ctrl.Result{}, nil
+	}
+	now := nowFrom(r.now)
+	if now.Before(stop) {
+		return false, requeueAt(stop, now), nil
+	}
+
+	base := be.DeepCopy()
+	if be.Annotations == nil {
+		be.Annotations = map[string]string{}
+	}
+	be.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation] = billingv1alpha1.EventTime(stop)
+	be.Spec.OfferRef = *contract.Term.OfferAfterRef.DeepCopy()
+	if err := r.client.Patch(ctx, be, client.MergeFrom(base)); err != nil {
+		return false, ctrl.Result{}, fmt.Errorf("moving the account onto offer %q at the contract's stop: %w",
+			contract.Term.OfferAfterRef.Name, err)
+	}
+	log.FromContext(ctx).Info("contract stopped: moved the account onto its next offer",
+		"billingAccount", be.Spec.BillingAccountRef.Name, "offer", be.Spec.OfferRef.Name, "stoppedAt", stop)
+	return true, ctrl.Result{}, nil
 }
 
 func setBEConditions(status *billingv1alpha1.BillingEntitlementStatus, generation int64, ready bool, reason, msg string) {

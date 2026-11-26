@@ -3,7 +3,9 @@
 package controller
 
 import (
+	"fmt"
 	"maps"
+	"strconv"
 	"time"
 
 	corev1 "k8s.io/api/core/v1"
@@ -120,4 +122,81 @@ func cardEventDetail(pm *billingv1alpha1.PaymentMethod) map[string]string {
 // card works until the end of that month.
 func cardExpiryMonth(card *billingv1alpha1.PaymentMethodCardDetails) time.Time {
 	return time.Date(int(card.ExpiryYear), time.Month(card.ExpiryMonth), 1, 0, 0, 0, 0, time.UTC)
+}
+
+// contractTermStatus returns the account's published contract term and its
+// ContractRenewalDue condition, copied, for comparing before and after a
+// reconcile.
+func contractTermStatus(account *billingv1alpha1.BillingAccount) (*billingv1alpha1.BillingAccountContractTerm, *metav1.Condition) {
+	var term *billingv1alpha1.BillingAccountContractTerm
+	if account.Status.Contract != nil {
+		term = account.Status.Contract.Term.DeepCopy()
+	}
+	cond := apimeta.FindStatusCondition(account.Status.Conditions, billingv1alpha1.BillingAccountConditionContractRenewalDue)
+	return term, cond.DeepCopy()
+}
+
+// recordContractTermTransition records the timeline events for a contract
+// reaching a point in its term on its own: the renewal flag turning on, the
+// term ending, a renewal and a stop. Each is told from the published term
+// before and after, and only when time, not an edit, moved it there: staff
+// changing the term are recorded from the audit log instead.
+func recordContractTermTransition(
+	recorder record.EventRecorder,
+	account *billingv1alpha1.BillingAccount,
+	before, after *billingv1alpha1.BillingAccountContractTerm,
+	renewalBefore, renewalAfter *metav1.Condition,
+) {
+	if recorder == nil || before == nil || after == nil || before.AtEnd != after.AtEnd {
+		return
+	}
+	renewed := after.Phase == billingv1alpha1.ContractTermPhaseInTerm &&
+		before.Phase == billingv1alpha1.ContractTermPhaseInTerm &&
+		after.Renewals > before.Renewals && after.CurrentTermStartsAt.Equal(&before.EndsAt)
+	sameTerm := before.EndsAt.Equal(&after.EndsAt)
+
+	switch {
+	case renewed:
+		recordTimelineEvent(recorder, account, map[string]string{
+			billingv1alpha1.EventAnnotationMonths: strconv.Itoa(int(after.RenewMonths)),
+			billingv1alpha1.EventAnnotationEndsAt: billingv1alpha1.EventTime(after.EndsAt.Time),
+		}, corev1.EventTypeNormal, billingv1alpha1.EventReasonContractRenewed, fmt.Sprintf(
+			"The contract renewed for %d months, until %s.", after.RenewMonths, formatEventDate(after.EndsAt.Time)))
+	case before.Phase == billingv1alpha1.ContractTermPhaseInTerm &&
+		after.Phase == billingv1alpha1.ContractTermPhaseMonthToMonth && sameTerm:
+		recordTimelineEvent(recorder, account, map[string]string{
+			billingv1alpha1.EventAnnotationEndsAt: billingv1alpha1.EventTime(after.EndsAt.Time),
+		}, corev1.EventTypeNormal, billingv1alpha1.EventReasonContractTermEnded, fmt.Sprintf(
+			"The contract's term ended on %s, and it carries on month to month.", formatEventDate(after.EndsAt.Time)))
+	case before.Phase != billingv1alpha1.ContractTermPhaseStopped &&
+		after.Phase == billingv1alpha1.ContractTermPhaseStopped &&
+		before.StopsAt != nil && before.StopsAt.Equal(&after.EndsAt):
+		recordTimelineEvent(recorder, account, map[string]string{
+			billingv1alpha1.EventAnnotationEndsAt: billingv1alpha1.EventTime(after.EndsAt.Time),
+		}, corev1.EventTypeNormal, billingv1alpha1.EventReasonContractStopped, fmt.Sprintf(
+			"The contract ended on %s.", formatEventDate(after.EndsAt.Time)))
+	}
+
+	becameDue := renewalAfter != nil &&
+		renewalAfter.Reason == billingv1alpha1.ContractRenewalDueReasonTermEndingSoon &&
+		(renewed || (sameTerm && renewalBefore != nil && renewalBefore.Reason == billingv1alpha1.ContractRenewalDueReasonInTerm))
+	if becameDue {
+		detail := map[string]string{
+			billingv1alpha1.EventAnnotationEndsAt:        billingv1alpha1.EventTime(after.EndsAt.Time),
+			billingv1alpha1.EventAnnotationContractAtEnd: string(after.AtEnd),
+		}
+		if after.AtEnd == billingv1alpha1.ContractTermAtEndRenew {
+			detail[billingv1alpha1.EventAnnotationMonths] = strconv.Itoa(int(after.RenewMonths))
+		}
+		// For staff only: no organization scope, so it reaches the platform
+		// timeline and not the customer's.
+		recorder.AnnotatedEventf(account, detail, corev1.EventTypeNormal, billingv1alpha1.EventReasonContractRenewalDue,
+			"%s", renewalAfter.Message)
+	}
+}
+
+// formatEventDate formats t as "18 April 2029", the way the activity
+// timeline shows dates.
+func formatEventDate(t time.Time) string {
+	return t.UTC().Format("2 January 2006")
 }

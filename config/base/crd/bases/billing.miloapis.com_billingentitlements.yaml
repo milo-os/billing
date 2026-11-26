@@ -126,6 +126,82 @@ spec:
                     x-kubernetes-validations:
                     - message: contract.startsAt is immutable
                       rule: self == oldSelf
+                  term:
+                    description: |-
+                      Term is how long the contract runs and what happens when it ends.
+                      Without one, the contract runs until it's changed.
+                    properties:
+                      atEnd:
+                        default: MonthToMonth
+                        description: |-
+                          AtEnd is what happens when the term ends. MonthToMonth, the default,
+                          carries the contract on at the same prices until someone decides
+                          otherwise. Renew starts another term of renewMonths. Stop stops the
+                          contract's charges and moves the account onto offerAfterRef.
+                        enum:
+                        - MonthToMonth
+                        - Renew
+                        - Stop
+                        type: string
+                      months:
+                        description: |-
+                          Months is the term's length. It's counted the way a fee's periods
+                          are, so the term ends on a billing date: from startsAt, or, for a
+                          contract billed on the invoice day, from its first billing date, so
+                          the prorated first period isn't counted. It must be a whole number
+                          of every recurring fee's interval in the Offer.
+                        format: int32
+                        maximum: 120
+                        minimum: 1
+                        type: integer
+                      offerAfterRef:
+                        description: |-
+                          OfferAfterRef is the Offer the account moves onto when the contract
+                          stops. Required when atEnd is Stop, and not allowed otherwise. It
+                          must be a published Offer with no one-time fees. At the stop, billing
+                          sets offerRef to it.
+                        properties:
+                          name:
+                            description: Name of the Offer.
+                            maxLength: 253
+                            minLength: 1
+                            type: string
+                        required:
+                        - name
+                        type: object
+                      renewMonths:
+                        description: |-
+                          RenewMonths is the length of each renewal, when atEnd is Renew.
+                          Defaults to months. Renewals are counted from the contract's start,
+                          so they end on its billing day.
+                        format: int32
+                        maximum: 120
+                        minimum: 1
+                        type: integer
+                      stopsAt:
+                        description: |-
+                          StopsAt is when a contract that's already running month to month
+                          stops, at midnight UTC. Only allowed once the term has ended, and
+                          then required when atEnd is Stop: a contract in its term stops at
+                          the term's end. It must be a billing date on or after the contract's
+                          next one, and end the period of every quarterly and annual fee billed
+                          in advance.
+                        format: date-time
+                        type: string
+                    required:
+                    - months
+                    type: object
+                    x-kubernetes-validations:
+                    - message: term.renewMonths is only allowed when atEnd is Renew
+                      rule: '!has(self.renewMonths) || (has(self.atEnd) && self.atEnd
+                        == ''Renew'')'
+                    - message: term.offerAfterRef is required when atEnd is Stop,
+                        and not allowed otherwise
+                      rule: has(self.offerAfterRef) == (has(self.atEnd) && self.atEnd
+                        == 'Stop')
+                    - message: term.stopsAt is only allowed when atEnd is Stop
+                      rule: '!has(self.stopsAt) || (has(self.atEnd) && self.atEnd
+                        == ''Stop'')'
                 required:
                 - startsAt
                 type: object

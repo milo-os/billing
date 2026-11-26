@@ -32,6 +32,15 @@ const (
 	// owner: @datum-cloud/platform
 	// alpha: v0.6.0
 	CreditGrants featuregate.Feature = "CreditGrants"
+
+	// ContractStop lets a contract's term be set to stop (term.atEnd Stop).
+	// Billing moves the account onto term.offerAfterRef at the stop, which
+	// openmeter-provider must handle as a stop rather than an amendment, so
+	// it stays off until a provider release that does is running.
+	//
+	// owner: @datum-cloud/platform
+	// alpha: v0.14.0
+	ContractStop featuregate.Feature = "ContractStop"
 )
 
 func init() {
@@ -42,6 +51,10 @@ func init() {
 // Features are listed in alphabetical order.
 var defaultFeatureGates = map[featuregate.Feature]featuregate.FeatureSpec{
 	CreditGrants: {
+		Default:    false,
+		PreRelease: featuregate.Alpha,
+	},
+	ContractStop: {
 		Default:    false,
 		PreRelease: featuregate.Alpha,
 	},

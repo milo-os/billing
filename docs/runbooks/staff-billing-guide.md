@@ -465,6 +465,35 @@ customer prices, then click **Change fees**.
 Each change creates a new Offer for the contract. Don't edit or reuse a
 contract's Offers directly.
 
+## A contract's term
+
+A contract can have a term: how many months it runs for, and what happens at
+the end. The staff portal can't set one yet, so ask the billing team. Without
+a term, a contract runs until it's changed.
+
+- **Month to month** (the default): at the end, the contract carries on at
+  the same prices, one month at a time.
+- **Renew**: another term starts at the same prices, of the same length or
+  of the renewal length agreed. A three-year contract often renews a year at
+  a time.
+- **Stop**: the contract's charges stop at the end, and the account moves
+  onto an ordinary Offer. Not available yet: billing refuses it until
+  OpenMeter can stop a contract.
+
+The term counts months from the start date, like a fee's renewals, so it
+ends on a billing date. It must be a whole number of every fee's period: a
+multiple of 12 with a yearly fee. Fees that should run as long as the
+contract leave **Renewals** blank, and the term decides when they end.
+
+**Renewal due.** From 90 days before the term ends, the account is flagged
+for renewal (the `ContractRenewalDue` condition), and stays flagged while
+the contract runs month to month. It clears when you agree a new term: a
+longer term moves the end out again.
+
+**A new term while month to month** is a longer term from the original
+start. A contract that ran 36 months and then two month to month, renewing
+for a year, has a 50-month term.
+
 ## What happens automatically
 
 | When | What happens | Who does it |
@@ -475,6 +504,8 @@ contract's Offers directly.
 | The contract's start date | The account moves onto the contract. The first invoice (setup fee and first month) is created and sent a few minutes later | OpenMeter |
 | Each billing date | An invoice for the fees billed in advance for the period starting, the fees billed in arrears for the period ending, and the last month's usage, with discounts applied. Quarterly and yearly fees only every 3 or 12 months | OpenMeter |
 | A fee's last renewal ends | It's removed and not charged again | Billing provider |
+| 90 days before a contract's term ends | The account is flagged for renewal | Billing |
+| A contract's term ends | It carries on month to month, or renews, as agreed. Nothing changes in what's charged | Billing |
 | An invoice is issued | Card accounts are charged. Invoice accounts are emailed the invoice, payable within their net days | Stripe |
 | You change a started contract | The new fees start on the next billing date, or at the end of the period of a quarterly or yearly fee billed in advance | OpenMeter |
 

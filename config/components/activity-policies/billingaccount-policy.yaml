@@ -8,7 +8,8 @@
 # api/v1alpha1/events.go): the account falling past due and becoming current
 # again, and billing making a card the default. They also cover InvoiceSent,
 # which the payment processor's provider (stripe-provider) records on the
-# account each time an invoice is emailed.
+# account each time an invoice is emailed, and a contract's term reaching
+# its renewal notice, its end, a renewal or a stop.
 #
 # Design principles:
 # - Prefer contactInfo.businessName / contactInfo.name as the display label,
@@ -108,3 +109,42 @@ spec:
     - name: invoice-sent-fallback
       match: "event.reason == 'InvoiceSent' && has(event.regarding.namespace)"
       summary: "An invoice for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} was emailed"
+
+    # Contracts reaching a point in their term on their own (api/v1alpha1/events.go).
+    # Staff changing a term are recorded from the BillingEntitlement's audit log.
+    # ContractRenewalDue carries no organization scope, so only staff see it:
+    # "The contract for billing account acme ends its term on 18 April 2029, and will renew for 12 months"
+    - name: contract-renewal-due
+      match: "event.reason == 'ContractRenewalDue' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/ends-at' in event.metadata.annotations && 'event.billing.miloapis.com/at-end' in event.metadata.annotations"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ends its term on {{ string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getFullYear()) }}, and will {{ event.metadata.annotations['event.billing.miloapis.com/at-end'] == 'Renew' && 'event.billing.miloapis.com/months' in event.metadata.annotations ? 'renew for ' + event.metadata.annotations['event.billing.miloapis.com/months'] + ' months' : (event.metadata.annotations['event.billing.miloapis.com/at-end'] == 'Stop' ? 'stop' : 'carry on month to month') }}"
+
+    - name: contract-renewal-due-fallback
+      match: "event.reason == 'ContractRenewalDue' && has(event.regarding.namespace)"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} is due for renewal"
+
+    # "The contract for billing account acme ended its term on 18 April 2029, and carries on month to month"
+    - name: contract-term-ended
+      match: "event.reason == 'ContractTermEnded' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/ends-at' in event.metadata.annotations"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ended its term on {{ string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getFullYear()) }}, and carries on month to month"
+
+    - name: contract-term-ended-fallback
+      match: "event.reason == 'ContractTermEnded' && has(event.regarding.namespace)"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ended its term, and carries on month to month"
+
+    # "The contract for billing account acme renewed for 12 months, until 18 April 2030"
+    - name: contract-renewed
+      match: "event.reason == 'ContractRenewed' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/months' in event.metadata.annotations && 'event.billing.miloapis.com/ends-at' in event.metadata.annotations"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} renewed for {{ event.metadata.annotations['event.billing.miloapis.com/months'] }} months, until {{ string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getFullYear()) }}"
+
+    - name: contract-renewed-fallback
+      match: "event.reason == 'ContractRenewed' && has(event.regarding.namespace)"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} renewed"
+
+    # "The contract for billing account acme ended on 18 April 2029"
+    - name: contract-stopped
+      match: "event.reason == 'ContractStopped' && has(event.metadata.annotations) && has(event.regarding.namespace) && 'event.billing.miloapis.com/ends-at' in event.metadata.annotations"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ended on {{ string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getDate()) + ' ' + ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'][timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getMonth()] + ' ' + string(timestamp(string(event.metadata.annotations['event.billing.miloapis.com/ends-at'])).getFullYear()) }}"
+
+    - name: contract-stopped-fallback
+      match: "event.reason == 'ContractStopped' && has(event.regarding.namespace)"
+      summary: "The contract for billing account {{ link(event.regarding.name, {'apiGroup': 'billing.miloapis.com', 'apiVersion': 'v1alpha1', 'resource': 'billingaccounts', 'namespace': event.regarding.namespace, 'name': event.regarding.name}) }} ended"

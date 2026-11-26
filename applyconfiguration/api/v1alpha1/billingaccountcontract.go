@@ -16,11 +16,13 @@ import (
 type BillingAccountContractApplyConfiguration struct {
 	// StartsAt is when the contract starts, at midnight UTC: its one-time
 	// fees are charged then, and its monthly fees bill from then.
+	//
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
 	// BillingDayOfMonth is the day of the month the contract bills on: the
 	// day it starts, or the account's invoice day for a contract whose
 	// billingDay is InvoiceDay. Months shorter than it bill on their last
 	// day.
+	//
 	BillingDayOfMonth *int32 `json:"billingDayOfMonth,omitempty"`
 	// BillingDay is how the contract chose its billing day, from its
 	// contract.billingDay: StartDate bills on the day it starts, so every
@@ -28,15 +30,22 @@ type BillingAccountContractApplyConfiguration struct {
 	// first period runs from the start to the next billing date and is
 	// prorated, and quarterly and annual fees bill in January, April, July
 	// and October, and in January.
+	//
 	BillingDay *apiv1alpha1.ContractBillingDay `json:"billingDay,omitempty"`
 	// Fees are the contract's fixed fees, before discounts: its one-time
 	// fees, such as a setup fee, and its recurring ones, such as a monthly
 	// fee. Discounts on them are listed in status.discounts. A contract
 	// amended after it started omits the one-time fees already charged.
+	//
 	Fees []BillingAccountContractFeeApplyConfiguration `json:"fees,omitempty"`
 	// UsageBilled is true when the contract also bills usage, at the rates
 	// in its Offer, on top of its fees.
+	//
 	UsageBilled *bool `json:"usageBilled,omitempty"`
+	// Term is how long the contract runs, what happens when it ends, and
+	// where it is now. Empty for a contract without a term.
+	//
+	Term *BillingAccountContractTermApplyConfiguration `json:"term,omitempty"`
 }
 
 // BillingAccountContractApplyConfiguration constructs a declarative configuration of the BillingAccountContract type for use with
@@ -87,5 +96,13 @@ func (b *BillingAccountContractApplyConfiguration) WithFees(values ...*BillingAc
 // If called multiple times, the UsageBilled field is set to the value of the last call.
 func (b *BillingAccountContractApplyConfiguration) WithUsageBilled(value bool) *BillingAccountContractApplyConfiguration {
 	b.UsageBilled = &value
+	return b
+}
+
+// WithTerm sets the Term field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Term field is set to the value of the last call.
+func (b *BillingAccountContractApplyConfiguration) WithTerm(value *BillingAccountContractTermApplyConfiguration) *BillingAccountContractApplyConfiguration {
+	b.Term = value
 	return b
 }

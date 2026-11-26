@@ -6,6 +6,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -71,7 +72,7 @@ func reconcileAccountDiscounts(t *testing.T, objs ...client.Object) []billingv1a
 		},
 	}
 	r := &BillingAccountReconciler{client: cl}
-	if err := r.reconcileEntitlementSummary(context.Background(), account); err != nil {
+	if _, err := r.reconcileEntitlementSummary(context.Background(), account, time.Now()); err != nil {
 		t.Fatalf("reconcileEntitlementSummary: %v", err)
 	}
 	return account.Status.Discounts

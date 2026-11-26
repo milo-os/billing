@@ -492,6 +492,74 @@ spec:
                       fees are charged then, and its monthly fees bill from then.
                     format: date-time
                     type: string
+                  term:
+                    description: |-
+                      Term is how long the contract runs, what happens when it ends, and
+                      where it is now. Empty for a contract without a term.
+                    properties:
+                      atEnd:
+                        description: |-
+                          AtEnd is what happens when the term ends: MonthToMonth, Renew or
+                          Stop.
+                        enum:
+                        - MonthToMonth
+                        - Renew
+                        - Stop
+                        type: string
+                      currentTermStartsAt:
+                        description: |-
+                          CurrentTermStartsAt is when the current term started: the contract's
+                          start, or the start of its latest renewal. Month to month or
+                          stopped, it's when the last term started.
+                        format: date-time
+                        type: string
+                      endsAt:
+                        description: |-
+                          EndsAt is when the current term ends. Month to month, it's when the
+                          last term ended. Stopped, it's when the contract stopped.
+                        format: date-time
+                        type: string
+                      months:
+                        description: Months is the first term's length.
+                        format: int32
+                        type: integer
+                      phase:
+                        description: Phase is InTerm, MonthToMonth or Stopped.
+                        enum:
+                        - InTerm
+                        - MonthToMonth
+                        - Stopped
+                        type: string
+                      renewMonths:
+                        description: RenewMonths is the length of each renewal, when
+                          atEnd is Renew.
+                        format: int32
+                        type: integer
+                      renewalDueAt:
+                        description: |-
+                          RenewalDueAt is when the ContractRenewalDue condition turns on for
+                          the current term: ContractRenewalNotice before endsAt. Empty once the
+                          contract has stopped.
+                        format: date-time
+                        type: string
+                      renewals:
+                        description: Renewals counts the renewals so far, when atEnd
+                          is Renew.
+                        format: int32
+                        type: integer
+                      stopsAt:
+                        description: |-
+                          StopsAt is when a contract set to stop stops: the term's end, or the
+                          contract's stopsAt once it's month to month.
+                        format: date-time
+                        type: string
+                    required:
+                    - atEnd
+                    - currentTermStartsAt
+                    - endsAt
+                    - months
+                    - phase
+                    type: object
                   usageBilled:
                     description: |-
                       UsageBilled is true when the contract also bills usage, at the rates

@@ -587,3 +587,275 @@ tests:
       component: stripe-provider
   exp_rule: invoice-sent-fallback
   exp_summary: An invoice for billing account acme was emailed
+- name: contract renewal due, renewing
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+        event.billing.miloapis.com/at-end: Renew
+        event.billing.miloapis.com/months: '12'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewalDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewal-due
+  exp_summary: The contract for billing account acme ends its term on 18 April 2029, and will renew for 12 months
+- name: contract renewal due, carrying on
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+        event.billing.miloapis.com/at-end: MonthToMonth
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewalDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewal-due
+  exp_summary: The contract for billing account acme ends its term on 18 April 2029, and will carry on month to month
+- name: contract renewal due, stopping
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+        event.billing.miloapis.com/at-end: Stop
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewalDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewal-due
+  exp_summary: The contract for billing account acme ends its term on 18 April 2029, and will stop
+- name: contract renewal due without its detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewalDue
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewal-due-fallback
+  exp_summary: The contract for billing account acme is due for renewal
+- name: contract term ended
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractTermEnded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-term-ended
+  exp_summary: The contract for billing account acme ended its term on 18 April 2029, and carries on month to month
+- name: contract term ended without its detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractTermEnded
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-term-ended-fallback
+  exp_summary: The contract for billing account acme ended its term, and carries on month to month
+- name: contract renewed
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/months: '12'
+        event.billing.miloapis.com/ends-at: '2030-04-18T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewed
+  exp_summary: The contract for billing account acme renewed for 12 months, until 18 April 2030
+- name: contract renewed without its detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractRenewed
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-renewed-fallback
+  exp_summary: The contract for billing account acme renewed
+- name: contract stopped
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+        event.billing.miloapis.com/ends-at: '2029-04-18T00:00:00Z'
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractStopped
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-stopped
+  exp_summary: The contract for billing account acme ended on 18 April 2029
+- name: contract stopped without its detail
+  event:
+    metadata:
+      name: acme.18a1
+      namespace: organization-acme
+      annotations:
+        platform.miloapis.com/scope.type: Organization
+        platform.miloapis.com/scope.name: acme
+    involvedObject:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    regarding:
+      apiVersion: billing.miloapis.com/v1alpha1
+      kind: BillingAccount
+      name: acme
+      namespace: organization-acme
+      uid: 3f0c6a1e-0000-4000-8000-000000000001
+    reason: ContractStopped
+    type: Normal
+    message: fallback message
+    source:
+      component: billing-controller
+  exp_rule: contract-stopped-fallback
+  exp_summary: The contract for billing account acme ended

@@ -97,6 +97,38 @@ func TestCycleTermsFollowAStartedContract(t *testing.T) {
 	}
 }
 
+func TestCycleTermsAfterAContractStops(t *testing.T) {
+	stopsAt := metav1.NewTime(date(2029, time.April, 18))
+	account := &billingv1alpha1.BillingAccount{
+		Spec: billingv1alpha1.BillingAccountSpec{
+			PaymentTerms: &billingv1alpha1.PaymentTerms{InvoiceFrequency: "Monthly", InvoiceDayOfMonth: 1, NetDays: 30},
+		},
+		Status: billingv1alpha1.BillingAccountStatus{
+			Contract: &billingv1alpha1.BillingAccountContract{
+				StartsAt:          metav1.NewTime(date(2026, time.April, 18)),
+				BillingDayOfMonth: 18,
+				Term: &billingv1alpha1.BillingAccountContractTerm{
+					Months: 36, AtEnd: billingv1alpha1.ContractTermAtEndStop, Phase: billingv1alpha1.ContractTermPhaseInTerm,
+					EndsAt: stopsAt, StopsAt: &stopsAt,
+				},
+			},
+		},
+	}
+	if got := CycleTerms(account, date(2029, time.April, 17)); got.InvoiceDayOfMonth != 18 {
+		t.Errorf("before the stop, day = %d, want the contract's 18", got.InvoiceDayOfMonth)
+	}
+	// From the stop the invoice day decides again, even before status
+	// catches up with it.
+	if got := CycleTerms(account, date(2029, time.April, 18)); got.InvoiceDayOfMonth != 1 {
+		t.Errorf("at the stop, day = %d, want the invoice day", got.InvoiceDayOfMonth)
+	}
+	account.Status.Contract.Term.Phase = billingv1alpha1.ContractTermPhaseStopped
+	account.Status.Contract.Term.StopsAt = nil
+	if got := CycleTerms(account, date(2029, time.May, 2)); got.InvoiceDayOfMonth != 1 {
+		t.Errorf("stopped, day = %d, want the invoice day", got.InvoiceDayOfMonth)
+	}
+}
+
 func TestRangeLabel(t *testing.T) {
 	if got := RangeLabel(date(2026, time.September, 30), date(2026, time.October, 30)); got != "30 Sep - 30 Oct 2026" {
 		t.Errorf("got %q", got)

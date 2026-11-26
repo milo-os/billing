@@ -36,6 +36,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.BillingAccountContractApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContractFee"):
 		return &apiv1alpha1.BillingAccountContractFeeApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountContractTerm"):
+		return &apiv1alpha1.BillingAccountContractTermApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountDiscount"):
 		return &apiv1alpha1.BillingAccountDiscountApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("BillingAccountPaymentArrangement"):
@@ -106,6 +108,8 @@ func ForKind(kind schema.GroupVersionKind) interface{} {
 		return &apiv1alpha1.ChargeSpecApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("ChargeStatus"):
 		return &apiv1alpha1.ChargeStatusApplyConfiguration{}
+	case v1alpha1.SchemeGroupVersion.WithKind("ContractTerm"):
+		return &apiv1alpha1.ContractTermApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrant"):
 		return &apiv1alpha1.CreditGrantApplyConfiguration{}
 	case v1alpha1.SchemeGroupVersion.WithKind("CreditGrantSpec"):

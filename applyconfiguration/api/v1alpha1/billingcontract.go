@@ -23,6 +23,7 @@ type BillingContractApplyConfiguration struct {
 	// contract is set, it may be today or up to a year ahead, but not in
 	// the past: billing providers can't start charging retroactively.
 	// Immutable.
+	//
 	StartsAt *v1.Time `json:"startsAt,omitempty"`
 	// BillingDay is the day of the month the contract bills on.
 	//
@@ -41,7 +42,12 @@ type BillingContractApplyConfiguration struct {
 	// that many whole periods after the prorated one.
 	//
 	// Immutable.
+	//
 	BillingDay *apiv1alpha1.ContractBillingDay `json:"billingDay,omitempty"`
+	// Term is how long the contract runs and what happens when it ends.
+	// Without one, the contract runs until it's changed.
+	//
+	Term *ContractTermApplyConfiguration `json:"term,omitempty"`
 }
 
 // BillingContractApplyConfiguration constructs a declarative configuration of the BillingContract type for use with
@@ -63,5 +69,13 @@ func (b *BillingContractApplyConfiguration) WithStartsAt(value v1.Time) *Billing
 // If called multiple times, the BillingDay field is set to the value of the last call.
 func (b *BillingContractApplyConfiguration) WithBillingDay(value apiv1alpha1.ContractBillingDay) *BillingContractApplyConfiguration {
 	b.BillingDay = &value
+	return b
+}
+
+// WithTerm sets the Term field in the declarative configuration to the given value
+// and returns the receiver, so that objects can be built by chaining "With" function invocations.
+// If called multiple times, the Term field is set to the value of the last call.
+func (b *BillingContractApplyConfiguration) WithTerm(value *ContractTermApplyConfiguration) *BillingContractApplyConfiguration {
+	b.Term = value
 	return b
 }

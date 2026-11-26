@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implementable
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -621,9 +621,12 @@ so staff record the outcome on the contract instead.
    `status.paymentArrangement.endsWithContract`, the `ContractRenewalDue`
    condition, the controllers, the activity policies and `usagereport`, with
    the staff guide updated. Release. Month to month and Renew work from this
-   release, since the provider has nothing to do for them.
+   release, since the provider has nothing to do for them. Setting a term to
+   `Stop` is refused while the `ContractStop` feature gate is off, its
+   default, so nothing can stop a contract before the provider handles it.
 2. **openmeter-provider**: Stop, with its e2e and time-travel tests, on the
-   billing release. Release, and pin it in production.
+   billing release. Release, and pin it in production. Then turn on
+   `ContractStop` in billing.
 3. **Fleet overview** (billing `ui/provider`): the two attention items. Can
    ship with step 1.
 4. **staff-portal**: the term in the contract editor and card, the attention
@@ -699,3 +702,7 @@ Infra needs only the usual version pins.
 - 2026-11-25: A contract that's month to month stops on `stopsAt`, a billing
   date that ends every quarterly and annual in-advance fee's period, rather
   than at the next billing date.
+- 2026-11-26: Design approved
+  ([#296](https://github.com/milo-os/billing/pull/296)). Billing's term,
+  renewal flag, stop and activity built behind the `ContractStop` feature
+  gate; payment terms tied to the contract follow separately.
