@@ -172,9 +172,8 @@ func TestReconcileContractTerm(t *testing.T) {
 		if _, err := r.reconcileEntitlementSummary(context.Background(), account, utcDate(2027, time.June, 1)); err != nil {
 			t.Fatal(err)
 		}
-		cond := apimeta.FindStatusCondition(account.Status.Conditions, billingv1alpha1.BillingAccountConditionContractRenewalDue)
-		if cond == nil || cond.Reason != billingv1alpha1.ContractRenewalDueReasonNoTerm || cond.Status != metav1.ConditionFalse {
-			t.Errorf("ContractRenewalDue = %+v, want False NoTerm", cond)
+		if cond := apimeta.FindStatusCondition(account.Status.Conditions, billingv1alpha1.BillingAccountConditionContractRenewalDue); cond != nil {
+			t.Errorf("ContractRenewalDue = %+v, want none without a contract", cond)
 		}
 	})
 }
@@ -215,7 +214,7 @@ func TestRecordContractTermTransition(t *testing.T) {
 		},
 		{
 			name: "staff adding a term inside the notice records nothing", before: nil, after: term(inTerm, monthly, start, end, 0, nil),
-			condBefore: cond(billingv1alpha1.ContractRenewalDueReasonNoTerm), condAfter: cond(soon),
+			condBefore: nil, condAfter: cond(soon),
 		},
 		{
 			name: "term ended", before: term(inTerm, monthly, start, end, 0, nil), after: term(m2m, monthly, start, end, 0, nil),

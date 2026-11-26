@@ -465,12 +465,13 @@ func (r *BillingAccountReconciler) contractStopBlocked(
 	if problem == "" {
 		return "", nil
 	}
+	const fix = " Point spec.contract.term.offerAfterRef at another Offer."
 	if stopped {
-		return fmt.Sprintf("The contract was due to stop on %s, but the account is still billed at the contract's prices: it can't move onto offer %q: %s.",
-			formatEventDate(state.StopsAt), name, problem), nil
+		return fmt.Sprintf("The contract was due to stop on %s, but the account is still billed at the contract's prices: it can't move onto offer %q: %s.%s",
+			formatEventDate(state.StopsAt), name, problem, fix), nil
 	}
-	return fmt.Sprintf("The contract stops on %s, but the account can't move onto offer %q then: %s.",
-		formatEventDate(state.StopsAt), name, problem), nil
+	return fmt.Sprintf("The contract stops on %s, but the account can't move onto offer %q then: %s.%s",
+		formatEventDate(state.StopsAt), name, problem, fix), nil
 }
 
 // entitledOffer returns the account's BillingEntitlement and the published
@@ -674,10 +675,15 @@ func accountContractTerm(term *billingv1alpha1.ContractTerm, state validation.Co
 
 // setContractRenewalDueCondition sets ContractRenewalDue from where the
 // account's contract is in its term. contract is nil when the account has
-// no published contract.
+// no published contract. An account without a contract with a term has no
+// condition.
 func setContractRenewalDueCondition(account *billingv1alpha1.BillingAccount, contract *billingv1alpha1.BillingContract,
 	state validation.ContractTermState, ok bool, now time.Time) {
 	reason, due := validation.ContractRenewalDue(state, ok, now)
+	if reason == "" {
+		apimeta.RemoveStatusCondition(&account.Status.Conditions, billingv1alpha1.BillingAccountConditionContractRenewalDue)
+		return
+	}
 	cond := metav1.Condition{
 		Type:               billingv1alpha1.BillingAccountConditionContractRenewalDue,
 		Status:             metav1.ConditionFalse,
@@ -688,8 +694,6 @@ func setContractRenewalDueCondition(account *billingv1alpha1.BillingAccount, con
 		cond.Status = metav1.ConditionTrue
 	}
 	switch reason {
-	case billingv1alpha1.ContractRenewalDueReasonNoTerm:
-		cond.Message = "The account has no contract with a term."
 	case billingv1alpha1.ContractRenewalDueReasonStopped:
 		cond.Message = fmt.Sprintf("The contract stopped on %s.", formatEventDate(state.EndsAt))
 	case billingv1alpha1.ContractRenewalDueReasonMonthToMonth:

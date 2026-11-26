@@ -486,7 +486,10 @@ was set to stop, which may have been years before. From 90 days before the
 stop, billing checks it too, and if the account can't move onto it, the
 renewal flag says why (reason `StopBlocked`). Pick another Offer before the
 stop. If it's missed, the account stays on the contract's prices until it
-can move, so the months after the stop need crediting.
+can move, so the time after the stop needs crediting. Another Offer can
+still be picked after the stop, until the account has moved: change the
+Offer the contract stops to, not the account's Offer, which billing refuses
+until then.
 
 The term counts months from the start date, like a fee's renewals, so it
 ends on a billing date. It must be a whole number of every fee's period: a
@@ -555,7 +558,7 @@ your internal notes and reasons.
 | "The first invoice hasn't come through yet" | It arrives a few minutes after the contract starts. If it hasn't after an hour, ask the billing team |
 | A published Offer has no **Published at** date after a few minutes | Its charge types probably don't cover every price in it. Create a new Offer with the right charge types |
 | A fee with renewals is still on an invoice after it should have ended | Ask the billing team. The periods charged after its end need crediting |
-| The account is flagged with `StopBlocked`, or the activity says "can't move onto offer" | The Offer the contract stops to was retired or changed. Ask the billing team to pick another; billing tries again every hour |
+| The account is flagged with `StopBlocked`, or the activity says "can't move onto offer" | The Offer the contract stops to was retired or changed. Ask the billing team to point the contract's `term.offerAfterRef` at another; billing moves the account within the hour |
 | A contract starting today has a smaller first invoice | It was charged from when you saved it, not midnight. Start contracts tomorrow or later for a full first month |
 | A customer says their invoice is wrong | Compare it with the Contract card and a preview, then ask the billing team. Don't edit anything in Stripe or OpenMeter |
 

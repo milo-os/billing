@@ -76,13 +76,13 @@ const BillingAccountConditionInvoiceWriterReady = "InvoiceWriterReady"
 // BillingAccountConditionContractRenewalDue is set by the billing service
 // controller and is True when the account's contract needs a decision about
 // what happens next: its term ends within ContractRenewalNotice, or it has
-// ended and the contract carries on month to month.
+// ended and the contract carries on month to month. Only an account whose
+// contract has a term has it.
 //
 // Reasons:
 //   - TermEndingSoon — the current term ends within the notice (True)
 //   - MonthToMonth — the term has ended and the contract carries on month to month (True)
 //   - InTerm — the current term ends after the notice (False)
-//   - NoTerm — there's no contract, or it has no term (False)
 //   - Stopped — the contract has stopped (False)
 //   - StopBlocked — the contract is set to stop, but the account can't move
 //     onto term.offerAfterRef: from the notice before the stop, and after it
@@ -94,7 +94,6 @@ const (
 	ContractRenewalDueReasonTermEndingSoon = "TermEndingSoon"
 	ContractRenewalDueReasonMonthToMonth   = "MonthToMonth"
 	ContractRenewalDueReasonInTerm         = "InTerm"
-	ContractRenewalDueReasonNoTerm         = "NoTerm"
 	ContractRenewalDueReasonStopped        = "Stopped"
 	ContractRenewalDueReasonStopBlocked    = "StopBlocked"
 )

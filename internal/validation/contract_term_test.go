@@ -155,7 +155,7 @@ func TestContractTermAt(t *testing.T) {
 	if _, ok := ContractTermAt(termContract(start, nil), 1, start); ok {
 		t.Error("ContractTermAt() without a term: ok = true, want false")
 	}
-	if reason, due := ContractRenewalDue(ContractTermState{}, false, start); reason != billingv1alpha1.ContractRenewalDueReasonNoTerm || due {
+	if reason, due := ContractRenewalDue(ContractTermState{}, false, start); reason != "" || due {
 		t.Errorf("ContractRenewalDue() without a term = %s, %v", reason, due)
 	}
 }
@@ -277,12 +277,17 @@ func TestValidateBillingEntitlementUpdate_Term(t *testing.T) {
 	stop := func(months int32, at *metav1.Time) *billingv1alpha1.ContractTerm {
 		return &billingv1alpha1.ContractTerm{Months: months, AtEnd: billingv1alpha1.ContractTermAtEndStop, OfferAfterRef: payg, StopsAt: at}
 	}
+	stopTo := func(offer string, months int32) *billingv1alpha1.ContractTerm {
+		return &billingv1alpha1.ContractTerm{Months: months, AtEnd: billingv1alpha1.ContractTermAtEndStop,
+			OfferAfterRef: &billingv1alpha1.OfferReference{Name: offer}}
+	}
 	inTerm := date(2027, time.June, 20)
 	monthToMonth := date(2029, time.June, 20)
 
 	tests := []struct {
 		name     string
 		now      time.Time
+		moved    bool
 		oldOffer string
 		oldTerm  *billingv1alpha1.ContractTerm
 		newOffer string
@@ -332,6 +337,20 @@ func TestValidateBillingEntitlementUpdate_Term(t *testing.T) {
 			oldTerm: stop(36, nil), newTerm: &billingv1alpha1.ContractTerm{Months: 48}, wantErr: "stopped on 18 April 2029"},
 		{name: "billing moving a stopped contract onto offerAfterRef", now: monthToMonth,
 			oldTerm: stop(36, nil), newOffer: "payg", newTerm: stop(36, nil)},
+		{name: "pointing a stopped contract that hasn't moved at another Offer", now: monthToMonth,
+			oldTerm: stopTo("retired", 36), newTerm: stop(36, nil)},
+		{name: "pointing a stopped contract that hasn't moved at an Offer with one-time fees", now: monthToMonth,
+			oldTerm: stopTo("retired", 36), newTerm: stopTo("setup", 36), wantErr: "charges one-time fees"},
+		{name: "pointing a stopped contract that has moved at another Offer", now: monthToMonth, moved: true,
+			oldOffer: "payg", newOffer: "payg", oldTerm: stop(36, nil), newTerm: stopTo("contract", 36),
+			wantErr: "stopped on 18 April 2029, so its term can't change"},
+		{name: "picking an Offer by hand for a stopped contract that hasn't moved", now: monthToMonth,
+			oldTerm: stopTo("retired", 36), newOffer: "payg", newTerm: stopTo("retired", 36),
+			wantErr: "set spec.contract.term.offerAfterRef to the Offer it moves onto instead"},
+		{name: "changing the Offer of a stopped contract that has moved", now: monthToMonth, moved: true,
+			oldOffer: "payg", newOffer: "lease", oldTerm: stop(36, nil), newTerm: stop(36, nil)},
+		{name: "lengthening a stopped contract that hasn't moved", now: monthToMonth,
+			oldTerm: stop(36, nil), newTerm: stop(48, nil), wantErr: "except offerAfterRef"},
 		{name: "an amendment adding an annual fee to a term that isn't a whole number of years", now: inTerm,
 			oldOffer: "payg", oldTerm: &billingv1alpha1.ContractTerm{Months: 30},
 			newTerm: &billingv1alpha1.ContractTerm{Months: 30}, wantErr: "rack is billed annual"},
@@ -346,6 +365,9 @@ func TestValidateBillingEntitlementUpdate_Term(t *testing.T) {
 				newOffer = "contract"
 			}
 			oldBE := termEntitlement(oldOffer, tt.oldTerm)
+			if tt.moved {
+				oldBE.Annotations = map[string]string{billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation: "2029-04-18T00:00:00Z"}
+			}
 			newBE := termEntitlement(newOffer, tt.newTerm)
 			errs := ValidateBillingEntitlementUpdate(context.Background(), termTestClient(t), oldBE, newBE, tt.now)
 			switch {

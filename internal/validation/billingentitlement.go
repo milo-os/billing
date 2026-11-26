@@ -246,13 +246,7 @@ func validateContractTerm(
 		oldContract := oldBE.Spec.Contract
 		oldTerm = oldContract.Term
 		if ContractStopped(oldContract, invoiceDay, now) {
-			// Billing moves offerRef to offerAfterRef at the stop, and staff
-			// may change it after, so only the term is frozen.
-			if !apiequality.Semantic.DeepEqual(oldTerm, contract.Term) {
-				return field.ErrorList{field.Forbidden(termPath, fmt.Sprintf(
-					"the contract stopped on %s, so its term can't change", formatDate(ContractStopDate(oldContract, invoiceDay))))}
-			}
-			return nil
+			return validateStoppedContractTerm(ctx, c, oldBE, newBE, ContractStopDate(oldContract, invoiceDay), termPath)
 		}
 	}
 
@@ -293,6 +287,46 @@ func validateContractTerm(
 	}
 	allErrs = append(allErrs, validateTermFitsFees(contract, invoiceDay, offer.Spec.ServicePricings, termPath)...)
 	return allErrs
+}
+
+// validateStoppedContractTerm checks a change to a contract that has
+// stopped. Its term is frozen, except offerAfterRef until billing has moved
+// the account onto it: if that Offer was retired since the term was set,
+// staff point it at another, and billing moves the account there. Billing
+// moves offerRef at the stop. Until then offerRef only changes to
+// offerAfterRef; after, staff may change it like any account's.
+func validateStoppedContractTerm(ctx context.Context, c client.Client, oldBE, newBE *billingv1alpha1.BillingEntitlement,
+	stoppedAt time.Time, termPath *field.Path) field.ErrorList {
+	oldTerm, newTerm := oldBE.Spec.Contract.Term, newBE.Spec.Contract.Term
+	_, moved := oldBE.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation]
+	var allErrs field.ErrorList
+	// Until billing has moved the account, offerRef only moves to
+	// offerAfterRef, which is billing's own change: a hand-picked Offer
+	// would be overwritten when billing moves the account.
+	if !moved && newTerm != nil && newTerm.OfferAfterRef != nil &&
+		newBE.Spec.OfferRef.Name != oldBE.Spec.OfferRef.Name && newBE.Spec.OfferRef.Name != newTerm.OfferAfterRef.Name {
+		allErrs = append(allErrs, field.Forbidden(field.NewPath("spec", "offerRef", "name"), fmt.Sprintf(
+			"the contract stopped on %s and billing hasn't moved the account yet: set spec.contract.term.offerAfterRef to the Offer it moves onto instead",
+			formatDate(stoppedAt))))
+	}
+	if newTerm != nil && !moved {
+		oldRest, newRest := oldTerm.DeepCopy(), newTerm.DeepCopy()
+		oldRest.OfferAfterRef, newRest.OfferAfterRef = nil, nil
+		if apiequality.Semantic.DeepEqual(oldRest, newRest) {
+			if apiequality.Semantic.DeepEqual(oldTerm.OfferAfterRef, newTerm.OfferAfterRef) {
+				return allErrs
+			}
+			return append(allErrs, validateOfferAfterRef(ctx, c, newTerm.OfferAfterRef, termPath.Child("offerAfterRef"))...)
+		}
+	}
+	if apiequality.Semantic.DeepEqual(oldTerm, newTerm) {
+		return allErrs
+	}
+	msg := fmt.Sprintf("the contract stopped on %s, so its term can't change", formatDate(stoppedAt))
+	if !moved {
+		msg += ", except offerAfterRef until the account has moved onto it"
+	}
+	return append(allErrs, field.Forbidden(termPath, msg))
 }
 
 // validateContractStopsAt checks when a contract set to stop stops. A

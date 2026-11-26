@@ -135,10 +135,11 @@ func ContractTermAt(contract *billingv1alpha1.BillingContract, invoiceDay int32,
 
 // ContractRenewalDue returns the ContractRenewalDue condition's reason for
 // a contract's term state, and whether the condition is True. ok is false
-// for a contract without a term.
+// for a contract without a term, which has no condition: the reason is
+// empty.
 func ContractRenewalDue(state ContractTermState, ok bool, now time.Time) (reason string, due bool) {
 	if !ok {
-		return billingv1alpha1.ContractRenewalDueReasonNoTerm, false
+		return "", false
 	}
 	switch state.Phase {
 	case billingv1alpha1.ContractTermPhaseStopped:
