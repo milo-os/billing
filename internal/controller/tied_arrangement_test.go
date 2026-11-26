@@ -129,3 +129,18 @@ func TestTiedTermsEndWithTheContract(t *testing.T) {
 		}
 	})
 }
+
+func TestTiedArrangementsAreRequeuedForTheirAccount(t *testing.T) {
+	cl, arr := tiedTermsClient(t, &billingv1alpha1.ContractTerm{Months: 36})
+	untied := arr.DeepCopy()
+	untied.Name, untied.ResourceVersion = "acme-old-terms", ""
+	untied.Spec.EndsWithContract = false
+	if err := cl.Create(context.Background(), untied); err != nil {
+		t.Fatal(err)
+	}
+	r := &BillingArrangementReconciler{client: cl}
+	reqs := r.tiedArrangements(context.Background(), "organization-acme", "acme")
+	if len(reqs) != 1 || reqs[0].Name != "acme-terms" {
+		t.Errorf("requeued %v, want only the tied terms", reqs)
+	}
+}

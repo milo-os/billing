@@ -148,27 +148,36 @@ func (r *BillingArrangementReconciler) SetupWithManager(mgr ctrl.Manager) error 
 		Named("billingarrangement").
 		For(&billingv1alpha1.BillingArrangement{}).
 		// Terms tied to the contract end when it stops, so a change to the
-		// contract's term moves their end.
+		// contract's term moves their end, and so does a change to the
+		// account's invoice day for a contract billed on it.
 		Watches(&billingv1alpha1.BillingEntitlement{},
-			handler.EnqueueRequestsFromMapFunc(r.mapEntitlementToTiedArrangements),
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				be, ok := obj.(*billingv1alpha1.BillingEntitlement)
+				if !ok {
+					return nil
+				}
+				return r.tiedArrangements(ctx, be.Namespace, be.Spec.BillingAccountRef.Name)
+			}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Watches(&billingv1alpha1.BillingAccount{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return r.tiedArrangements(ctx, obj.GetNamespace(), obj.GetName())
+			}),
 			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
 		).
 		Complete(r)
 }
 
-// mapEntitlementToTiedArrangements enqueues the account's arrangements that
-// end with its contract.
-func (r *BillingArrangementReconciler) mapEntitlementToTiedArrangements(ctx context.Context, obj client.Object) []reconcile.Request {
-	be, ok := obj.(*billingv1alpha1.BillingEntitlement)
-	if !ok {
-		return nil
-	}
+// tiedArrangements enqueues the account's arrangements that end with its
+// contract.
+func (r *BillingArrangementReconciler) tiedArrangements(ctx context.Context, namespace, accountName string) []reconcile.Request {
 	var list billingv1alpha1.BillingArrangementList
 	if err := r.client.List(ctx, &list,
-		client.InNamespace(be.Namespace),
-		client.MatchingFields{ArrangementBillingAccountRefField: be.Spec.BillingAccountRef.Name},
+		client.InNamespace(namespace),
+		client.MatchingFields{ArrangementBillingAccountRefField: accountName},
 	); err != nil {
-		log.FromContext(ctx).Error(err, "listing BillingArrangements for BillingEntitlement", "billingEntitlement", be.Name)
+		log.FromContext(ctx).Error(err, "listing BillingArrangements for billing account", "billingAccount", accountName)
 		return nil
 	}
 	var reqs []reconcile.Request

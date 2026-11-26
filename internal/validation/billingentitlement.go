@@ -253,11 +253,18 @@ func validateContractTerm(
 	term := contract.Term
 	termChanged := oldBE == nil || !apiequality.Semantic.DeepEqual(oldTerm, term)
 	offerChanged := oldBE == nil || oldBE.Spec.OfferRef.Name != newBE.Spec.OfferRef.Name
-	if term == nil || (!termChanged && !offerChanged) {
-		return nil
-	}
 
 	var allErrs field.ErrorList
+	if oldBE != nil && oldBE.Spec.Contract != nil && termChanged {
+		oldStop, newStop := ContractStopDate(oldBE.Spec.Contract, invoiceDay), ContractStopDate(contract, invoiceDay)
+		if !oldStop.Equal(newStop) {
+			allErrs = append(allErrs, validateTiedTermsStillFit(ctx, c, newBE, oldStop, newStop, termPath)...)
+		}
+	}
+	if term == nil || (!termChanged && !offerChanged) {
+		return allErrs
+	}
+
 	atEnd := ContractTermAtEnd(term)
 	termEnd := ContractTermEndsAt(contract, invoiceDay)
 	termEnded := !now.Before(termEnd)
@@ -498,4 +505,43 @@ func entitlementInvoiceDay(ctx context.Context, c client.Client, be *billingv1al
 // formatDate formats t as "18 April 2029".
 func formatDate(t time.Time) string {
 	return t.UTC().Format("2 January 2006")
+}
+
+// validateTiedTermsStillFit checks that moving a contract's stop date from
+// oldStop to newStop (the zero time for none) doesn't make the account's
+// payment terms overlap. Terms tied to the contract end at its stop, so
+// staff may have scheduled other terms from then; moving the stop later,
+// or no longer stopping, would leave both in effect at once.
+func validateTiedTermsStillFit(ctx context.Context, c client.Reader, be *billingv1alpha1.BillingEntitlement,
+	oldStop, newStop time.Time, termPath *field.Path) field.ErrorList {
+	var list billingv1alpha1.BillingArrangementList
+	if err := c.List(ctx, &list, client.InNamespace(be.Namespace)); err != nil {
+		return field.ErrorList{field.InternalError(termPath, fmt.Errorf("listing billing arrangements: %w", err))}
+	}
+	var arrs []*billingv1alpha1.BillingArrangement
+	for i := range list.Items {
+		arr := &list.Items[i]
+		if arr.DeletionTimestamp.IsZero() && arr.Spec.BillingAccountRef.Name == be.Spec.BillingAccountRef.Name {
+			arrs = append(arrs, arr)
+		}
+	}
+	overlap := func(a, b *billingv1alpha1.BillingArrangement, stop time.Time) bool {
+		aStart, bStart := ArrangementStart(a, a.CreationTimestamp.Time), ArrangementStart(b, b.CreationTimestamp.Time)
+		aEnd, bEnd := ArrangementEnd(a, stop), ArrangementEnd(b, stop)
+		return !windowEmpty(aStart, aEnd) && !windowEmpty(bStart, bEnd) && windowsOverlap(aStart, aEnd, bStart, bEnd)
+	}
+	for _, tied := range arrs {
+		if !tied.Spec.EndsWithContract {
+			continue
+		}
+		for _, other := range arrs {
+			if other == tied || !overlap(tied, other, newStop) || overlap(tied, other, oldStop) {
+				continue
+			}
+			return field.ErrorList{field.Forbidden(termPath, fmt.Sprintf(
+				"payment terms %q end with the contract, so they'd overlap payment terms %q, which start at %s: withdraw %q, or set an end date on %q first",
+				tied.Name, other.Name, ArrangementStart(other, other.CreationTimestamp.Time).UTC().Format(time.RFC3339), other.Name, tied.Name))}
+		}
+	}
+	return nil
 }

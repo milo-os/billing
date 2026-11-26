@@ -35,7 +35,7 @@ func ValidateBillingArrangementCreate(
 	start := ArrangementStart(arr, now)
 	account, errs := getReferencedBillingAccount(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name)
 	allErrs = append(allErrs, errs...)
-	contractStop, contractErrs := validateArrangementContract(ctx, c, arr, account)
+	contractStop, contractErrs := validateArrangementContract(ctx, c, arr, account, arr.Spec.EndsWithContract, now)
 	allErrs = append(allErrs, contractErrs...)
 	allErrs = append(allErrs, validateBillingArrangementSpec(arr, start, false, now)...)
 	allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, arr, start, contractStop)...)
@@ -45,23 +45,32 @@ func ValidateBillingArrangementCreate(
 }
 
 // validateArrangementContract returns the stop date of the account's
-// contract, which terms tied to it end on, and checks terms are only tied
-// to a contract the account has. account is nil when it couldn't be read,
-// which is reported elsewhere.
+// contract, which terms tied to it end on. When tying is true (the terms are
+// being tied to the contract, on create or update), it checks the account
+// has a contract and it hasn't stopped: tying terms to a stopped contract
+// would end them at once. account is nil when it couldn't be read, which
+// is reported elsewhere.
 func validateArrangementContract(
 	ctx context.Context,
 	c client.Reader,
 	arr *billingv1alpha1.BillingArrangement,
 	account *billingv1alpha1.BillingAccount,
+	tying bool,
+	now time.Time,
 ) (time.Time, field.ErrorList) {
 	fldPath := field.NewPath("spec", "endsWithContract")
 	stop, hasContract, err := accountContract(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name, account)
-	if err != nil {
+	switch {
+	case err != nil:
 		return time.Time{}, field.ErrorList{field.InternalError(fldPath, err)}
-	}
-	if arr.Spec.EndsWithContract && !hasContract {
+	case !tying:
+		return stop, nil
+	case !hasContract:
 		return stop, field.ErrorList{field.Invalid(fldPath, true, fmt.Sprintf(
 			"billing account %q has no contract for the terms to end with", arr.Spec.BillingAccountRef.Name))}
+	case !stop.IsZero() && !now.Before(stop):
+		return stop, field.ErrorList{field.Invalid(fldPath, true, fmt.Sprintf(
+			"billing account %q's contract stopped on %s, so terms can't be tied to it", arr.Spec.BillingAccountRef.Name, formatDate(stop)))}
 	}
 	return stop, nil
 }
@@ -102,16 +111,13 @@ func ValidateBillingArrangementUpdate(
 	start := ArrangementStart(newArr, newArr.CreationTimestamp.Time)
 	allErrs = append(allErrs, validateBillingArrangementSpec(newArr, start, true, now)...)
 
-	var account *billingv1alpha1.BillingAccount
-	if newArr.Spec.EndsWithContract {
-		// Tying terms needs the account's invoice day; it's read only then,
-		// so ending terms on an account being deleted still works.
-		account, _ = getReferencedBillingAccount(ctx, c, newArr.Namespace, newArr.Spec.BillingAccountRef.Name)
-	}
-	contractStop, contractErrs := validateArrangementContract(ctx, c, newArr, account)
-	if newArr.Spec.EndsWithContract && !oldArr.Spec.EndsWithContract {
-		allErrs = append(allErrs, contractErrs...)
-	}
+	// The contract's stop date depends on the account's invoice day. An
+	// account that can't be read (say, being deleted) falls back to the
+	// standard one, so terms can still be ended.
+	account, _ := getReferencedBillingAccount(ctx, c, newArr.Namespace, newArr.Spec.BillingAccountRef.Name)
+	tying := newArr.Spec.EndsWithContract && !oldArr.Spec.EndsWithContract
+	contractStop, contractErrs := validateArrangementContract(ctx, c, newArr, account, tying, now)
+	allErrs = append(allErrs, contractErrs...)
 
 	oldStart := ArrangementStart(oldArr, oldArr.CreationTimestamp.Time)
 	if !windowWithin(start, ArrangementEnd(newArr, contractStop), oldStart, ArrangementEnd(oldArr, contractStop)) {
@@ -167,9 +173,16 @@ func accountContract(ctx context.Context, c client.Reader, namespace, accountNam
 	if err := c.List(ctx, &list, client.InNamespace(namespace)); err != nil {
 		return time.Time{}, false, fmt.Errorf("listing billing entitlements: %w", err)
 	}
+	var accountUID types.UID
+	if account != nil {
+		accountUID = account.UID
+	}
 	for i := range list.Items {
 		be := &list.Items[i]
-		if be.DeletionTimestamp.IsZero() && be.Spec.BillingAccountRef.Name == accountName && be.Spec.Contract != nil {
+		// Skip an entitlement left by a deleted account of the same name,
+		// waiting for garbage collection.
+		if be.DeletionTimestamp.IsZero() && be.Spec.BillingAccountRef.Name == accountName && be.Spec.Contract != nil &&
+			!OwnedByOtherBillingAccount(be, accountUID) {
 			return ContractStopDate(be.Spec.Contract, AccountInvoiceDay(account)), true, nil
 		}
 	}
