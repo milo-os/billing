@@ -202,7 +202,7 @@ func TestTermsEndedOnTheirOwn(t *testing.T) {
 		},
 	} {
 		t.Run(name, func(t *testing.T) {
-			if got := termsEndedOnTheirOwn(tc.arr, tc.phase); got != tc.want {
+			if got := termsEndedOnTheirOwn(tc.arr, tc.arr.Spec.EndsAt, tc.phase); got != tc.want {
 				t.Errorf("termsEndedOnTheirOwn() = %v, want %v", got, tc.want)
 			}
 		})

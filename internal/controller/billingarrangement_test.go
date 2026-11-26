@@ -99,10 +99,10 @@ func TestArrangementPhaseAt(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := validation.ArrangementPhaseAt(&tt.arr, tt.now); got != tt.want {
+			if got := validation.ArrangementPhaseAt(&tt.arr, time.Time{}, tt.now); got != tt.want {
 				t.Errorf("phase = %s, want %s", got, tt.want)
 			}
-			if got := nextArrangementBoundary(&tt.arr, tt.now); !got.Equal(tt.wantBoundary) {
+			if got := nextArrangementBoundary(&tt.arr, time.Time{}, tt.now); !got.Equal(tt.wantBoundary) {
 				t.Errorf("boundary = %s, want %s", got, tt.wantBoundary)
 			}
 		})
@@ -117,7 +117,7 @@ func TestPickArrangements(t *testing.T) {
 		testArrangement("next", dayPtr(20), nil),
 	}
 
-	picked := pickArrangements(arrs, "", day(10))
+	picked := pickArrangements(arrs, "", time.Time{}, day(10))
 	if picked.active == nil || picked.active.Name != "current" {
 		t.Errorf("active = %v, want current", picked.active)
 	}
@@ -128,14 +128,14 @@ func TestPickArrangements(t *testing.T) {
 		t.Errorf("nextScheduled = %v, want next", picked.nextScheduled)
 	}
 
-	picked = pickArrangements(arrs, "", day(25))
+	picked = pickArrangements(arrs, "", time.Time{}, day(25))
 	if picked.active == nil || picked.active.Name != "next" {
 		t.Errorf("active after handover = %v, want next", picked.active)
 	}
 
 	// Overlap slipped past the webhook: the later start wins.
 	overlapping := append(arrs, testArrangement("racer", dayPtr(8), nil))
-	picked = pickArrangements(overlapping, "", day(10))
+	picked = pickArrangements(overlapping, "", time.Time{}, day(10))
 	if picked.active == nil || picked.active.Name != "racer" {
 		t.Errorf("active with overlap = %v, want racer", picked.active)
 	}
@@ -146,11 +146,11 @@ func TestPickArrangements(t *testing.T) {
 	orphan.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "deleted-account"}}
 	owned := testArrangement("owned", dayPtr(1), nil)
 	owned.OwnerReferences = []metav1.OwnerReference{{Kind: "BillingAccount", Name: "acme", UID: "current-account"}}
-	picked = pickArrangements([]billingv1alpha1.BillingArrangement{orphan}, "current-account", day(10))
+	picked = pickArrangements([]billingv1alpha1.BillingArrangement{orphan}, "current-account", time.Time{}, day(10))
 	if picked.active != nil {
 		t.Errorf("active = %v, want orphan ignored", picked.active.Name)
 	}
-	picked = pickArrangements([]billingv1alpha1.BillingArrangement{orphan, owned}, "current-account", day(10))
+	picked = pickArrangements([]billingv1alpha1.BillingArrangement{orphan, owned}, "current-account", time.Time{}, day(10))
 	if picked.active == nil || picked.active.Name != "owned" {
 		t.Errorf("active = %v, want owned", picked.active)
 	}

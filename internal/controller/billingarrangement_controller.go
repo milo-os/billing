@@ -14,8 +14,11 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	"k8s.io/client-go/tools/record"
 	ctrl "sigs.k8s.io/controller-runtime"
+	"sigs.k8s.io/controller-runtime/pkg/builder"
 	"sigs.k8s.io/controller-runtime/pkg/client"
+	"sigs.k8s.io/controller-runtime/pkg/handler"
 	"sigs.k8s.io/controller-runtime/pkg/log"
+	"sigs.k8s.io/controller-runtime/pkg/predicate"
 	"sigs.k8s.io/controller-runtime/pkg/reconcile"
 
 	billingv1alpha1 "go.miloapis.com/billing/api/v1alpha1"
@@ -24,9 +27,10 @@ import (
 
 // BillingArrangementReconciler projects a BillingArrangement's validity
 // window onto its status. Phase is derived purely from spec.startsAt,
-// spec.endsAt and the current time, so the BillingAccount controller
-// computes the same answer with validation.ArrangementPhaseAt instead of
-// waiting on this status.
+// spec.endsAt, the stop date of the account's contract for terms tied to
+// it, and the current time, so the BillingAccount controller computes the
+// same answer with validation.ArrangementPhaseAt instead of waiting on
+// this status.
 type BillingArrangementReconciler struct {
 	client   client.Client
 	recorder record.EventRecorder
@@ -35,6 +39,8 @@ type BillingArrangementReconciler struct {
 
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements,verbs=get;list;watch
 // +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingarrangements/status,verbs=get;update;patch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingaccounts,verbs=get;list;watch
+// +kubebuilder:rbac:groups=billing.miloapis.com,resources=billingentitlements,verbs=get;list;watch
 
 func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconcile.Request) (ctrl.Result, error) {
 	var arr billingv1alpha1.BillingArrangement
@@ -49,10 +55,15 @@ func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconc
 	}
 
 	now := nowFrom(r.now)
-	phase := validation.ArrangementPhaseAt(&arr, now)
+	contractStop, err := r.contractStop(ctx, &arr)
+	if err != nil {
+		return ctrl.Result{}, err
+	}
+	phase := validation.ArrangementPhaseAt(&arr, contractStop, now)
+	end := validation.ArrangementEnd(&arr, contractStop)
 
 	base := arr.DeepCopy()
-	endedOnTheirOwn := termsEndedOnTheirOwn(base, phase)
+	endedOnTheirOwn := termsEndedOnTheirOwn(base, end, phase)
 	arr.Status.Phase = phase
 	arr.Status.ObservedGeneration = arr.Generation
 
@@ -70,7 +81,10 @@ func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconc
 		cond.Message = fmt.Sprintf("Arrangement takes effect at %s.", arrangementStart(&arr).UTC().Format(time.RFC3339))
 	default:
 		cond.Status = metav1.ConditionFalse
-		cond.Message = fmt.Sprintf("Arrangement ended at %s.", arr.Spec.EndsAt.UTC().Format(time.RFC3339))
+		cond.Message = fmt.Sprintf("Arrangement ended at %s.", end.UTC().Format(time.RFC3339))
+		if arr.Spec.EndsWithContract && (arr.Spec.EndsAt == nil || end.Before(arr.Spec.EndsAt)) {
+			cond.Message = fmt.Sprintf("Arrangement ended with the contract at %s.", end.UTC().Format(time.RFC3339))
+		}
 	}
 	apimeta.SetStatusCondition(&arr.Status.Conditions, cond)
 
@@ -80,22 +94,40 @@ func (r *BillingArrangementReconciler) Reconcile(ctx context.Context, req reconc
 	if endedOnTheirOwn {
 		recordTimelineEvent(r.recorder, &arr, map[string]string{
 			billingv1alpha1.EventAnnotationBillingAccount: arr.Spec.BillingAccountRef.Name,
-			billingv1alpha1.EventAnnotationEndsAt:         billingv1alpha1.EventTime(arr.Spec.EndsAt.Time),
+			billingv1alpha1.EventAnnotationEndsAt:         billingv1alpha1.EventTime(end.Time),
 		}, corev1.EventTypeNormal, billingv1alpha1.EventReasonPaymentTermsEnded, cond.Message)
 	}
 
 	log.FromContext(ctx).V(1).Info("reconciled billing arrangement", "phase", phase)
-	return requeueAt(nextArrangementBoundary(&arr, now), now), nil
+	return requeueAt(nextArrangementBoundary(&arr, contractStop, now), now), nil
+}
+
+// contractStop returns the stop date of the contract on the account the
+// arrangement is for, when the terms are tied to it, or the zero time.
+func (r *BillingArrangementReconciler) contractStop(ctx context.Context, arr *billingv1alpha1.BillingArrangement) (time.Time, error) {
+	if !arr.Spec.EndsWithContract {
+		return time.Time{}, nil
+	}
+	var account billingv1alpha1.BillingAccount
+	accountRef := &account
+	if err := r.client.Get(ctx, types.NamespacedName{Namespace: arr.Namespace, Name: arr.Spec.BillingAccountRef.Name}, &account); err != nil {
+		if !apierrors.IsNotFound(err) {
+			return time.Time{}, fmt.Errorf("getting billing account: %w", err)
+		}
+		accountRef = nil
+	}
+	return validation.AccountContractStop(ctx, r.client, arr.Namespace, arr.Spec.BillingAccountRef.Name, accountRef)
 }
 
 // termsEndedOnTheirOwn reports whether stored arrangement arr, last seen
-// Active, has now reached its endsAt without anyone editing it. A person
-// ending terms changes the spec, so the generation is ahead of the one the
-// status last observed; the audit log records that instead.
-func termsEndedOnTheirOwn(arr *billingv1alpha1.BillingArrangement, phase billingv1alpha1.BillingArrangementPhase) bool {
+// Active, has now reached its end without anyone editing it: its endsAt,
+// or the contract's stop for terms tied to it. A person ending terms
+// changes the spec, so the generation is ahead of the one the status last
+// observed; the audit log records that instead.
+func termsEndedOnTheirOwn(arr *billingv1alpha1.BillingArrangement, end *metav1.Time, phase billingv1alpha1.BillingArrangementPhase) bool {
 	return arr.Status.Phase == billingv1alpha1.BillingArrangementPhaseActive &&
 		phase == billingv1alpha1.BillingArrangementPhaseEnded &&
-		arr.Spec.EndsAt != nil &&
+		end != nil &&
 		arr.Status.ObservedGeneration == arr.Generation
 }
 
@@ -115,7 +147,46 @@ func (r *BillingArrangementReconciler) SetupWithManager(mgr ctrl.Manager) error 
 	return ctrl.NewControllerManagedBy(mgr).
 		Named("billingarrangement").
 		For(&billingv1alpha1.BillingArrangement{}).
+		// Terms tied to the contract end when it stops, so a change to the
+		// contract's term moves their end, and so does a change to the
+		// account's invoice day for a contract billed on it.
+		Watches(&billingv1alpha1.BillingEntitlement{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				be, ok := obj.(*billingv1alpha1.BillingEntitlement)
+				if !ok {
+					return nil
+				}
+				return r.tiedArrangements(ctx, be.Namespace, be.Spec.BillingAccountRef.Name)
+			}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
+		Watches(&billingv1alpha1.BillingAccount{},
+			handler.EnqueueRequestsFromMapFunc(func(ctx context.Context, obj client.Object) []reconcile.Request {
+				return r.tiedArrangements(ctx, obj.GetNamespace(), obj.GetName())
+			}),
+			builder.WithPredicates(predicate.GenerationChangedPredicate{}),
+		).
 		Complete(r)
+}
+
+// tiedArrangements enqueues the account's arrangements that end with its
+// contract.
+func (r *BillingArrangementReconciler) tiedArrangements(ctx context.Context, namespace, accountName string) []reconcile.Request {
+	var list billingv1alpha1.BillingArrangementList
+	if err := r.client.List(ctx, &list,
+		client.InNamespace(namespace),
+		client.MatchingFields{ArrangementBillingAccountRefField: accountName},
+	); err != nil {
+		log.FromContext(ctx).Error(err, "listing BillingArrangements for billing account", "billingAccount", accountName)
+		return nil
+	}
+	var reqs []reconcile.Request
+	for i := range list.Items {
+		if list.Items[i].Spec.EndsWithContract {
+			reqs = append(reqs, reconcile.Request{NamespacedName: client.ObjectKeyFromObject(&list.Items[i])})
+		}
+	}
+	return reqs
 }
 
 // arrangementStart is when a stored arrangement takes effect.
@@ -126,17 +197,18 @@ func arrangementStart(arr *billingv1alpha1.BillingArrangement) time.Time {
 // nextArrangementBoundary returns the next time after now that the
 // arrangement's phase can change (its start or its end), or the zero time
 // when it never changes again.
-func nextArrangementBoundary(arr *billingv1alpha1.BillingArrangement, now time.Time) time.Time {
+func nextArrangementBoundary(arr *billingv1alpha1.BillingArrangement, contractStop, now time.Time) time.Time {
 	var next time.Time
 	start := arrangementStart(arr)
+	end := validation.ArrangementEnd(arr, contractStop)
 	var candidates []time.Time
-	// Terms withdrawn before they started (endsAt at or before startsAt)
+	// Terms withdrawn before they started (an end at or before startsAt)
 	// never become active, so their start isn't a boundary.
-	if arr.Spec.EndsAt == nil || start.Before(arr.Spec.EndsAt.Time) {
+	if end == nil || start.Before(end.Time) {
 		candidates = append(candidates, start)
 	}
-	if arr.Spec.EndsAt != nil {
-		candidates = append(candidates, arr.Spec.EndsAt.Time)
+	if end != nil {
+		candidates = append(candidates, end.Time)
 	}
 	for _, t := range candidates {
 		if t.After(now) && (next.IsZero() || t.Before(next)) {
@@ -176,15 +248,17 @@ type accountArrangements struct {
 // belonged to a deleted account with the same name and are waiting for
 // garbage collection. accountUID may be empty (in unit tests), which
 // skips nothing.
-func pickArrangements(arrs []billingv1alpha1.BillingArrangement, accountUID types.UID, now time.Time) accountArrangements {
+func pickArrangements(arrs []billingv1alpha1.BillingArrangement, accountUID types.UID, contractStop, now time.Time) accountArrangements {
 	var picked accountArrangements
-	endsAt := func(a *billingv1alpha1.BillingArrangement) time.Time { return a.Spec.EndsAt.Time }
+	endsAt := func(a *billingv1alpha1.BillingArrangement) time.Time {
+		return validation.ArrangementEnd(a, contractStop).Time
+	}
 	for i := range arrs {
 		arr := &arrs[i]
 		if !arr.DeletionTimestamp.IsZero() || validation.OwnedByOtherBillingAccount(arr, accountUID) {
 			continue
 		}
-		switch validation.ArrangementPhaseAt(arr, now) {
+		switch validation.ArrangementPhaseAt(arr, contractStop, now) {
 		case billingv1alpha1.BillingArrangementPhaseActive:
 			if picked.active == nil || laterArrangement(arr, picked.active, arrangementStart) {
 				picked.active = arr

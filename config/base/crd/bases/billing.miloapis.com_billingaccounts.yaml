@@ -646,10 +646,17 @@ spec:
                   active.
                 properties:
                   endsAt:
-                    description: EndsAt is when the arrangement ends, if it has a
-                      fixed end.
+                    description: |-
+                      EndsAt is when the arrangement ends, if it has a fixed end. For
+                      terms that end with the contract, it's the contract's stop date once
+                      the contract is set to stop, and empty while it will carry on.
                     format: date-time
                     type: string
+                  endsWithContract:
+                    description: |-
+                      EndsWithContract is true when the terms last as long as the
+                      account's contract and end when it stops.
+                    type: boolean
                   invoice:
                     description: Invoice carries the invoice terms when type is Invoice.
                     properties:

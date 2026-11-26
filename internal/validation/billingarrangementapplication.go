@@ -278,19 +278,25 @@ func validateAccountCanApply(
 		}
 	}
 
+	// Terms tied to the contract have no end until the contract is set to
+	// stop, so they can't be renewed by application before then.
+	contractStop, err := AccountContractStop(ctx, c, app.Namespace, account.Name, account)
+	if err != nil {
+		return field.ErrorList{field.InternalError(fldPath, err)}
+	}
 	for i := range arrs {
 		arr := &arrs[i]
 		if !arr.DeletionTimestamp.IsZero() || arr.Spec.BillingAccountRef.Name != account.Name ||
 			OwnedByOtherBillingAccount(arr, account.UID) {
 			continue
 		}
-		switch ArrangementPhaseAt(arr, now) {
+		switch ArrangementPhaseAt(arr, contractStop, now) {
 		case billingv1alpha1.BillingArrangementPhaseScheduled:
 			return field.ErrorList{field.Forbidden(fldPath,
 				fmt.Sprintf("billing account %q already has payment terms starting at %s",
 					account.Name, ArrangementStart(arr, arr.CreationTimestamp.Time).UTC().Format(time.RFC3339)))}
 		case billingv1alpha1.BillingArrangementPhaseActive:
-			if arr.Spec.EndsAt == nil {
+			if ArrangementEnd(arr, contractStop) == nil {
 				return field.ErrorList{field.Forbidden(fldPath,
 					fmt.Sprintf("billing account %q already has payment terms with no end date", account.Name))}
 			}

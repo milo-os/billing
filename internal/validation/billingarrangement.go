@@ -33,12 +33,46 @@ func ValidateBillingArrangementCreate(
 	var allErrs field.ErrorList
 
 	start := ArrangementStart(arr, now)
-	allErrs = append(allErrs, validateArrangementBillingAccountRef(ctx, c, arr)...)
+	account, errs := getReferencedBillingAccount(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name)
+	allErrs = append(allErrs, errs...)
+	contractStop, contractErrs := validateArrangementContract(ctx, c, arr, account, arr.Spec.EndsWithContract, now)
+	allErrs = append(allErrs, contractErrs...)
 	allErrs = append(allErrs, validateBillingArrangementSpec(arr, start, false, now)...)
-	allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, arr, start)...)
+	allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, arr, start, contractStop)...)
 	allErrs = append(allErrs, validateArrangementApplicationRef(ctx, c, arr)...)
 
 	return allErrs
+}
+
+// validateArrangementContract returns the stop date of the account's
+// contract, which terms tied to it end on. When tying is true (the terms are
+// being tied to the contract, on create or update), it checks the account
+// has a contract and it hasn't stopped: tying terms to a stopped contract
+// would end them at once. account is nil when it couldn't be read, which
+// is reported elsewhere.
+func validateArrangementContract(
+	ctx context.Context,
+	c client.Reader,
+	arr *billingv1alpha1.BillingArrangement,
+	account *billingv1alpha1.BillingAccount,
+	tying bool,
+	now time.Time,
+) (time.Time, field.ErrorList) {
+	fldPath := field.NewPath("spec", "endsWithContract")
+	stop, hasContract, err := accountContract(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name, account)
+	switch {
+	case err != nil:
+		return time.Time{}, field.ErrorList{field.InternalError(fldPath, err)}
+	case !tying:
+		return stop, nil
+	case !hasContract:
+		return stop, field.ErrorList{field.Invalid(fldPath, true, fmt.Sprintf(
+			"billing account %q has no contract for the terms to end with", arr.Spec.BillingAccountRef.Name))}
+	case !stop.IsZero() && !now.Before(stop):
+		return stop, field.ErrorList{field.Invalid(fldPath, true, fmt.Sprintf(
+			"billing account %q's contract stopped on %s, so terms can't be tied to it", arr.Spec.BillingAccountRef.Name, formatDate(stop)))}
+	}
+	return stop, nil
 }
 
 // ValidateBillingArrangementUpdate validates a BillingArrangement on
@@ -77,9 +111,17 @@ func ValidateBillingArrangementUpdate(
 	start := ArrangementStart(newArr, newArr.CreationTimestamp.Time)
 	allErrs = append(allErrs, validateBillingArrangementSpec(newArr, start, true, now)...)
 
+	// The contract's stop date depends on the account's invoice day. An
+	// account that can't be read (say, being deleted) falls back to the
+	// standard one, so terms can still be ended.
+	account, _ := getReferencedBillingAccount(ctx, c, newArr.Namespace, newArr.Spec.BillingAccountRef.Name)
+	tying := newArr.Spec.EndsWithContract && !oldArr.Spec.EndsWithContract
+	contractStop, contractErrs := validateArrangementContract(ctx, c, newArr, account, tying, now)
+	allErrs = append(allErrs, contractErrs...)
+
 	oldStart := ArrangementStart(oldArr, oldArr.CreationTimestamp.Time)
-	if !windowWithin(start, newArr.Spec.EndsAt, oldStart, oldArr.Spec.EndsAt) {
-		allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, newArr, start)...)
+	if !windowWithin(start, ArrangementEnd(newArr, contractStop), oldStart, ArrangementEnd(oldArr, contractStop)) {
+		allErrs = append(allErrs, validateNoOverlappingArrangement(ctx, c, newArr, start, contractStop)...)
 	}
 
 	return allErrs
@@ -94,13 +136,67 @@ func ArrangementStart(arr *billingv1alpha1.BillingArrangement, fallback time.Tim
 	return fallback
 }
 
+// ArrangementEnd returns when an arrangement stops applying, or nil when it
+// has no end: spec.endsAt, or, for terms tied to the contract
+// (spec.endsWithContract), the contract's stop date when that comes first.
+// contractStop is the stop date of the account's contract, the zero time
+// while it isn't set to stop (see AccountContractStop).
+func ArrangementEnd(arr *billingv1alpha1.BillingArrangement, contractStop time.Time) *metav1.Time {
+	end := arr.Spec.EndsAt
+	if arr.Spec.EndsWithContract && !contractStop.IsZero() && (end == nil || contractStop.Before(end.Time)) {
+		stop := metav1.NewTime(contractStop)
+		return &stop
+	}
+	return end
+}
+
+// AccountContractStop returns the stop date of the contract on the
+// account's BillingEntitlement, or the zero time when it has none or it
+// isn't set to stop. Terms tied to the contract end then. account may be
+// nil, for the standard invoice day.
+func AccountContractStop(ctx context.Context, c client.Reader, namespace, accountName string,
+	account *billingv1alpha1.BillingAccount) (time.Time, error) {
+	stop, _, err := accountContract(ctx, c, namespace, accountName, account)
+	return stop, err
+}
+
+// accountContract returns the stop date of the contract on the account's
+// BillingEntitlement (see AccountContractStop), and whether it has a
+// contract at all.
+//
+// It lists the namespace rather than using the billingAccountRef field
+// index, so it works with an uncached reader; entitlements per
+// organization are few.
+func accountContract(ctx context.Context, c client.Reader, namespace, accountName string,
+	account *billingv1alpha1.BillingAccount) (stop time.Time, hasContract bool, err error) {
+	var list billingv1alpha1.BillingEntitlementList
+	if err := c.List(ctx, &list, client.InNamespace(namespace)); err != nil {
+		return time.Time{}, false, fmt.Errorf("listing billing entitlements: %w", err)
+	}
+	var accountUID types.UID
+	if account != nil {
+		accountUID = account.UID
+	}
+	for i := range list.Items {
+		be := &list.Items[i]
+		// Skip an entitlement left by a deleted account of the same name,
+		// waiting for garbage collection.
+		if be.DeletionTimestamp.IsZero() && be.Spec.BillingAccountRef.Name == accountName && be.Spec.Contract != nil &&
+			!OwnedByOtherBillingAccount(be, accountUID) {
+			return ContractStopDate(be.Spec.Contract, AccountInvoiceDay(account)), true, nil
+		}
+	}
+	return time.Time{}, false, nil
+}
+
 // ArrangementPhaseAt computes an arrangement's phase at the given time.
 // The window is half-open: active from startsAt up to, not including,
-// endsAt. An endsAt at or before startsAt (terms withdrawn before they
-// started) is Ended from endsAt onwards.
-func ArrangementPhaseAt(arr *billingv1alpha1.BillingArrangement, now time.Time) billingv1alpha1.BillingArrangementPhase {
+// its end (see ArrangementEnd). An end at or before startsAt (terms
+// withdrawn before they started) is Ended from then on.
+func ArrangementPhaseAt(arr *billingv1alpha1.BillingArrangement, contractStop, now time.Time) billingv1alpha1.BillingArrangementPhase {
+	end := ArrangementEnd(arr, contractStop)
 	switch {
-	case arr.Spec.EndsAt != nil && !now.Before(arr.Spec.EndsAt.Time):
+	case end != nil && !now.Before(end.Time):
 		return billingv1alpha1.BillingArrangementPhaseEnded
 	case now.Before(ArrangementStart(arr, arr.CreationTimestamp.Time)):
 		return billingv1alpha1.BillingArrangementPhaseScheduled
@@ -141,15 +237,6 @@ func validateBillingArrangementSpec(arr *billingv1alpha1.BillingArrangement, sta
 	}
 
 	return allErrs
-}
-
-func validateArrangementBillingAccountRef(
-	ctx context.Context,
-	c client.Reader,
-	arr *billingv1alpha1.BillingArrangement,
-) field.ErrorList {
-	_, errs := getReferencedBillingAccount(ctx, c, arr.Namespace, arr.Spec.BillingAccountRef.Name)
-	return errs
 }
 
 // getReferencedBillingAccount reads the BillingAccount a resource's
@@ -199,16 +286,21 @@ func validatePlainEmail(email string, fldPath *field.Path) field.ErrorList {
 // This lists the namespace rather than using the billingAccountRef
 // field index, because the index lives in the cache and this must read
 // through to the API server. Arrangements per organization are few.
+//
+// Terms tied to the contract run until it stops, so until it's set to stop
+// they have no end, and nothing can be scheduled after them.
 func validateNoOverlappingArrangement(
 	ctx context.Context,
 	c client.Reader,
 	arr *billingv1alpha1.BillingArrangement,
 	start time.Time,
+	contractStop time.Time,
 ) field.ErrorList {
 	var allErrs field.ErrorList
 	fldPath := field.NewPath("spec", "startsAt")
 
-	if arr.Spec.BillingAccountRef.Name == "" || windowEmpty(start, arr.Spec.EndsAt) {
+	end := ArrangementEnd(arr, contractStop)
+	if arr.Spec.BillingAccountRef.Name == "" || windowEmpty(start, end) {
 		return allErrs
 	}
 
@@ -229,10 +321,11 @@ func validateNoOverlappingArrangement(
 			continue
 		}
 		otherStart := ArrangementStart(other, other.CreationTimestamp.Time)
-		if windowEmpty(otherStart, other.Spec.EndsAt) {
+		otherEnd := ArrangementEnd(other, contractStop)
+		if windowEmpty(otherStart, otherEnd) {
 			continue
 		}
-		if windowsOverlap(start, arr.Spec.EndsAt, otherStart, other.Spec.EndsAt) {
+		if windowsOverlap(start, end, otherStart, otherEnd) {
 			allErrs = append(allErrs, field.Forbidden(fldPath,
 				fmt.Sprintf("overlaps arrangement %q for billing account %q; end it before this one starts",
 					other.Name, arr.Spec.BillingAccountRef.Name)))

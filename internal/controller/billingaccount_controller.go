@@ -741,9 +741,14 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 		return time.Time{}, fmt.Errorf("listing billing arrangements: %w", err)
 	}
 
+	contractStop, err := validation.AccountContractStop(ctx, r.client, account.Namespace, account.Name, account)
+	if err != nil {
+		return time.Time{}, err
+	}
+
 	var next time.Time
 	for i := range arrList.Items {
-		b := nextArrangementBoundary(&arrList.Items[i], now)
+		b := nextArrangementBoundary(&arrList.Items[i], contractStop, now)
 		if !b.IsZero() && (next.IsZero() || b.Before(next)) {
 			next = b
 		}
@@ -754,17 +759,18 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 		return time.Time{}, err
 	}
 
-	picked := pickArrangements(arrList.Items, account.UID, now)
+	picked := pickArrangements(arrList.Items, account.UID, contractStop, now)
 	active := picked.active
 	account.Status.PaymentArrangement = nil
 	if active != nil {
 		start := metav1.NewTime(arrangementStart(active))
 		account.Status.PaymentArrangement = &billingv1alpha1.BillingAccountPaymentArrangement{
-			Name:     active.Name,
-			Type:     active.Spec.Type,
-			StartsAt: &start,
-			EndsAt:   active.Spec.EndsAt.DeepCopy(),
-			Invoice:  active.Spec.Invoice.DeepCopy(),
+			Name:             active.Name,
+			Type:             active.Spec.Type,
+			StartsAt:         &start,
+			EndsAt:           validation.ArrangementEnd(active, contractStop).DeepCopy(),
+			EndsWithContract: active.Spec.EndsWithContract,
+			Invoice:          active.Spec.Invoice.DeepCopy(),
 		}
 	}
 
@@ -809,7 +815,7 @@ func (r *BillingAccountReconciler) reconcilePaymentReadyCondition(
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "ArrangementEnded"
 		cond.Message = fmt.Sprintf("Payment terms under arrangement %q ended at %s. Add a payment method to continue.",
-			picked.lastEnded.Name, picked.lastEnded.Spec.EndsAt.UTC().Format(time.RFC3339))
+			picked.lastEnded.Name, validation.ArrangementEnd(picked.lastEnded, contractStop).UTC().Format(time.RFC3339))
 	default:
 		cond.Status = metav1.ConditionFalse
 		cond.Reason = "NotConfigured"

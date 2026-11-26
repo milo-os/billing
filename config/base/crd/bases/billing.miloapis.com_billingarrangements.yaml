@@ -31,6 +31,10 @@ spec:
     - jsonPath: .spec.endsAt
       name: Ends
       type: date
+    - jsonPath: .spec.endsWithContract
+      name: With Contract
+      priority: 1
+      type: boolean
     - jsonPath: .metadata.creationTimestamp
       name: Age
       type: date
@@ -106,6 +110,14 @@ spec:
                   current time, which keeps the record for history.
                 format: date-time
                 type: string
+              endsWithContract:
+                description: |-
+                  EndsWithContract ties the terms to the contract on the account's
+                  BillingEntitlement: they stay in effect while the contract runs, in
+                  its term, renewed or month to month, and end when it stops. With
+                  endsAt too, they end at whichever comes first. Only allowed when the
+                  account has a contract. It can be set or cleared at any time.
+                type: boolean
               invoice:
                 description: Invoice carries the invoice terms. Required when type
                   is Invoice.

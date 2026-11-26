@@ -167,6 +167,15 @@ func TestValidateBillingArrangementApplicationCreate(t *testing.T) {
 			wantErr: `can only be owned by billing account "acme"`,
 		},
 		{
+			name:     "terms tied to a contract that carries on",
+			existing: []client.Object{contractFor(false), tiedArrangement("terms", arrangementTime(1), nil)},
+			wantErr:  `billing account "acme" already has payment terms with no end date`,
+		},
+		{
+			name:     "terms tied to a contract set to stop can be renewed",
+			existing: []client.Object{contractFor(true), tiedArrangement("terms", arrangementTime(1), nil)},
+		},
+		{
 			name:     "open-ended terms are already active",
 			existing: []client.Object{invoiceArrangement("terms", arrangementTime(1), nil)},
 			wantErr:  `billing account "acme" already has payment terms with no end date`,
