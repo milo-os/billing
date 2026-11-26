@@ -73,6 +73,31 @@ const BillingAccountConditionInvoicingReady = "InvoicingReady"
 // late, and none reaches Stripe without its product, quantity and note.
 const BillingAccountConditionInvoiceWriterReady = "InvoiceWriterReady"
 
+// BillingAccountConditionContractRenewalDue is set by the billing service
+// controller and is True when the account's contract needs a decision about
+// what happens next: its term ends within ContractRenewalNotice, or it has
+// ended and the contract carries on month to month. Only an account whose
+// contract has a term has it.
+//
+// Reasons:
+//   - TermEndingSoon — the current term ends within the notice (True)
+//   - MonthToMonth — the term has ended and the contract carries on month to month (True)
+//   - InTerm — the current term ends after the notice (False)
+//   - Stopped — the contract has stopped (False)
+//   - StopBlocked — the contract is set to stop, but the account can't move
+//     onto term.offerAfterRef: from the notice before the stop, and after it
+//     until billing has moved the account (True)
+const BillingAccountConditionContractRenewalDue = "ContractRenewalDue"
+
+// Reasons for the ContractRenewalDue condition.
+const (
+	ContractRenewalDueReasonTermEndingSoon = "TermEndingSoon"
+	ContractRenewalDueReasonMonthToMonth   = "MonthToMonth"
+	ContractRenewalDueReasonInTerm         = "InTerm"
+	ContractRenewalDueReasonStopped        = "Stopped"
+	ContractRenewalDueReasonStopBlocked    = "StopBlocked"
+)
+
 // BillingAccountSpec defines the desired state of a BillingAccount.
 type BillingAccountSpec struct {
 	// CurrencyCode is the ISO 4217 currency code for this billing account.
@@ -489,6 +514,84 @@ type BillingAccountContract struct {
 	//
 	// +kubebuilder:validation:Optional
 	UsageBilled bool `json:"usageBilled"`
+
+	// Term is how long the contract runs, what happens when it ends, and
+	// where it is now. Empty for a contract without a term.
+	//
+	// +kubebuilder:validation:Optional
+	Term *BillingAccountContractTerm `json:"term,omitempty"`
+}
+
+// ContractTermPhase is where a contract is in its term.
+//
+// +kubebuilder:validation:Enum=InTerm;MonthToMonth;Stopped
+type ContractTermPhase string
+
+const (
+	// ContractTermPhaseInTerm is a contract in its first term or a
+	// renewal, including before it starts.
+	ContractTermPhaseInTerm ContractTermPhase = "InTerm"
+	// ContractTermPhaseMonthToMonth is a contract whose term has ended and
+	// that carries on month to month.
+	ContractTermPhaseMonthToMonth ContractTermPhase = "MonthToMonth"
+	// ContractTermPhaseStopped is a contract that has stopped.
+	ContractTermPhaseStopped ContractTermPhase = "Stopped"
+)
+
+// BillingAccountContractTerm is a contract's term, as agreed and as it
+// stands now.
+type BillingAccountContractTerm struct {
+	// Months is the first term's length.
+	//
+	// +kubebuilder:validation:Required
+	Months int32 `json:"months"`
+
+	// AtEnd is what happens when the term ends: MonthToMonth, Renew or
+	// Stop.
+	//
+	// +kubebuilder:validation:Required
+	AtEnd ContractTermAtEnd `json:"atEnd"`
+
+	// RenewMonths is the length of each renewal, when atEnd is Renew.
+	//
+	// +kubebuilder:validation:Optional
+	RenewMonths int32 `json:"renewMonths,omitempty"`
+
+	// Phase is InTerm, MonthToMonth or Stopped.
+	//
+	// +kubebuilder:validation:Required
+	Phase ContractTermPhase `json:"phase"`
+
+	// CurrentTermStartsAt is when the current term started: the contract's
+	// start, or the start of its latest renewal. Month to month or
+	// stopped, it's when the last term started.
+	//
+	// +kubebuilder:validation:Required
+	CurrentTermStartsAt metav1.Time `json:"currentTermStartsAt"`
+
+	// EndsAt is when the current term ends. Month to month, it's when the
+	// last term ended. Stopped, it's when the contract stopped.
+	//
+	// +kubebuilder:validation:Required
+	EndsAt metav1.Time `json:"endsAt"`
+
+	// Renewals counts the renewals so far, when atEnd is Renew.
+	//
+	// +kubebuilder:validation:Optional
+	Renewals int32 `json:"renewals,omitempty"`
+
+	// RenewalDueAt is when the ContractRenewalDue condition turns on for
+	// the current term: ContractRenewalNotice before endsAt. Empty once the
+	// contract has stopped.
+	//
+	// +kubebuilder:validation:Optional
+	RenewalDueAt *metav1.Time `json:"renewalDueAt,omitempty"`
+
+	// StopsAt is when a contract set to stop stops: the term's end, or the
+	// contract's stopsAt once it's month to month.
+	//
+	// +kubebuilder:validation:Optional
+	StopsAt *metav1.Time `json:"stopsAt,omitempty"`
 }
 
 // BillingAccountContractFee is one of a contract's fixed fees.

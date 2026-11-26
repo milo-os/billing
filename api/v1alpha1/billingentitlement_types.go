@@ -10,6 +10,11 @@ import (
 // Offer exists and is in the GA launch stage.
 const BillingEntitlementConditionOfferAssigned = "OfferAssigned"
 
+// BillingEntitlementContractStoppedAtAnnotation records when billing moved
+// an account onto its contract's term.offerAfterRef because the contract
+// stopped. Billing does it once, so staff may change offerRef after.
+const BillingEntitlementContractStoppedAtAnnotation = "billing.miloapis.com/contract-stopped-at"
+
 // BillingEntitlementSpec defines the desired state of a BillingEntitlement.
 //
 // Exactly one active BillingEntitlement exists per billing account. It
@@ -98,6 +103,83 @@ type BillingContract struct {
 	//
 	// +kubebuilder:validation:Optional
 	BillingDay ContractBillingDay `json:"billingDay,omitempty"`
+
+	// Term is how long the contract runs and what happens when it ends.
+	// Without one, the contract runs until it's changed.
+	//
+	// +kubebuilder:validation:Optional
+	Term *ContractTerm `json:"term,omitempty"`
+}
+
+// ContractTermAtEnd is what happens when a contract's term ends.
+//
+// +kubebuilder:validation:Enum=MonthToMonth;Renew;Stop
+type ContractTermAtEnd string
+
+const (
+	// ContractTermAtEndMonthToMonth carries the contract on at the same
+	// prices, one month at a time, until someone decides otherwise.
+	ContractTermAtEndMonthToMonth ContractTermAtEnd = "MonthToMonth"
+	// ContractTermAtEndRenew starts another term at the same prices, of
+	// renewMonths, and again at the end of that one.
+	ContractTermAtEndRenew ContractTermAtEnd = "Renew"
+	// ContractTermAtEndStop stops the contract's charges and moves the
+	// account onto offerAfterRef.
+	ContractTermAtEndStop ContractTermAtEnd = "Stop"
+)
+
+// ContractTerm is how long a contract runs and what happens when it ends.
+//
+// +kubebuilder:validation:XValidation:rule="!has(self.renewMonths) || (has(self.atEnd) && self.atEnd == 'Renew')",message="term.renewMonths is only allowed when atEnd is Renew"
+// +kubebuilder:validation:XValidation:rule="has(self.offerAfterRef) == (has(self.atEnd) && self.atEnd == 'Stop')",message="term.offerAfterRef is required when atEnd is Stop, and not allowed otherwise"
+// +kubebuilder:validation:XValidation:rule="!has(self.stopsAt) || (has(self.atEnd) && self.atEnd == 'Stop')",message="term.stopsAt is only allowed when atEnd is Stop"
+type ContractTerm struct {
+	// Months is the term's length. It's counted the way a fee's periods
+	// are, so the term ends on a billing date: from startsAt, or, for a
+	// contract billed on the invoice day, from its first billing date, so
+	// the prorated first period isn't counted. It must be a whole number
+	// of every recurring fee's interval in the Offer.
+	//
+	// +kubebuilder:validation:Required
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=120
+	Months int32 `json:"months"`
+
+	// AtEnd is what happens when the term ends. MonthToMonth, the default,
+	// carries the contract on at the same prices until someone decides
+	// otherwise. Renew starts another term of renewMonths. Stop stops the
+	// contract's charges and moves the account onto offerAfterRef.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:default=MonthToMonth
+	AtEnd ContractTermAtEnd `json:"atEnd,omitempty"`
+
+	// RenewMonths is the length of each renewal, when atEnd is Renew.
+	// Defaults to months. Renewals are counted from the contract's start,
+	// so they end on its billing day.
+	//
+	// +kubebuilder:validation:Optional
+	// +kubebuilder:validation:Minimum=1
+	// +kubebuilder:validation:Maximum=120
+	RenewMonths int32 `json:"renewMonths,omitempty"`
+
+	// OfferAfterRef is the Offer the account moves onto when the contract
+	// stops. Required when atEnd is Stop, and not allowed otherwise. It
+	// must be a published Offer with no one-time fees. At the stop, billing
+	// sets offerRef to it.
+	//
+	// +kubebuilder:validation:Optional
+	OfferAfterRef *OfferReference `json:"offerAfterRef,omitempty"`
+
+	// StopsAt is when a contract that's already running month to month
+	// stops, at midnight UTC. Only allowed once the term has ended, and
+	// then required when atEnd is Stop: a contract in its term stops at
+	// the term's end. It must be a billing date on or after the contract's
+	// next one, and end the period of every quarterly and annual fee billed
+	// in advance.
+	//
+	// +kubebuilder:validation:Optional
+	StopsAt *metav1.Time `json:"stopsAt,omitempty"`
 }
 
 // BillingEntitlementStatus defines the observed state of a BillingEntitlement.

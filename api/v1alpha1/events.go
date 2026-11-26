@@ -143,6 +143,35 @@ const (
 	// recorded from the audit log instead. Annotations: billing account,
 	// ends at.
 	EventReasonPaymentTermsEnded = "PaymentTermsEnded"
+
+	// EventReasonContractRenewalDue is recorded on a BillingAccount when
+	// its contract's term comes within the renewal notice of its end, and
+	// again after each renewal that does. It's for staff, so it carries no
+	// organization scope. Annotations: ends at, at end, months (the
+	// renewal's length, for a contract that renews).
+	EventReasonContractRenewalDue = "ContractRenewalDue"
+
+	// EventReasonContractTermEnded is recorded on a BillingAccount when its
+	// contract's term ends and the contract carries on month to month.
+	// Annotations: ends at.
+	EventReasonContractTermEnded = "ContractTermEnded"
+
+	// EventReasonContractRenewed is recorded on a BillingAccount when its
+	// contract renews for another term. Annotations: months (the renewal's
+	// length), ends at (the new term's end).
+	EventReasonContractRenewed = "ContractRenewed"
+
+	// EventReasonContractStopped is recorded on a BillingAccount when its
+	// contract stops. Annotations: ends at (when it stopped).
+	EventReasonContractStopped = "ContractStopped"
+
+	// EventReasonContractStopBlocked is a warning recorded on a
+	// BillingAccount when billing can't move it onto its contract's
+	// term.offerAfterRef at the stop, because the Offer was retired or
+	// changed since. Billing tries again hourly; until it succeeds, the
+	// account is billed at the contract's prices. It's for staff, so it
+	// carries no organization scope. Annotations: ends at (the stop), offer.
+	EventReasonContractStopBlocked = "ContractStopBlocked"
 )
 
 // EventAnnotationPrefix prefixes every annotation billing reads from a
@@ -212,8 +241,20 @@ const (
 	// month (a card expiring 11/2026 is "2026-11-01T00:00:00Z").
 	EventAnnotationCardExpiry = EventAnnotationPrefix + "card-expiry"
 
-	// EventAnnotationEndsAt is when payment terms ended.
+	// EventAnnotationEndsAt is when payment terms ended, or when a
+	// contract's term ends or ended.
 	EventAnnotationEndsAt = EventAnnotationPrefix + "ends-at"
+
+	// EventAnnotationContractAtEnd is what happens when a contract's term
+	// ends: MonthToMonth, Renew or Stop.
+	EventAnnotationContractAtEnd = EventAnnotationPrefix + "at-end"
+
+	// EventAnnotationMonths is a contract term's length in months, as a
+	// decimal string.
+	EventAnnotationMonths = EventAnnotationPrefix + "months"
+
+	// EventAnnotationOffer is the name of the Offer the event concerns.
+	EventAnnotationOffer = EventAnnotationPrefix + "offer"
 )
 
 // DeclineReason is the normalized reason a payment or payment method setup

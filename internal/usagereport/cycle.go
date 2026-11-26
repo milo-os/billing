@@ -55,13 +55,13 @@ func BillingCycles(terms *billingv1alpha1.PaymentTerms, now time.Time) (current,
 
 // CycleTerms returns the terms an account's billing cycles follow: its
 // payment terms, except that a contract that has started bills monthly on
-// its own day. Nil when the account has neither.
+// its own day until it stops. Nil when the account has neither.
 func CycleTerms(account *billingv1alpha1.BillingAccount, now time.Time) *billingv1alpha1.PaymentTerms {
 	if account == nil {
 		return nil
 	}
 	contract := account.Status.Contract
-	if contract == nil || now.Before(contract.StartsAt.Time) {
+	if contract == nil || now.Before(contract.StartsAt.Time) || contractStoppedBy(contract, now) {
 		return account.Spec.PaymentTerms
 	}
 	terms := &billingv1alpha1.PaymentTerms{}
@@ -71,6 +71,19 @@ func CycleTerms(account *billingv1alpha1.BillingAccount, now time.Time) *billing
 	terms.InvoiceFrequency = "Monthly"
 	terms.InvoiceDayOfMonth = contract.BillingDayOfMonth
 	return terms
+}
+
+// contractStoppedBy reports whether contract stopped at or before now, after
+// which the account bills on its invoice day again.
+func contractStoppedBy(contract *billingv1alpha1.BillingAccountContract, now time.Time) bool {
+	term := contract.Term
+	if term == nil {
+		return false
+	}
+	if term.Phase == billingv1alpha1.ContractTermPhaseStopped {
+		return !now.Before(term.EndsAt.Time)
+	}
+	return term.StopsAt != nil && !now.Before(term.StopsAt.Time)
 }
 
 // anchorDate is the invoice day in a month, clamped to the month's length:

@@ -1,5 +1,5 @@
 ---
-status: provisional
+status: implementable
 stage: alpha
 latest-milestone: "v0"
 ---
@@ -333,15 +333,16 @@ account has no card.
 ### The renewal flag
 
 A new BillingAccount condition, `ContractRenewalDue`, tells staff a contract
-needs a decision:
+needs a decision. Only accounts whose contract has a term have it, so the
+conditions of every other account are unchanged:
 
 | Status | Reason | When |
 |---|---|---|
 | `True` | `TermEndingSoon` | The current term ends within 90 days, whatever `atEnd` says |
 | `True` | `MonthToMonth` | The term has ended and the contract carries on month to month |
 | `False` | `InTerm` | The current term ends more than 90 days from now |
-| `False` | `NoTerm` | There is no contract, or it has no term |
 | `False` | `Stopped` | The contract has stopped |
+| `True` | `StopBlocked` | The contract is set to stop, but the account can't move onto `offerAfterRef`: checked from 90 days before the stop, and after it until billing has moved the account |
 
 - It's set by billing's BillingAccount controller, which already works out
   `status.contract`, and which requeues itself for the moment the flag or the
@@ -471,7 +472,10 @@ By the webhook, when the term or `offerRef` changes:
   quarterly or annual fee billed in advance.
 - `offerAfterRef` must name an assignable Offer with no `OneTime` fees.
 - Once the contract has stopped (`atEnd` is `Stop` and the stop date has
-  passed), the term can't change.
+  passed), the term can't change, except `offerAfterRef` until billing has
+  moved the account onto it (see [A stop billing can't make](#billings-controllers)).
+  Until then `offerRef` can only change to `offerAfterRef`, so an Offer
+  picked by hand isn't overwritten when billing moves the account.
 
 The Offer webhook can't see the contract, so an amendment that adds an annual
 fee to a contract whose term isn't a multiple of 12 is refused when
@@ -491,6 +495,17 @@ set on an account whose entitlement has a contract.
   to `offerAfterRef`. It's the only place billing writes an entitlement's
   spec, and the audit log records it as billing's service account. It
   requeues itself for the stop date.
+- **A stop billing can't make.** `offerAfterRef` is checked when the term is
+  set to stop, which may be years before the stop, and the Offer may be
+  retired or gain a one-time fee in between. Then the webhook refuses the
+  controller's change. So the BillingAccount controller checks the Offer
+  hourly from 90 days before the stop, and sets `ContractRenewalDue` to
+  `StopBlocked` with the reason while it can't be used. If the stop comes and
+  the change is refused, the BillingEntitlement controller records a
+  `ContractStopBlocked` warning on the account and tries again hourly. Until
+  the account moves, it's still billed the contract's fees, and
+  `status.contract` keeps showing them. Staff fix it by pointing
+  `offerAfterRef` at another Offer, which stays editable until the move.
 - **BillingArrangement controller.** An arrangement's phase now depends on
   the contract when `endsWithContract` is set: `Ended` from the contract's
   stop. It records `PaymentTermsEnded` then, as for an arrangement that
@@ -575,6 +590,9 @@ Recorded on the BillingAccount by billing:
 | `ContractRenewed` | Organization | The contract renewed for N months, until {date} |
 | `ContractStopped` | Organization | The contract ended on {date} |
 
+And `ContractStopBlocked` (staff only, a warning) when billing can't move
+the account onto `offerAfterRef` at the stop.
+
 Recorded on the BillingEntitlement by openmeter-provider, staff only:
 `ContractStopScheduled`, and `ContractStoppedLate` as a warning.
 
@@ -621,9 +639,12 @@ so staff record the outcome on the contract instead.
    `status.paymentArrangement.endsWithContract`, the `ContractRenewalDue`
    condition, the controllers, the activity policies and `usagereport`, with
    the staff guide updated. Release. Month to month and Renew work from this
-   release, since the provider has nothing to do for them.
+   release, since the provider has nothing to do for them. Setting a term to
+   `Stop` is refused while the `ContractStop` feature gate is off, its
+   default, so nothing can stop a contract before the provider handles it.
 2. **openmeter-provider**: Stop, with its e2e and time-travel tests, on the
-   billing release. Release, and pin it in production.
+   billing release. Release, and pin it in production. Then turn on
+   `ContractStop` in billing.
 3. **Fleet overview** (billing `ui/provider`): the two attention items. Can
    ship with step 1.
 4. **staff-portal**: the term in the contract editor and card, the attention
@@ -699,3 +720,7 @@ Infra needs only the usual version pins.
 - 2026-11-25: A contract that's month to month stops on `stopsAt`, a billing
   date that ends every quarterly and annual in-advance fee's period, rather
   than at the next billing date.
+- 2026-11-26: Design approved
+  ([#296](https://github.com/milo-os/billing/pull/296)). Billing's term,
+  renewal flag, stop and activity built behind the `ContractStop` feature
+  gate; payment terms tied to the contract follow separately.

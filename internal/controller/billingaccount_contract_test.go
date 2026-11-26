@@ -60,7 +60,7 @@ func reconcileAccountContract(t *testing.T, objs ...client.Object) *billingv1alp
 		},
 	}
 	r := &BillingAccountReconciler{client: cl}
-	if err := r.reconcileEntitlementSummary(context.Background(), account); err != nil {
+	if _, err := r.reconcileEntitlementSummary(context.Background(), account, time.Now()); err != nil {
 		t.Fatalf("reconcileEntitlementSummary: %v", err)
 	}
 	return account.Status.Contract
@@ -177,7 +177,7 @@ func TestAccountContract(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := accountContract(tt.entitlement, tt.offer, 1); !reflect.DeepEqual(got, tt.want) {
+			if got := accountContract(tt.entitlement, tt.offer, 1, time.Now()); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("accountContract() = %+v, want %+v", got, tt.want)
 			}
 		})
@@ -219,7 +219,7 @@ func TestAccountContract_BilledOnInvoiceDay(t *testing.T) {
 	be := contractEntitlement("acme-term", startsAt)
 	be.Spec.Contract.BillingDay = billingv1alpha1.ContractBillingDayInvoiceDay
 
-	got := accountContract(be, publishedOffer("acme-term", billingv1alpha1.OfferLaunchStageGA, monthly, annual), 5)
+	got := accountContract(be, publishedOffer("acme-term", billingv1alpha1.OfferLaunchStageGA, monthly, annual), 5, time.Now())
 	if got == nil || got.BillingDayOfMonth != 5 {
 		t.Fatalf("billing day = %+v, want the invoice day, 5", got)
 	}

@@ -153,22 +153,31 @@ func (r *BillingAccountReconciler) Reconcile(ctx context.Context, req reconcile.
 
 	// Publish the Offer's discounts and the contract so customers can see
 	// them without reading the entitlement or the Offer.
-	if err := r.reconcileEntitlementSummary(ctx, &account); err != nil {
+	termBefore, renewalBefore := contractTermStatus(&account)
+	termBoundary, err := r.reconcileEntitlementSummary(ctx, &account, now)
+	if err != nil {
 		return ctrl.Result{}, fmt.Errorf("reconciling discounts and contract: %w", err)
+	}
+	if !termBoundary.IsZero() && (nextBoundary.IsZero() || termBoundary.Before(nextBoundary)) {
+		nextBoundary = termBoundary
 	}
 
 	if err := r.client.Status().Update(ctx, &account); err != nil {
 		return ctrl.Result{}, fmt.Errorf("failed to update status: %w", err)
 	}
 	recordInvoicingTransition(r.recorder, &account, invoicingBefore, pastDueInvoice)
+	termAfter, renewalAfter := contractTermStatus(&account)
+	recordContractTermTransition(r.recorder, &account, termBefore, termAfter, renewalBefore, renewalAfter)
 
 	logger.Info("reconciled billing account",
 		"phase", targetPhase,
 		"linkedProjects", linkedCount,
 	)
 
-	// Requeue when an arrangement starts or ends so PaymentReady flips
-	// on time rather than on the next unrelated event.
+	// Requeue when an arrangement starts or ends, or the contract's term
+	// reaches a renewal date, an end or a stop, so PaymentReady and
+	// ContractRenewalDue flip on time rather than on the next unrelated
+	// event.
 	return requeueAt(nextBoundary, now), nil
 }
 
@@ -356,20 +365,113 @@ func (r *BillingAccountReconciler) reconcileDefaultPaymentMethodCondition(
 
 // reconcileEntitlementSummary publishes the prices and discounts of the
 // Offer the account is entitled to on status.prices and status.discounts,
-// and its entitlement's contract on status.contract. An account without a
-// BillingEntitlement, or whose Offer isn't published yet, has none of them.
+// and its entitlement's contract on status.contract, with the
+// ContractRenewalDue condition. An account without a BillingEntitlement, or
+// whose Offer isn't published yet, has none of them. It returns the next
+// time the contract's term state changes, or the zero time.
 func (r *BillingAccountReconciler) reconcileEntitlementSummary(
 	ctx context.Context,
 	account *billingv1alpha1.BillingAccount,
-) error {
+	now time.Time,
+) (time.Time, error) {
 	entitlement, offer, err := r.entitledOffer(ctx, account)
 	if err != nil {
-		return err
+		return time.Time{}, err
 	}
+	invoiceDay := validation.AccountInvoiceDay(account)
 	account.Status.Discounts = accountDiscounts(offer)
-	account.Status.Contract = accountContract(entitlement, offer, validation.AccountInvoiceDay(account))
+	account.Status.Contract = accountContract(entitlement, offer, invoiceDay, now)
 	account.Status.Prices = accountPrices(offer)
-	return nil
+
+	var contract *billingv1alpha1.BillingContract
+	if account.Status.Contract != nil {
+		contract = entitlement.Spec.Contract
+	}
+	state, ok := validation.ContractTermAt(contract, invoiceDay, now)
+	setContractRenewalDueCondition(account, contract, state, ok, now)
+	next := validation.NextContractTermBoundary(state, ok, now)
+
+	blocked, err := r.contractStopBlocked(ctx, entitlement, state, now)
+	if err != nil {
+		return time.Time{}, err
+	}
+	if blocked != "" || stopCheckDue(entitlement, state, now) {
+		// Look again within the hour: the Offer to move onto may be fixed,
+		// or retired, without anything here being told.
+		if recheck := now.Add(contractStopRecheck); next.IsZero() || recheck.Before(next) {
+			next = recheck
+		}
+	}
+	if blocked != "" {
+		apimeta.SetStatusCondition(&account.Status.Conditions, metav1.Condition{
+			Type:               billingv1alpha1.BillingAccountConditionContractRenewalDue,
+			Status:             metav1.ConditionTrue,
+			ObservedGeneration: account.Generation,
+			Reason:             billingv1alpha1.ContractRenewalDueReasonStopBlocked,
+			Message:            blocked,
+		})
+	}
+	return next, nil
+}
+
+// contractStopRecheck is how often billing checks again that an account can
+// move onto the Offer its contract stops to, from the renewal notice until
+// it has.
+const contractStopRecheck = time.Hour
+
+// contractStopGrace is how long after a contract's stop billing waits for
+// the BillingEntitlement controller to move the account before it reports
+// the stop as blocked.
+const contractStopGrace = 10 * time.Minute
+
+// contractMoved reports whether billing has moved the account onto the
+// Offer its contract stopped to.
+func contractMoved(entitlement *billingv1alpha1.BillingEntitlement) bool {
+	_, moved := entitlement.Annotations[billingv1alpha1.BillingEntitlementContractStoppedAtAnnotation]
+	return moved
+}
+
+// stopCheckDue reports whether a contract set to stop is close enough to its
+// stop, or past it without the account having moved, for billing to check
+// the Offer it moves onto: from the renewal notice before the stop.
+func stopCheckDue(entitlement *billingv1alpha1.BillingEntitlement, state validation.ContractTermState, now time.Time) bool {
+	return !state.StopsAt.IsZero() && entitlement != nil && !contractMoved(entitlement) &&
+		!now.Before(state.StopsAt.AddDate(0, 0, -validation.ContractRenewalNoticeDays))
+}
+
+// contractStopBlocked says why the account can't be moved onto the Offer its
+// contract stops to, from the renewal notice before the stop until it has
+// moved, or returns "". Staff can then pick another Offer before the stop,
+// or after it, since the account stays on the contract's prices until
+// billing moves it.
+func (r *BillingAccountReconciler) contractStopBlocked(
+	ctx context.Context,
+	entitlement *billingv1alpha1.BillingEntitlement,
+	state validation.ContractTermState,
+	now time.Time,
+) (string, error) {
+	if !stopCheckDue(entitlement, state, now) {
+		return "", nil
+	}
+	name := entitlement.Spec.Contract.Term.OfferAfterRef.Name
+	stopped := state.Phase == billingv1alpha1.ContractTermPhaseStopped
+	problem, err := validation.OfferAfterRefProblem(ctx, r.client, name)
+	if err != nil {
+		return "", err
+	}
+	if problem == "" && stopped && !now.Before(state.StopsAt.Add(contractStopGrace)) {
+		problem = "billing hasn't moved it there yet"
+	}
+	if problem == "" {
+		return "", nil
+	}
+	const fix = " Point spec.contract.term.offerAfterRef at another Offer."
+	if stopped {
+		return fmt.Sprintf("The contract was due to stop on %s, but the account is still billed at the contract's prices: it can't move onto offer %q: %s.%s",
+			formatEventDate(state.StopsAt), name, problem, fix), nil
+	}
+	return fmt.Sprintf("The contract stops on %s, but the account can't move onto offer %q then: %s.%s",
+		formatEventDate(state.StopsAt), name, problem, fix), nil
 }
 
 // entitledOffer returns the account's BillingEntitlement and the published
@@ -484,8 +586,12 @@ func accountPrices(offer *billingv1alpha1.Offer) []billingv1alpha1.BillingAccoun
 // the Offer isn't published. The Offer is the contract's from when the
 // contract is added, so its fees show before it starts. invoiceDay is the
 // account's, which a contract billed on the invoice day bills on.
+//
+// A contract that has stopped keeps its start, billing day and term, and,
+// once billing has moved the account onto the Offer it stops to, has no
+// fees: the account's Offer is no longer the contract's.
 func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *billingv1alpha1.Offer,
-	invoiceDay int32) *billingv1alpha1.BillingAccountContract {
+	invoiceDay int32, now time.Time) *billingv1alpha1.BillingAccountContract {
 	if entitlement == nil || entitlement.Spec.Contract == nil || offer == nil {
 		return nil
 	}
@@ -500,6 +606,14 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 	if validation.ContractBillsOnInvoiceDay(terms) {
 		contract.BillingDayOfMonth = invoiceDay
 		contract.BillingDay = billingv1alpha1.ContractBillingDayInvoiceDay
+	}
+	if state, ok := validation.ContractTermAt(terms, invoiceDay, now); ok {
+		contract.Term = accountContractTerm(terms.Term, state)
+		// Until billing has moved the account onto the Offer it stops to,
+		// it's still billed the contract's fees.
+		if state.Phase == billingv1alpha1.ContractTermPhaseStopped && contractMoved(entitlement) {
+			return contract
+		}
 	}
 	for _, sp := range offer.Spec.ServicePricings {
 		switch sp.Spec.ChargeType {
@@ -532,6 +646,79 @@ func accountContract(entitlement *billingv1alpha1.BillingEntitlement, offer *bil
 		}
 	}
 	return contract
+}
+
+// accountContractTerm publishes a contract's term and where it is now.
+func accountContractTerm(term *billingv1alpha1.ContractTerm, state validation.ContractTermState) *billingv1alpha1.BillingAccountContractTerm {
+	atEnd := validation.ContractTermAtEnd(term)
+	status := &billingv1alpha1.BillingAccountContractTerm{
+		Months:              term.Months,
+		AtEnd:               atEnd,
+		Phase:               state.Phase,
+		CurrentTermStartsAt: metav1.NewTime(state.CurrentTermStartsAt),
+		EndsAt:              metav1.NewTime(state.EndsAt),
+	}
+	if atEnd == billingv1alpha1.ContractTermAtEndRenew {
+		status.RenewMonths = validation.ContractRenewMonths(term)
+		status.Renewals = state.Renewals
+	}
+	if !state.RenewalDueAt.IsZero() {
+		due := metav1.NewTime(state.RenewalDueAt)
+		status.RenewalDueAt = &due
+	}
+	if !state.StopsAt.IsZero() {
+		stopsAt := metav1.NewTime(state.StopsAt)
+		status.StopsAt = &stopsAt
+	}
+	return status
+}
+
+// setContractRenewalDueCondition sets ContractRenewalDue from where the
+// account's contract is in its term. contract is nil when the account has
+// no published contract. An account without a contract with a term has no
+// condition.
+func setContractRenewalDueCondition(account *billingv1alpha1.BillingAccount, contract *billingv1alpha1.BillingContract,
+	state validation.ContractTermState, ok bool, now time.Time) {
+	reason, due := validation.ContractRenewalDue(state, ok, now)
+	if reason == "" {
+		apimeta.RemoveStatusCondition(&account.Status.Conditions, billingv1alpha1.BillingAccountConditionContractRenewalDue)
+		return
+	}
+	cond := metav1.Condition{
+		Type:               billingv1alpha1.BillingAccountConditionContractRenewalDue,
+		Status:             metav1.ConditionFalse,
+		ObservedGeneration: account.Generation,
+		Reason:             reason,
+	}
+	if due {
+		cond.Status = metav1.ConditionTrue
+	}
+	switch reason {
+	case billingv1alpha1.ContractRenewalDueReasonStopped:
+		cond.Message = fmt.Sprintf("The contract stopped on %s.", formatEventDate(state.EndsAt))
+	case billingv1alpha1.ContractRenewalDueReasonMonthToMonth:
+		cond.Message = fmt.Sprintf("The contract's term ended on %s, and it carries on month to month", formatEventDate(state.EndsAt))
+		if !state.StopsAt.IsZero() {
+			cond.Message += fmt.Sprintf(" until it stops on %s", formatEventDate(state.StopsAt))
+		}
+		cond.Message += "."
+	default:
+		cond.Message = fmt.Sprintf("The contract's term ends on %s, and %s.",
+			formatEventDate(state.EndsAt), contractAtEndPhrase(contract.Term))
+	}
+	apimeta.SetStatusCondition(&account.Status.Conditions, cond)
+}
+
+// contractAtEndPhrase says what happens when term ends, as "it will …".
+func contractAtEndPhrase(term *billingv1alpha1.ContractTerm) string {
+	switch validation.ContractTermAtEnd(term) {
+	case billingv1alpha1.ContractTermAtEndRenew:
+		return fmt.Sprintf("it will renew for %d months", validation.ContractRenewMonths(term))
+	case billingv1alpha1.ContractTermAtEndStop:
+		return "it will stop"
+	default:
+		return "it will carry on month to month"
+	}
 }
 
 // reconcilePaymentReadyCondition publishes the active BillingArrangement
