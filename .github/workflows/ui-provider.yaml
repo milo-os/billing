@@ -16,7 +16,7 @@ permissions:
 
 jobs:
   check:
-    runs-on: ubuntu-latest
+    runs-on: ${{ (github.event_name == 'push' || github.event.pull_request.head.repo.full_name == github.repository) && vars.MILO_LINUX_RUNNER || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: ui/provider
