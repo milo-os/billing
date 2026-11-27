@@ -10,13 +10,14 @@
 # /etc/tls (config/components/provider-ui-plugin/deployment.yaml).
 #
 # Node and pnpm versions must match package.json's engines/packageManager.
-# Node 25+ no longer ships corepack, so pnpm is installed at its pinned version.
+# Node 25+ no longer ships corepack, so the build stage installs the pnpm that
+# packageManager pins; it stays in that stage only.
 
 FROM node:26.13.1-slim AS build
 WORKDIR /app
-RUN npm install --global pnpm@12.16.1
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml .npmrc ./
-RUN pnpm install --frozen-lockfile
+RUN npm install --global "$(node -p 'require("./package.json").packageManager.split("+")[0]')" --no-audit --no-fund && \
+    pnpm install --frozen-lockfile --prod=false --ignore-scripts
 COPY . .
 RUN pnpm run build
 
