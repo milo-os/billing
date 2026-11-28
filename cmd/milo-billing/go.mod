@@ -12,7 +12,7 @@ require (
 	github.com/spf13/cobra v1.10.2
 	go.datum.net/datumctl v0.23.3
 	go.miloapis.com/billing v0.7.4
-	k8s.io/apimachinery v0.37.2
+	k8s.io/apimachinery v0.37.3
 	sigs.k8s.io/yaml v1.6.0
 )
 
